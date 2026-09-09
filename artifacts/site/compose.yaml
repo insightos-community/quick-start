@@ -1,0 +1,29 @@
+name: semantic-site
+services:
+  static:
+    # Choose an approved nginx image for your deployment.
+    image: ${NGINX_IMAGE:-nginx:stable-alpine}
+    container_name: semantic-static
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+      - ./nginx-static.conf:/etc/nginx/conf.d/default.conf:ro
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    networks:
+      edge:
+        aliases:
+          - semantic-static
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8080/']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+networks:
+  edge:
+    name: ${SEMANTIC_EDGE_NETWORK:-semantic-edge}

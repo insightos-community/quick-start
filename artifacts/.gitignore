@@ -1,0 +1,11 @@
+/.build/
+/releases/
+/channels/
+/logs/
+__pycache__/
+# Defense in depth: credentials and signed tickets belong outside the repository.
+*.env
+*credentials*
+download.json
+install-current.sh
+oss-local*.json

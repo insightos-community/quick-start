@@ -1,0 +1,11 @@
+# 安装器本机状态 / 生成物，勿入库
+installer-settings.json
+installer-status.json
+semantic-env.sh
+.tui-logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
