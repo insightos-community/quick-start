@@ -20,6 +20,13 @@ python3 semantic_installer.py --list
 
 ## 🛠 源码构建
 
+步骤 2.3 的场景资产仍通过 Git LFS 拉取；第三方 Wheel 优先复用已校验的本地缓存，
+再通过 `pip download` 从 `UV_DEFAULT_INDEX` 指定的包源下载。文件名、大小和 SHA-256
+均以当前检出版本的 LFS 指针为准，不升级依赖。包源缺失或文件不一致时回退 LFS；
+经过特殊处理的 TinyXML2/urdfdom Wheel 仍使用 LFS。下载结果用于后续离线 Bundle，
+不会安装到系统 Python。设置 `RUNTIME_WHEEL_SOURCE=auto`（默认）、`lfs`（跳过包源）
+或 `offline`（仅检查运行时缓存，场景资产仍走 LFS）。已修改的缓存文件会保留并报错。
+
 使用 Linux、Git / Git LFS 和支持 curses 的 Python。源码安装器的系统配置步骤面向 Ubuntu/apt；组件构建还需要 Go 1.23+、Node.js 22、uv 和 xmake。原生 MuJoCo 与 Robot Worker 分别使用独立的 Python 3.10 / 3.13 环境。
 
 ```bash
@@ -73,6 +80,8 @@ TUI 中 `e` 配置、Enter 执行步骤、`L` 查看服务日志、`x` 停止托
 ## 常见问题
 
 - Wheel 无效：重跑 5.1–5.2 的源码构建与复制；LFS 指针不是二进制产物。
+- sudo 使用 Linux 用户登录密码，不是 Web 管理员密码。安装前先验证，失败原因显示在表单中；
+  TUI 输入有问题时，按 `e` 设置 `SUDO_AUTH=terminal` 后重跑。
 - Robot 离线或缺 Skill：检查 Runtime 登记、激活 Bundle 和已发布 Skill 的精确版本。
 - 步骤失败会停止队列；重跑前查看 `.tui-logs/`。
 - 密码和模型 Key 仅保存在本地，不向不可信网络开放开发服务。

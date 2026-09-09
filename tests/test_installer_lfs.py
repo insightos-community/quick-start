@@ -52,6 +52,18 @@ class RuntimeAssetTests(unittest.TestCase):
         self.assertIsNone(self.check())
         self.assertIn("1 个 LFS 文件", self.app.log.call_args.args[1])
 
+    def test_asset_command_and_runtime_downloader(self):
+        commands = installer._asset_pull_script(self.app)
+        self.assertIn('git lfs pull -I "" -X ""', commands[0])
+        self.assertNotIn("\nmujoco-asset\n", commands[0])
+        self.assertIn("fetch_runtime_wheels.py", commands[1])
+        self.assertIn("--source auto", commands[1])
+
+    def test_invalid_wheel_source_rejected(self):
+        self.app.settings["RUNTIME_WHEEL_SOURCE"] = "unknown"
+        with self.assertRaises(ValueError):
+            installer._asset_pull_script(self.app)
+
     def test_missing_third_party_or_pointer_fails(self):
         self.wheel.unlink()
         self.assertEqual(self.check()[0], "fail")

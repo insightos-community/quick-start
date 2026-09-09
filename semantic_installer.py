@@ -78,12 +78,6 @@ def plain_log_text(text):
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
 
 
-SOURCE_BUILT_LFS_EXCLUDES = (
-    "AbilityFramework,**/AbilityFramework,"
-    "ability_py-*.whl,**/ability_py-*.whl,"
-    "ability_scaffold-*.whl,**/ability_scaffold-*.whl"
-)
-
 DONE_STATES = {"ok", "skip", "warn", "done"}
 STAGE_PREREQ = {6: [1, 2, 3, 4, 5], 7: [1, 2, 3, 4, 5, 6], 8: [1, 2, 3, 4, 5]}
 
@@ -114,6 +108,7 @@ DEFAULT_SETTINGS = {
     "GO_VERSION": "1.23.8",
     "BUNDLE_VER": "0.5.0-dev",
     "UV_DEFAULT_INDEX": "https://mirrors.aliyun.com/pypi/simple",
+    "RUNTIME_WHEEL_SOURCE": "auto",
     "SEMANTIC_ADMIN_PASSWORD": "test-admin-pass",
     "SEMANTIC_MUJOCO_GL": "egl",
     "APT_MIRROR": "https://mirrors.aliyun.com/ubuntu",
@@ -150,7 +145,7 @@ SETTINGS_GROUPS = [
                  "GITLAB_OAUTH_CLIENT_SECRET", "OAUTH_CALLBACK_PORT",
                  "PAT_PAGE_PATH", "APPS_PAGE_PATH"]),
     ("版本", ["GO_VERSION", "BUNDLE_VER"]),
-    ("镜像与密钥", ["UV_DEFAULT_INDEX", "SEMANTIC_ADMIN_PASSWORD"]),
+    ("镜像与密钥", ["UV_DEFAULT_INDEX", "RUNTIME_WHEEL_SOURCE", "SEMANTIC_ADMIN_PASSWORD"]),
     ("国内镜像 (置空即直连)", ["APT_MIRROR", "GO_DL_MIRROR", "GO_PROXY", "NODE_MIRROR",
                           "NODE_VERSION", "NPM_REGISTRY", "GITHUB_PROXY"]),
     ("sudo 鉴权", ["SUDO_AUTH"]),
@@ -176,6 +171,7 @@ SETTINGS_DESC = {
     "GO_VERSION": "官方 Go 版本, go.mod 要求 >= 1.23",
     "BUNDLE_VER": "r1pro-mujoco Bundle 版本目录名后缀",
     "UV_DEFAULT_INDEX": "uv 的 PyPI 镜像; 备用: https://pypi.tuna.tsinghua.edu.cn/simple",
+    "RUNTIME_WHEEL_SOURCE": "auto = 缓存/包源优先, LFS 兜底; lfs = 只从 LFS 获取; offline = 仅校验缓存",
     "SEMANTIC_ADMIN_PASSWORD": "写入 framework .env 的管理员密码 (不要提交 Git)",
     "SEMANTIC_MUJOCO_GL": "egl (默认) 或 osmesa (EGL 起不来时, 需另装 libosmesa6)",
     "APT_MIRROR": "apt 软件源基址, 步骤 1.0 自动切换; 例 https://mirrors.aliyun.com/ubuntu",
@@ -1140,7 +1136,7 @@ def build_steps():
       cmds=["sudo apt update",
             "sudo apt install -y curl ca-certificates git git-lfs make xz-utils",
             "git lfs install"],
-      note="从 GO_DL_MIRROR 下载官方包 (默认阿里云); SQLite 走 Go 纯实现, 不需要系统 sqlite3")
+      note="更新软件包索引并安装 curl、Git、Git LFS、make 和解压工具。")
 
     S("1.2", "安装 Go >= 1.23 (镜像下载)", sudo=True,
       confirm="将执行 sudo rm -rf /usr/local/go 并解压 Go, 确认继续?",
@@ -1191,8 +1187,9 @@ def build_steps():
       note="优先读取 repo-versions.json 版本清单 (用 repo_versions.py 维护, 支持 branch/tag/commit); "
            "清单缺失时回退到设置里的分支")
 
-    S("2.3", "拉取 Git LFS 资产",
+    S("2.3", "准备场景资产与 Wheel",
       cmds=lambda app: _asset_pull_script(app),
+      env=lambda app: {"UV_DEFAULT_INDEX": app.settings.get("UV_DEFAULT_INDEX", "")},
       post=lambda app, rc: _check_runtime_assets(app),
       note="拉取清单: 场景资产、运行时 bundle 配置与第三方 Wheel。")
 
@@ -1620,10 +1617,16 @@ def _branch_script(app):
 
 def _asset_pull_script(app):
     base = sx(app.settings["SEMANTIC"])
+    source = app.settings.get("RUNTIME_WHEEL_SOURCE", "auto")
+    if source not in ("auto", "lfs", "offline"):
+        raise ValueError("RUNTIME_WHEEL_SOURCE 必须为 auto、lfs 或 offline")
+    fetch = " ".join(shlex.quote(str(arg)) for arg in (
+        sys.executable, SCRIPT_DIR / "scripts/fetch_runtime_wheels.py",
+        "--repo", os.path.join(base, "semantic-ability/ability-runtime"), "--source", source))
     commands = []
     for local, action in (
-        ("semantic-scene/mujoco-asset", "mujoco-asset"),
-        ("semantic-ability/ability-runtime", f'git lfs pull -I "" -X "{SOURCE_BUILT_LFS_EXCLUDES}"'),
+        ("semantic-scene/mujoco-asset", 'git lfs pull -I "" -X ""'),
+        ("semantic-ability/ability-runtime", fetch),
     ):
         commands.append("\n".join(["set -e", _repo_event(local, "running"),
                                    "cd " + shlex.quote(os.path.join(base, local)), action,
@@ -2186,11 +2189,12 @@ class App:
                 manifest, rows = _repo_plan(self)
                 if sid == "2.3":
                     rows = [row for row in rows if row["repo"] in
-                            ("semantic-scene/mujoco-asset", "mujoco-asset")]
+                            ("semantic-scene/mujoco-asset", "semantic-ability/ability-runtime")]
                 form["rows"] = rows
                 form["fields"] = [("工作区", sx(self.settings["SEMANTIC"])), ("版本清单", manifest or "内置配置")]
                 if sid == "2.3":
                     form["fields"].append(("拉取清单", "场景资产 / bundle 配置 / 第三方 Wheel"))
+                    form["fields"].append(("Wheel 来源", self.settings.get("RUNTIME_WHEEL_SOURCE", "auto")))
             else:
                 keys = {
                     "1.0": ("APT_MIRROR",), "1.1": ("APT_MIRROR", "SUDO_AUTH"),
@@ -2217,6 +2221,12 @@ class App:
             except OSError as e:
                 self.log_error = f"无法写入日志: {e}"
         if kind == "detail":
+            return
+        if self.cur and kind == "out" and text.startswith("[wheel "):
+            form = self.form_for(self.cur)
+            form["fields"] = [(k, v) for k, v in form["fields"] if k != "Wheel 进度"]
+            form["fields"].append(("Wheel 进度", text))
+            self.dirty = True
             return
         if self.cur and kind == "out" and text.startswith(REPO_EVENT_MARK):
             try:
@@ -2393,11 +2403,11 @@ class App:
         """用 -k 强制重新鉴权来验证密码是否正确"""
         try:
             r = subprocess.run(["sudo", "-S", "-k", "-p", "", "true"],
-                               input=(pw + "\n") * 3, capture_output=True,
+                               input=pw + "\n", capture_output=True,
                                text=True, timeout=30)
             return r.returncode == 0
         except Exception:
-            return True
+            return False
 
     def maybe_retry_auth_failed(self):
         """凭证配置完成后, 询问是否重跑刚才因认证失败的步骤"""
@@ -2524,6 +2534,9 @@ class App:
                     if not pw:
                         self._finish("fail", "已取消: 未提供 sudo 密码")
                         return
+                    if not self._sudo_pw_valid(pw):
+                        self._finish("fail", "sudo 授权未通过或超时；请重跑并输入 Linux 登录密码，或按 e 设置 SUDO_AUTH=terminal")
+                        return
                     self.vars["SUDO_PW"] = pw
                     self.log("note", "sudo 密码仅存于本进程内存 (不写盘), P 键可清除")
                 cmds, use_pw = self._sudoize(cmds)
@@ -2550,8 +2563,8 @@ class App:
             self._finish("fail", str(e))
             return
         if use_pw:
-            # 每个会提示的 sudo 消耗一行; 预留 3 倍余量应对重试
-            feed = (self.vars.get("SUDO_PW", "") + "\n") * min(30, max(1, use_pw * 3))
+            # 已提前验证密码；每条 sudo 最多预留一行，不自动重复三次失败验证。
+            feed = (self.vars.get("SUDO_PW", "") + "\n") * max(1, use_pw)
             try:
                 self.cur_proc.stdin.write(feed)
                 self.cur_proc.stdin.flush()
@@ -2721,10 +2734,12 @@ class App:
                         self.last_auth_fail_sid = self.cur["sid"]
                         self.log("note", "看起来是 GitLab 凭证问题: 按 g 打开凭证助手 "
                                         "(OAuth 自动登录 / 粘贴 PAT), 配好后会自动重跑本步骤")
-                    if getattr(self, "cur_used_pw", 0) and self.vars.get("SUDO_PW"):
-                        if not self._sudo_pw_valid(self.vars["SUDO_PW"]):
-                            self.vars.pop("SUDO_PW", None)
-                            self.log("err", "sudo 密码不正确, 已清除; 重跑步骤会重新询问")
+                    if getattr(self, "cur_used_pw", 0) and re.search(
+                            r"incorrect password|authentication failure|a password is required|"
+                            r"no password was provided|not in the sudoers|错误密码|对不起，请重试|需要密码|未提供密码",
+                            out_text, re.I):
+                        self.vars.pop("SUDO_PW", None)
+                        self.log("err", "sudo 授权失败，缓存已清除；请重跑或设置 SUDO_AUTH=terminal")
                 if rc != 0 and self.cur.get("retry"):
                     try:
                         extra = self.cur["retry"](self, out_text)
@@ -2856,7 +2871,7 @@ class App:
                     row["status"] = status
             if status == "fail":
                 detail = next((line for line in reversed(self.cur_out)
-                               if re.search(r"fatal:|error:|permission denied|not found", line, re.I)), msg or "步骤失败")
+                               if re.search(r"fatal:|error:|permission denied|not found|sudo:|错误密码|对不起，请重试", line, re.I)), msg or "步骤失败")
                 form["error"] = self._redact(detail).splitlines()[0][:180]
         self.log("info" if status != "fail" else "err", f"最终结果: {status}; {msg or ''}; 日志: {self.step_log_path or self.log_error}")
         self.set_status(step["sid"], status)

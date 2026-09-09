@@ -29,6 +29,15 @@ python3 semantic_installer.py
 
 Confirm the workspace directory and repository URLs before starting. Configure versions in [repo-versions.json](repo-versions.json); the installer checks out the manifest revisions. Settings, credentials, and generated output belong outside version control.
 
+Step 2.3 fetches scene assets through Git LFS. Runtime Wheels reuse verified local
+files first, then use `pip download` with the checked-out revision's filenames,
+sizes and SHA-256 hashes. The index follows `UV_DEFAULT_INDEX`; unavailable exact
+builds and the patched TinyXML2/urdfdom Wheels fall back to Git LFS. Downloads fill
+the existing offline Bundle cache, not the host Python environment. In settings,
+`RUNTIME_WHEEL_SOURCE=auto` is the default; `lfs` bypasses the package index and
+`offline` only checks the runtime cache (scene assets still use LFS). No dependency
+versions are upgraded. Modified cache files are preserved and reported for review.
+
 | Order | Work | Output |
 |---|---|---|
 | 1–2 | Configure tools, clone repositories, fetch required LFS assets | Source workspace + assets |
@@ -75,6 +84,9 @@ In the TUI, `e` edits settings, Enter runs a step, `L` opens service logs, and `
 - Invalid Wheel: rerun source build/copy steps 5.1–5.2; an LFS pointer is not a binary.
 - Robot offline or missing Skill: check Runtime registration, active Bundle, and exact published Skill versions.
 - A failed step stops the queue; inspect `.tui-logs/` before rerunning it.
+- Sudo authentication uses your Linux account password, not the Web admin password.
+  It is validated before installation; failures appear in the status form. Use
+  `SUDO_AUTH=terminal` if the TUI input does not work in your terminal.
 - Keep passwords and model keys local. Do not expose development services to untrusted networks.
 
 [Detailed TUI guide](semantic-installer-README.md) · [Troubleshooting notes](NOTES.md)

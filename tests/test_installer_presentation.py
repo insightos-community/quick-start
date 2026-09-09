@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import tempfile
+import subprocess
 import time
 import unittest
 from pathlib import Path
@@ -95,6 +96,40 @@ class InstallerPresentationTests(unittest.TestCase):
         form = self.app.form_for(self.app.bysid["3.1"])
         self.assertIn(("管理员密码", "已配置"), form["fields"])
         self.assertNotIn(self.app.settings["SEMANTIC_ADMIN_PASSWORD"], repr(form))
+
+    def test_sudo_validation_sends_one_attempt_and_fails_closed(self):
+        with patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)) as run:
+            self.assertFalse(self.app._sudo_pw_valid("test-password"))
+        self.assertEqual(run.call_args.kwargs["input"], "test-password\n")
+        with patch.object(installer.subprocess, "run", side_effect=subprocess.TimeoutExpired("sudo", 30)):
+            self.assertFalse(self.app._sudo_pw_valid("test-password"))
+
+    def test_bad_sudo_password_does_not_launch_install_or_get_saved(self):
+        self.app.prompt = lambda: "wrong-password"
+        with patch.object(self.app, "_sudo_pw_valid", return_value=False), \
+             patch.object(installer.subprocess, "Popen") as popen:
+            self.app._begin(self.app.bysid["1.1"], True)
+        popen.assert_not_called()
+        self.assertEqual(self.app.status("1.1"), "fail")
+        self.assertNotIn("SUDO_PW", self.app.vars)
+        self.assertIn("Linux 登录密码", self.app.form_for(self.app.bysid["1.1"])["error"])
+        self.assertNotIn("wrong-password", Path(self.app.step_log_path).read_text())
+
+    def test_chinese_sudo_error_is_visible_in_form(self):
+        self.run_step(["printf 'sudo: 3 次错误密码尝试\\n'; exit 1"])
+        self.assertIn("错误密码", self.app.form_for(self.app.bysid["2.1"])["error"])
+
+    def test_wheel_progress_is_a_form_field(self):
+        self.run_step(["printf '[wheel 1/36] cached: package.whl\\n'"])
+        self.assertIn(("Wheel 进度", "[wheel 1/36] cached: package.whl"),
+                      self.app.form_for(self.app.bysid["2.1"])["fields"])
+
+    def test_asset_form_includes_runtime_repository(self):
+        self.plan[:] = [{"repo": name, "status": "pending"} for name in (
+            "semantic-scene/mujoco-asset", "semantic-ability/ability-runtime", "semantic-web")]
+        form = self.app.form_for(self.app.bysid["2.3"])
+        self.assertEqual([row["repo"] for row in form["rows"]], [
+            "semantic-scene/mujoco-asset", "semantic-ability/ability-runtime"])
 
     def test_build_colors_are_removed_from_screen_and_log_file(self):
         self.app._start_step_log("5.1")
