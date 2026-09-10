@@ -1131,7 +1131,8 @@ def build_steps():
       cmds=lambda app: _apt_mirror_script(app),
       skip_check=lambda app: None if app.settings.get("APT_MIRROR", "").strip()
       else "APT_MIRROR 未配置, 保持系统源",
-      note="将 archive/security.ubuntu.com 替换为 APT_MIRROR, 每个源文件保留 .bak-orig 备份")
+      note="将 archive/security.ubuntu.com 替换为 APT_MIRROR; 备份后缀用 .disabled (apt 静默忽略, 旧版也不打 N: 提示), "
+           "已存在 .bak-orig 旧备份时不再重复备份")
 
     S("1.1", "基础工具 (curl/git/git-lfs/编译工具链)", sudo=True,
       cmds=["sudo apt update",
@@ -1390,9 +1391,9 @@ def _apt_mirror_script(app):
         "for f in $files; do",
         '  [ -f "$f" ] || continue',
         '  if grep -qE "(archive|security)\\.ubuntu\\.com" "$f"; then',
-        '    [ -f "$f.bak-orig" ] || sudo cp "$f" "$f.bak-orig"',
+        '    if [ ! -f "$f.disabled" ] && [ ! -f "$f.bak-orig" ]; then sudo cp "$f" "$f.disabled"; fi',
         f'    sudo sed -i -E "s|https?://(cn\\.)?archive\\.ubuntu\\.com/ubuntu|{m}|g; s|https?://security\\.ubuntu\\.com/ubuntu|{m}|g" "$f"',
-        '    echo "[apt源] 已切换: $f (备份: $f.bak-orig)"; changed=1',
+        '    echo "[apt源] 已切换: $f (备份: $f.disabled)"; changed=1',
         "  fi",
         "done",
         'if [ "$changed" -eq 0 ]; then echo "[apt源] 未发现官方源地址, 无需修改"; fi',
