@@ -81,3 +81,34 @@ class ReleaseDownloadsTests(unittest.TestCase):
                 manifest,download=self.fixture(**options)
                 with patch.object(releases,'download',download), self.assertRaises(ValueError):
                     releases.fetch(manifest,self.root/f'cache-{index}')
+
+
+class PublisherLayoutTests(unittest.TestCase):
+    def test_publish_uses_the_unique_manifest_directory(self):
+        import os
+        import runpy
+        from types import SimpleNamespace
+        script=Path(__file__).resolve().parents[1]/'.github/scripts/publish.py'
+        for layout in ('release-assets','release-assets/0.1.0/linux-x86_64'):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as temporary:
+                work=Path(temporary)
+                root=work/layout
+                root.mkdir(parents=True)
+                metadata=dict(tag='v0.1.0',source_commit='a'*40,build_recipe_commit='b'*40,workflow_run='https://github.com/org/repo/actions/runs/1',validation_scope='test')
+                (root/'release.json').write_text(json.dumps(metadata))
+                (root/'package.tar.gz').write_bytes(b'payload')
+                (root/'SHA256SUMS').write_text(''.join(f'{releases.digest(p)}  {p.name}\n' for p in sorted(root.iterdir())))
+                def gh(args,**kwargs):
+                    return 'a'*40 if args[1]=='api' else ''
+                previous=Path.cwd()
+                try:
+                    os.chdir(work)
+                    with patch.dict(os.environ,{'TARGET_TAG':'v0.1.0','GITHUB_REPOSITORY':'org/repo'}), \
+                         patch('subprocess.check_output',side_effect=gh) as commands, \
+                         patch('subprocess.run',return_value=SimpleNamespace(returncode=1)):
+                        runpy.run_path(str(script))
+                    uploads=[c.args[0] for c in commands.call_args_list if c.args[0][1:3]==['release','upload']]
+                    self.assertEqual(len(uploads),1)
+                    self.assertEqual(set(uploads[0][7:]),{str(Path(layout)/p.name) for p in root.iterdir()})
+                finally:
+                    os.chdir(previous)
