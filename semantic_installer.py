@@ -1141,6 +1141,16 @@ def build_steps():
       note="更新软件包索引并安装 curl、Git、Git LFS、make、解压工具与 C/C++ 编译工具链; "
            "build-essential 提供 gcc/g++, ninja-build/cmake 供 5.1 xmake 编译 AbilityFramework 使用")
 
+    S("1.1b", "安装 xmake (AbilityFramework 编译)",
+      cmds=['command -v xmake >/dev/null 2>&1 || curl -fsSL https://xmake.io/shget.text | bash',
+            "xmake --version"],
+      env=lambda app: {"PATH": _path_with_tools(app)},
+      skip_check=lambda app: (lambda rc, out: f"已满足: {out.splitlines()[0]}" if rc == 0 and out else None)(
+          *_run_quick(["xmake", "--version"], env={"PATH": _path_with_tools(app)}, timeout=10)),
+      verify=['PATH="$HOME/.local/bin:$PATH" xmake --version'],
+      note="官方脚本安装到 ~/.local/bin (已由 _path_with_tools 加入 PATH); 5.1 编译 AbilityFramework 依赖它; "
+           "xmake.io 走不通时可从 GitHub Release (GITHUB_PROXY 前缀加速) 手动安装后重跑此步")
+
     S("1.2", "安装 Go >= 1.23 (镜像下载)", sudo=True,
       confirm="将执行 sudo rm -rf /usr/local/go 并解压 Go, 确认继续?",
       cmds=lambda app: _go_install_cmds(app),
