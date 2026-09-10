@@ -192,7 +192,7 @@ SETTINGS_DESC = {
 
 # 本地目录, GitLab 仓库路径, 分支设置键 (None = 只有 main, 不切)
 REPOS = [
-    ("semantic-framework", "Sementic-Framework", "BR_SEMANTIC_FRAMEWORK"),
+    ("semantic-framework", "Semantic-Framework", "BR_SEMANTIC_FRAMEWORK"),
     ("semantic-web", "semantic-web", "BR_SEMANTIC_WEB"),
     ("semantic-docs", "semantic-docs", "BR_SEMANTIC_DOCS"),
     ("semantic-ability/r1pro-ability", "r1pro-ability", "BR_R1PRO_ABILITY"),
