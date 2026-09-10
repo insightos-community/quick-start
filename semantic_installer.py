@@ -45,6 +45,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 import traceback
 import unicodedata
@@ -1130,13 +1131,26 @@ def build_steps():
       cmds=lambda app: _apt_mirror_script(app),
       skip_check=lambda app: None if app.settings.get("APT_MIRROR", "").strip()
       else "APT_MIRROR 未配置, 保持系统源",
-      note="将 archive/security.ubuntu.com 替换为 APT_MIRROR, 每个源文件保留 .bak-orig 备份")
+      note="将 archive/security.ubuntu.com 替换为 APT_MIRROR; 备份后缀用 .disabled (apt 静默忽略, 旧版也不打 N: 提示), "
+           "已存在 .bak-orig 旧备份时不再重复备份")
 
-    S("1.1", "基础工具 (curl/git/git-lfs/make)", sudo=True,
+    S("1.1", "基础工具 (curl/git/git-lfs/编译工具链)", sudo=True,
       cmds=["sudo apt update",
-            "sudo apt install -y curl ca-certificates git git-lfs make xz-utils",
+            "sudo apt install -y curl ca-certificates git git-lfs make xz-utils "
+            "build-essential ninja-build cmake pkg-config",
             "git lfs install"],
-      note="更新软件包索引并安装 curl、Git、Git LFS、make 和解压工具。")
+      note="更新软件包索引并安装 curl、Git、Git LFS、make、解压工具与 C/C++ 编译工具链; "
+           "build-essential 提供 gcc/g++, ninja-build/cmake 供 5.1 xmake 编译 AbilityFramework 使用")
+
+    S("1.1b", "安装 xmake (AbilityFramework 编译)",
+      cmds=['command -v xmake >/dev/null 2>&1 || curl -fsSL https://xmake.io/shget.text | bash',
+            "xmake --version"],
+      env=lambda app: {"PATH": _path_with_tools(app)},
+      skip_check=lambda app: (lambda rc, out: f"已满足: {out.splitlines()[0]}" if rc == 0 and out else None)(
+          *_run_quick(["xmake", "--version"], env={"PATH": _path_with_tools(app)}, timeout=10)),
+      verify=['PATH="$HOME/.local/bin:$PATH" xmake --version'],
+      note="官方脚本安装到 ~/.local/bin (已由 _path_with_tools 加入 PATH); 5.1 编译 AbilityFramework 依赖它; "
+           "xmake.io 走不通时可从 GitHub Release (GITHUB_PROXY 前缀加速) 手动安装后重跑此步")
 
     S("1.2", "安装 Go >= 1.23 (镜像下载)", sudo=True,
       confirm="将执行 sudo rm -rf /usr/local/go 并解压 Go, 确认继续?",
@@ -1377,9 +1391,9 @@ def _apt_mirror_script(app):
         "for f in $files; do",
         '  [ -f "$f" ] || continue',
         '  if grep -qE "(archive|security)\\.ubuntu\\.com" "$f"; then',
-        '    [ -f "$f.bak-orig" ] || sudo cp "$f" "$f.bak-orig"',
+        '    if [ ! -f "$f.disabled" ] && [ ! -f "$f.bak-orig" ]; then sudo cp "$f" "$f.disabled"; fi',
         f'    sudo sed -i -E "s|https?://(cn\\.)?archive\\.ubuntu\\.com/ubuntu|{m}|g; s|https?://security\\.ubuntu\\.com/ubuntu|{m}|g" "$f"',
-        '    echo "[apt源] 已切换: $f (备份: $f.bak-orig)"; changed=1',
+        '    echo "[apt源] 已切换: $f (备份: $f.disabled)"; changed=1',
         "  fi",
         "done",
         'if [ "$changed" -eq 0 ]; then echo "[apt源] 未发现官方源地址, 无需修改"; fi',
@@ -3934,6 +3948,20 @@ def run_tui(app):
 
     os.environ.setdefault("ESCDELAY", str(ESC_GATHER_MS))
     prepare_terminal()
+
+    # 进入 curses 前保存 tty 原始模式; 退出时无条件写回, 不依赖 ncurses 内部状态
+    try:
+        saved_termios = termios.tcgetattr(sys.__stdin__.fileno())
+    except Exception:
+        saved_termios = None
+
+    # SIGTERM/SIGHUP 默认直接终止进程 (finally 不会执行), 转成异常保证终端被恢复
+    def _bail(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    for _sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(_sig, _bail)
+
     stdscr = curses.initscr()
     ok = False
     try:
@@ -3952,15 +3980,27 @@ def run_tui(app):
         ui.run(stdscr)
         ok = True
     finally:
-        for fn in (curses.endwin, curses.echo, curses.nocbreak):
-            try:
-                fn()
-            except curses.error:
-                pass
+        # 恢复顺序须与 curses.wrapper 一致: 先退出输入模式, 最后 endwin。
+        # 若先 endwin, 其后的 nocbreak/keypad 会把 termios 的 ECHO 位重新写回关闭状态,
+        # 退出后终端无回显 (实测复现)。
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
         try:
             stdscr.keypad(False)
         except curses.error:
             pass
+        for fn in (curses.nocbreak, curses.echo, curses.endwin):
+            try:
+                fn()
+            except curses.error:
+                pass
+        if saved_termios is not None:
+            try:
+                termios.tcsetattr(sys.__stdin__.fileno(), termios.TCSADRAIN, saved_termios)
+            except Exception:
+                pass
         if not ok:
             print("TUI 异常退出; 若终端显示错乱请执行 reset", file=sys.stderr)
 
