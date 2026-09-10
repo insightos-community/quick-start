@@ -46,8 +46,10 @@ POINTER = b'version https://git-lfs.github.com/spec/v1'
 
 def reject_external_models(name):
     parts = Path(name).parts
-    if len(parts) >= 2 and parts[0] == 'robot' and parts[1].startswith('r1_pro'):
-        raise ValueError('Galaxea models must not be included in public packages; see EXTERNAL_MODELS.md')
+    approved = {'r1_pro', 'r1_pro_chassis', 'r1_pro_no_wheels', 'r1_pro_tote_gripper'}
+    if (len(parts) >= 2 and parts[0] == 'robot' and parts[1].startswith('r1_pro')
+            and parts[1] not in approved):
+        raise ValueError('Unapproved Galaxea model variant; see EXTERNAL_MODELS.md')
 
 
 def digest(path):
@@ -229,7 +231,9 @@ def build(a):
         tracked = subprocess.check_output(['git', '-C', str(asset), 'ls-files', '-z']).decode().split('\0')
         for name in filter(None, tracked):
             reject_external_models(name)
-            if Path(name).parts[0] in ('robot', 'scene', 'assets') or name in ('asset-catalog.v1.json', 'README.md', 'LICENSE', 'LICENSE.md'):
+            if Path(name).parts[0] in ('robot', 'scene', 'assets') or name in (
+                    'asset-catalog.v1.json', 'README.md', 'README.zh-CN.md', 'LICENSE', 'LICENSE.md',
+                    'NOTICE', 'LICENSE_SCOPE.md', 'ASSET_PROVENANCE.md', 'EXTERNAL_MODELS.md'):
                 copy_file(asset/name, payload/'assets/mujoco'/name)
         pack = payload/'runtime-packs/native-mujoco-0.4.0-dev.0.runtime.tar.zst'
         if a.runtime_pack:

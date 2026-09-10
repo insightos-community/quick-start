@@ -38,8 +38,8 @@
     },
     "semantic-scene/mujoco-asset": {
       "url": "https://github.com/insightos-community/mujoco-asset.git",
-      "ref": "v0.4.0-insightos.2026.2",
-      "commit": "d743d407de1be97db2ddeaa32966581e4235d416"
+      "ref": "v0.4.0-insightos.2026.3",
+      "commit": "f9855e6dd1419f890b418a9f398bd1d5ec49b57c"
     },
     "semantic-robot-deployment": {
       "url": "https://github.com/insightos-community/semantic-deployment.git",

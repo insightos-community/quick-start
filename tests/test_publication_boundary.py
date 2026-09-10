@@ -12,15 +12,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublicationBoundaryTests(unittest.TestCase):
-    def test_packager_rejects_external_models(self):
+    def test_packager_allows_only_approved_r1pro_variants(self):
         spec = importlib.util.spec_from_file_location('public_packager', ROOT / 'artifacts/build_release.py')
         module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {'yaml': SimpleNamespace()}), patch.object(sys, 'path', [str(ROOT / 'artifacts'), *sys.path]):
             spec.loader.exec_module(module)
-        for name in ('robot/r1_pro/config/model.xml', 'robot/r1_pro_chassis/meshes/model.STL', 'robot/r1_pro_tote_gripper/config/model.xml'):
+        for name in ('robot/r1_pro_local/config/model.xml', 'robot/r1_pro_future/meshes/model.STL'):
             with self.assertRaisesRegex(ValueError, 'Galaxea'):
                 module.reject_external_models(name)
-        for name in ('robot/franka_panda/model_bundle/LICENSE', 'assets/objects/box.xml', 'scene/r1_pro_001/scene_info.yaml'):
+        for name in ('robot/franka_panda/model_bundle/LICENSE', 'assets/objects/box.xml',
+                     'scene/r1_pro_001/scene_info.yaml', 'robot/r1_pro/config/model.xml',
+                     'robot/r1_pro_chassis/meshes/model.STL', 'robot/r1_pro_no_wheels/config/model.xml',
+                     'robot/r1_pro_tote_gripper/config/model.xml'):
             module.reject_external_models(name)
 
     def test_bootstraps_do_not_select_old_binary_channel(self):

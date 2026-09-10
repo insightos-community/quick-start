@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> This source snapshot excludes Galaxea models and has no default prebuilt download channel. See [publication scope](PUBLICATION.md). R1 Pro simulation requires separately obtained and adapted models.
+> R1 Pro maintenance models are now available through the pinned asset repository's Git LFS. See [publication scope](PUBLICATION.md) for third-party attribution. This source distribution still has no default prebuilt download channel.
 
 🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
 
@@ -16,7 +16,7 @@ cd quick-start
 python3 semantic_installer.py --list
 ```
 
-The existing deployment baseline targets **Linux x86_64** and was verified on **Ubuntu 24.04**. Removing external models means this public snapshot is not a complete out-of-the-box R1 Pro simulation deployment. System dependency installation may require sudo.
+The existing deployment baseline targets **Linux x86_64** and was verified on **Ubuntu 24.04**. Model downloads do not replace the source build, Bundle activation and Skill publication steps. System dependency installation may require sudo.
 
 ## 🛠 Build from source
 
@@ -37,6 +37,11 @@ the existing offline Bundle cache, not the host Python environment. In settings,
 `RUNTIME_WHEEL_SOURCE=auto` is the default; `lfs` bypasses the package index and
 `offline` only checks the runtime cache (scene assets still use LFS). No dependency
 versions are upgraded. Modified cache files are preserved and reported for review.
+
+Step 2.3 also downloads the approved R1 Pro model payloads (XML/URDF, profiles and
+meshes). Step 2.4 checks the model entry files and referenced assets. Keep the
+chassis and tote/gripper directories together; do not select the older model-free
+asset tag. Third-party models retain their own rights and attribution.
 
 | Order | Work | Output |
 |---|---|---|
@@ -67,7 +72,7 @@ Each component has its own English/Chinese README. Repository names and local di
 
 ## Versions and daily use
 
-Releases and future mirror synchronization stay on the verified maintenance baseline, not the newest upstream/default branch. Use the exact tags and commits in `repo-versions.json`; see the [release policy](maintenance/release-policy.md) and [v0.1.2 record](maintenance/v0.1.2.md).
+Releases and future mirror synchronization stay on the verified maintenance baseline, not the newest upstream/default branch. Use the exact tags and commits in `repo-versions.json`; see the [release policy](maintenance/release-policy.md) and [v0.1.3 record](maintenance/v0.1.3.md).
 
 ```bash
 # The public organization and repository mappings are configured by default.

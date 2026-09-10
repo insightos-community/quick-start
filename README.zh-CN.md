@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 本次源码公开快照不包含星海图模型，也不默认指向旧的预编译安装包。详见[发布范围](PUBLICATION.md)。R1 Pro 仿真需另行获取和适配模型。
+> R1 Pro 旧业务模型现已通过清单锁定的资产仓库提供 Git LFS 下载。第三方来源声明见[发布范围](PUBLICATION.md)。本源码版本仍不默认指向预编译安装包。
 
 🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 13 个组件仓库，本身不是 Server。
 
@@ -16,7 +16,7 @@ cd quick-start
 python3 semantic_installer.py --list
 ```
 
-原有部署基线面向 **Linux x86_64**，已在 **Ubuntu 24.04** 验证。移除外部模型后，本次源码快照不代表开箱即用的完整 R1 Pro 仿真部署。安装系统依赖可能需要 sudo。
+原有部署基线面向 **Linux x86_64**，已在 **Ubuntu 24.04** 验证。下载模型后仍需完成源码构建、Bundle 激活与 Skill 发布，并非下载即完成部署。安装系统依赖可能需要 sudo。
 
 ## 🛠 源码构建
 
@@ -26,6 +26,10 @@ python3 semantic_installer.py --list
 经过特殊处理的 TinyXML2/urdfdom Wheel 仍使用 LFS。下载结果用于后续离线 Bundle，
 不会安装到系统 Python。设置 `RUNTIME_WHEEL_SOURCE=auto`（默认）、`lfs`（跳过包源）
 或 `offline`（仅检查运行时缓存，场景资产仍走 LFS）。已修改的缓存文件会保留并报错。
+
+2.3 同时下载已确认发布的 R1 Pro 模型文件（XML/URDF、配置与 Mesh），2.4 检查模型入口
+及引用文件。chassis 与 tote/gripper 目录应保持完整；不要继续使用之前不含模型的资产 tag。
+第三方模型保留其原有权利与来源声明。
 
 使用 Linux、Git / Git LFS 和支持 curses 的 Python。源码安装器的系统配置步骤面向 Ubuntu/apt；组件构建还需要 Go 1.23+、Node.js 22、uv 和 xmake。原生 MuJoCo 与 Robot Worker 分别使用独立的 Python 3.10 / 3.13 环境。
 
@@ -65,7 +69,7 @@ python3 semantic_installer.py
 
 ## 版本与日常使用
 
-发布及后续镜像同步均基于已验证的维护版本，不跟随上游或默认分支的领先版本。请使用 `repo-versions.json` 固定的 Tag 与提交，详见[发布策略](maintenance/release-policy.md)和 [v0.1.2 记录](maintenance/v0.1.2.md)。
+发布及后续镜像同步均基于已验证的维护版本，不跟随上游或默认分支的领先版本。请使用 `repo-versions.json` 固定的 Tag 与提交，详见[发布策略](maintenance/release-policy.md)和 [v0.1.3 记录](maintenance/v0.1.3.md)。
 
 ```bash
 # 已默认配置 insightos-community 组织及仓库映射。
