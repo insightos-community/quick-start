@@ -2,13 +2,25 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> R1 Pro maintenance models are now available through the pinned asset repository's Git LFS. See [publication scope](PUBLICATION.md) for third-party attribution. This source distribution still has no default prebuilt download channel.
+> R1 Pro maintenance models are now available through the pinned asset repository's Git LFS. See [publication scope](PUBLICATION.md) for third-party attribution. Component and installer archives are published through GitHub Releases with their original notices.
 
 🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
 
 ## Start here
 
-Start with the public source workspace below. The [artifact installer guide](artifacts/README.md) describes tooling for separately supplied packages; this snapshot does not publish a complete binary deployment archive.
+Use the Release installer from current main on Linux x86_64 with Python 3.10+:
+
+```bash
+git clone https://github.com/insightos-community/quick-start.git
+cd quick-start
+python3 semantic_installer.py --release --install-system-deps
+```
+
+This downloads the `v0.1.0` installer, verifies checksums and source identity, then installs without cloning the 13 components or requiring Go, Node or xmake. Initial installation downloads isolated Python environments. Set `--dir` for a separate instance. The Release installer generates a random password for `admin`; use `semanticctl welcome` to view it.
+
+CI assembles the component Releases pinned by `repo-versions.json` and smoke-tests Web/API, skill versions, MuJoCo Runtime registration and repeat installation. This does not certify physical robots, GPU execution or LLM task completion. See [release CI](docs/release-ci.md).
+
+For a source build from the verified baseline, check out the existing tag:
 
 ```bash
 git clone https://github.com/insightos-community/quick-start.git

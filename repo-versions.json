@@ -2,7 +2,7 @@
   "version": 1,
   "repos": {
     "semantic-framework": {
-      "url": "https://github.com/insightos-community/Sementic-Framework.git",
+      "url": "https://github.com/insightos-community/Semantic-Framework.git",
       "ref": "v0.5.0-insightos.2026.2",
       "commit": "81ea016480f099f9db95bd48c083ee99d8806a4d"
     },

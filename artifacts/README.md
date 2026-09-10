@@ -3,8 +3,15 @@
 这是与源码 TUI 安装器独立的**预编译产物部署**入口。安装端不克隆 Git、不运行
 Go/xmake/npm 构建；从构建机提取产物，在目标机初始化独立实例。
 
-已接入阿里云 OSS：实际发布地址、仓库外凭据配置、按版本上传和限时安装入口见 [OSS.md](OSS.md)。
-当前发布对象为公开读、授权写，中国用户可直接通过 OSS 的 curl 入口安装，无需密钥或下载票据。
+当前公开发布入口为 [GitHub Releases](https://github.com/insightos-community/quick-start/releases)。在 quick-start 的当前 main 中运行：
+
+```bash
+python3 semantic_installer.py --release --install-system-deps
+```
+
+默认 `v0.1.0`，支持 `--tag`、`--dir`、`--yes` 等参数。下载组件用于组装时使用 `fetch_releases.py`；CI 使用 `build_from_releases.py`，无需重新编译子仓库。版本、校验与组装说明见 [Release CI](../docs/release-ci.md)。
+
+以下 OSS/站点部署说明保留供已有部署维护使用，GitHub Release 安装无需配置 OSS 凭据；另行发布到镜像的操作见 [OSS.md](OSS.md)。
 
 介绍与安装入口：<https://semantic.insightos.cn/>。静态站点源码、Nginx 配置和维护/回滚说明见 [site/README.md](site/README.md)。
 
