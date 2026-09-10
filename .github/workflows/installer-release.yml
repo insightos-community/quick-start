@@ -99,7 +99,7 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: release-assets
-        path: source/artifacts/releases/*/linux-x86_64/*
+        path: source/artifacts/releases/${{ env.INSTALLER_VERSION }}/linux-x86_64/*
         if-no-files-found: error
         retention-days: 14
     - name: Upload smoke report
