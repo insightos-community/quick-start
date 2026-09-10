@@ -1133,11 +1133,13 @@ def build_steps():
       else "APT_MIRROR 未配置, 保持系统源",
       note="将 archive/security.ubuntu.com 替换为 APT_MIRROR, 每个源文件保留 .bak-orig 备份")
 
-    S("1.1", "基础工具 (curl/git/git-lfs/make)", sudo=True,
+    S("1.1", "基础工具 (curl/git/git-lfs/编译工具链)", sudo=True,
       cmds=["sudo apt update",
-            "sudo apt install -y curl ca-certificates git git-lfs make xz-utils",
+            "sudo apt install -y curl ca-certificates git git-lfs make xz-utils "
+            "build-essential ninja-build cmake pkg-config",
             "git lfs install"],
-      note="更新软件包索引并安装 curl、Git、Git LFS、make 和解压工具。")
+      note="更新软件包索引并安装 curl、Git、Git LFS、make、解压工具与 C/C++ 编译工具链; "
+           "build-essential 提供 gcc/g++, ninja-build/cmake 供 5.1 xmake 编译 AbilityFramework 使用")
 
     S("1.2", "安装 Go >= 1.23 (镜像下载)", sudo=True,
       confirm="将执行 sudo rm -rf /usr/local/go 并解压 Go, 确认继续?",
