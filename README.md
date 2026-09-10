@@ -13,6 +13,7 @@ Start with the public source workspace below. The [artifact installer guide](art
 ```bash
 git clone https://github.com/insightos-community/quick-start.git
 cd quick-start
+git checkout v0.1.0
 python3 semantic_installer.py --list
 ```
 
@@ -50,7 +51,9 @@ asset tag. Third-party models retain their own rights and attribution.
 | 4 | Prepare and register native MuJoCo | Runtime registration + isolated environment |
 | 5 | Build AbilityFramework and Python Wheels; assemble and activate Robot Bundle | Runtime seed + Robot Bundle + catalog |
 | 6 | Start Server/Web; publish Robot Skills | Web Studio + versioned Skill registry |
-| 7 | Configure models, project, scene and Robot in Studio | Runnable task environment |
+| 7 | Practical example: plan a depalletizing/palletizing scenario through chat | Reviewable task plan |
+
+After starting Server, sign in with the default username `admin` and password `test-admin-pass`. If changed, use `SEMANTIC_ADMIN_PASSWORD` from `.env`.
 
 **Bundle activation and Skill publication are separate steps.** A compiled bundle alone does not install the skills requested by a Robot.
 
@@ -71,6 +74,8 @@ asset tag. Third-party models retain their own rights and attribution.
 Each component has its own English/Chinese README. Repository names and local directory names are not always identical; preserve this layout for cross-repository builds.
 
 ## Versions and daily use
+
+**Recommended build version: `v0.1.0`.** Run `git checkout v0.1.0` before building with the installer. The [repo-versions.json at this tag](https://github.com/insightos-community/quick-start/blob/v0.1.0/repo-versions.json) is the usable, verified component baseline and pins all 13 repositories to tags and commit SHAs. For an existing clone, run `git fetch origin --tags` first.
 
 Releases and future mirror synchronization stay on the verified maintenance baseline, not the newest upstream/default branch. Use the exact tags and commits in `repo-versions.json`; see the [release policy](maintenance/release-policy.md) and [v0.1.3 record](maintenance/v0.1.3.md).
 

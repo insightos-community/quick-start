@@ -18,7 +18,7 @@ import subprocess
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import semantic_installer as installer
 
@@ -91,6 +91,30 @@ class InstallerPresentationTests(unittest.TestCase):
         self.app._begin(step, False)
         self.assertEqual(self.app.status("1.6"), "fail")
         self.assertIn("Traceback", Path(self.app.log_paths["1.6"]).read_text())
+
+    def test_startup_and_example_hints_are_visible_before_running_steps(self):
+        self.app.settings["SEMANTIC_ADMIN_PASSWORD"] = "custom-private-password"
+        ui = installer.UI(self.app)
+        ui.stdscr = MagicMock()
+        ui.log_win = MagicMock()
+        ui.log_win.getmaxyx.return_value = (16, 44)
+        with patch.object(installer.curses, "color_pair", return_value=0):
+            ui._draw_top(20, 90)
+            self.assertIn("Semantic Installer", ui.stdscr.addstr.call_args_list[0].args[2])
+            for sid, expected in (("7.1", "将来源托盘当前最上面一层周转箱"),
+                                  ("6.1", "test-admin-pass"), ("6.3", "test-admin-pass")):
+                with self.subTest(sid=sid):
+                    ui.log_win.reset_mock()
+                    ui.rows = [("step", self.app.bysid[sid], None)]
+                    ui.sel = 0
+                    ui._draw_log()
+                    calls = ui.log_win.addstr.call_args_list
+                    visible = "".join(call.args[2] for call in calls)
+                    self.assertIn(expected, visible)
+                    self.assertNotIn("custom-private-password", visible)
+                    for call in calls:
+                        self.assertLess(call.args[0], 16)
+                        self.assertLess(call.args[1] + installer.dwidth(call.args[2]), 44)
 
     def test_configuration_form_does_not_contain_admin_password(self):
         form = self.app.form_for(self.app.bysid["3.1"])

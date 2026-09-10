@@ -13,6 +13,7 @@
 ```bash
 git clone https://github.com/insightos-community/quick-start.git
 cd quick-start
+git checkout v0.1.0
 python3 semantic_installer.py --list
 ```
 
@@ -47,7 +48,9 @@ python3 semantic_installer.py
 | 4 | 准备并登记原生 MuJoCo | Runtime 登记与独立环境 |
 | 5 | 编译 AbilityFramework、Python Wheel，组装并激活 Robot Bundle | Runtime 种子、Bundle 与目录 |
 | 6 | 启动 Server / Web，发布 Robot Skill | Studio 与版本化 Skill 注册表 |
-| 7 | 在 Studio 配置模型、项目、场景和 Robot | 可执行的任务环境 |
+| 7 | 实操示例：拆码垛场景测试，通过对话进行场景任务规划 | 可审阅的任务计划 |
+
+启动 Server 后，默认用户名为 `admin`，密码为 `test-admin-pass`；如已修改，使用 `.env` 中的 `SEMANTIC_ADMIN_PASSWORD`。
 
 **Bundle 激活与 Skill 发布是两个独立步骤。** 仅编译 Bundle 不会安装 Robot 所请求的 Skill。
 
@@ -68,6 +71,8 @@ python3 semantic_installer.py
 各组件均有中英文 README。仓库名称不一定等于本地目录名；跨仓构建时请保留上述布局。
 
 ## 版本与日常使用
+
+**推荐构建版本：`v0.1.0`。** 请先 `git checkout v0.1.0`，再运行安装器进行构建。该 Tag 中的 [repo-versions.json](https://github.com/insightos-community/quick-start/blob/v0.1.0/repo-versions.json) 是可用、已验证的组件版本组合，固定了全部 13 个仓库的 Tag 与提交 SHA。已有克隆请先执行 `git fetch origin --tags`。
 
 发布及后续镜像同步均基于已验证的维护版本，不跟随上游或默认分支的领先版本。请使用 `repo-versions.json` 固定的 Tag 与提交，详见[发布策略](maintenance/release-policy.md)和 [v0.1.3 记录](maintenance/v0.1.3.md)。
 

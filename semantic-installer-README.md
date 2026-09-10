@@ -78,9 +78,13 @@ python3 semantic_installer.py --reset-status        # 清空步骤状态
 3. **构建 Server**: `.env` (管理员密码) / `make build` / `make init` / 产物核对
 4. **登记 MuJoCo Runtime**: `uv sync` / `semantic runtime install` (已存在时自动加 `--replace` 重试)
 5. **Robot 执行栈**: 从源码构建并复制 AbilityFramework / ability-py / ability-scaffold / Wheel 缓存检查 / `refresh_v050_mujoco.py build --activate --stop-users` (重跑先停本工作区 Server 与占用旧 Bundle 的实例) / 自动改 `.output` 配置 (robot_runtime + leader allowlist)
-6. **启动**: Server (`make run` 后台) / Web (`npm ci` + `.env` + `npm run dev` 后台) / 登录并发布三个 Robot Skill；已有本工作区同名服务会先停再拉
-7. **Studio 手动联调**: 按 Enter 显示 8 条手动清单, 完成后 `m` 标记
+6. **启动**: Server (`make run` 后台) / Web (`npm ci` + `.env` + `npm run dev` 后台) / 登录并发布三个 Robot Skill（默认用户名 `admin`，密码 `test-admin-pass`；如已修改，使用 `.env` 中的 `SEMANTIC_ADMIN_PASSWORD`）；已有本工作区同名服务会先停再拉
+7. **实操示例**: 7.1「拆码垛场景测试」，按 Enter 查看通过对话进行场景任务规划的示例提示词，完成后 `m` 标记
 8. **日常再开**: 先停本工作区已在跑的 Server/Web, 再后台拉起
+
+步骤 7.1 提示词可使用如下：
+
+> 将来源托盘当前最上面一层周转箱，搬到目标托盘对应位置，放稳并恢复行走姿态。给出计划。
 
 ## 行为说明
 

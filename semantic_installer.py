@@ -89,7 +89,7 @@ STAGES = [
     (4, "登记 MuJoCo Runtime"),
     (5, "Robot 执行栈"),
     (6, "启动 Server/Web/Skills"),
-    (7, "Studio 手动联调"),
+    (7, "实操示例"),
     (8, "日常再开"),
 ]
 
@@ -1283,7 +1283,8 @@ def build_steps():
     # ---------------- 阶段 6 ----------------
     S("6.1", "启动 Server (make run)", kind="service",
       service=lambda app: _server_service(app),
-      note="端口: HTTP 8080 / WS 8081 / MuJoCo Runtime 随后一般 8090 / Ability 18100-18199; "
+      note="默认登录: 用户名 admin / 密码 test-admin-pass; 如已修改, 使用 .env 中的 SEMANTIC_ADMIN_PASSWORD; "
+           "端口: HTTP 8080 / WS 8081 / MuJoCo Runtime 随后一般 8090 / Ability 18100-18199; "
            "TMPDIR 已指向 .output/tmp (AF 打包在 /tmp 跨设备 rename 会 EXDEV); "
            "已有本工作区 Server 会先停再拉")
 
@@ -1300,14 +1301,14 @@ def build_steps():
           "timeout": 240,
       },
       note=lambda app: (f"启动后浏览器打开 {app.settings['WEB_URL']}; 登录: 用户名 admin / "
-                        f"密码 SEMANTIC_ADMIN_PASSWORD (当前设置值已写入 .env); "
+                        f"默认密码 test-admin-pass (如已修改, 使用 .env 中的 SEMANTIC_ADMIN_PASSWORD); "
                         f"已有本工作区 Web 会先停再拉"))
 
     S("6.4", "发布三个 Robot Skill", kind="python", fn=_step_publish_skills,
       note="只在 Bundle 刷新后做一次; Server 必须已在跑; 发布清单: semantic-navigation / grasp-object / place-object，版本以本次构建产物为准")
 
     # ---------------- 阶段 7 ----------------
-    S("7.1", "Studio 场景联调 (手动)", kind="manual", manual_text=MANUAL_STUDIO)
+    S("7.1", "拆码垛场景测试", kind="manual", manual_text=MANUAL_STUDIO)
 
     # ---------------- 阶段 8 ----------------
     S("8.1", "日常再开: Server", kind="service",
@@ -1327,20 +1328,10 @@ def build_steps():
     return steps
 
 
-MANUAL_STUDIO = """[Studio 手动联调清单] (对应文档第 7 节)
-1. 系统设置里加 DeepSeek (text + tool_call), 设为全局默认; Token 只放设置里
-2. 新建或打开 Project; 左侧 Agent Skills 勾选
-   depalletizing-workflow-planning / depalletizing-robot-task
-3. 资源页面手动增加仿真 Runtime Profile, 选 Native MuJoCo
-4. 添加场景 R1 Pro 拆码垛 (depalletizing-r1pro)
-5. 第一次用 layout001, 点启动 Layout
-6. 查看设备中是否存在 r1_pro_tote_gripper-1 这个 Robot
-7. 启动后切换回对话页面, 输入框左边 + 选「规划模式」(不要「协作」)
-8. 发送指令 (首行触发词 + 完整任务描述):
-   PLAN-V050-MUJOCO-LAYER-DEEPSEEK
-   请在当前Project的layout001中完成一层周转箱拆垛, 并直接生成可审阅的Plan Proposal。
-   (完整八条指令原文见《新版Semantic安装步骤》第 7 节)
-完成标准: 四个箱体分别稳定进入对应目标列第一层、双工具为空、Robot 恢复 travel 姿态。"""
+MANUAL_STUDIO = """[拆码垛场景测试]
+通过对话进行场景任务规划，提示词可使用如下：
+
+“将来源托盘当前最上面一层周转箱，搬到目标托盘对应位置，放稳并恢复行走姿态。给出计划。”"""
 
 
 def _path_with_tools(app):
@@ -3067,7 +3058,7 @@ class UI:
 
     def _draw_top(self, H, W):
         s = self.app.settings
-        left = " Semantic 安装器 《新版Semantic安装步骤》"
+        left = " Semantic Installer"
         right = f"{sx(s['SEMANTIC'])}  "
         self.stdscr.addstr(0, 0, trunc(left, W - dwidth(right) - 1), curses.A_BOLD | curses.color_pair(3))
         self.stdscr.addstr(0, max(0, W - dwidth(right) - 1), trunc(right, W - 1), curses.color_pair(0) | curses.A_DIM)
@@ -3182,12 +3173,28 @@ class UI:
         if self.focus == "log":
             title = " 日志 (滚动: PgUp/PgDn, End 跟随) "
         win.addstr(0, 2, trunc(title, WW - 4), curses.A_BOLD | curses.color_pair(3))
-        avail = WH - 2
+        y = 1
+        hint = step.get("manual_text") if step else None
+        if step and step["sid"] in ("6.1", "6.3"):
+            hint = step["note"]
+            if callable(hint):
+                hint = hint(self.app)
+        if hint:
+            for line in hint.splitlines():
+                for text in wrap_cells(line, WW - 2):
+                    if y >= WH - 1:
+                        break
+                    win.addstr(y, 1, trunc(text, WW - 2), curses.color_pair(3))
+                    y += 1
+            if step["kind"] == "manual":
+                win.refresh()
+                return
+            y += 1
+        avail = max(0, WH - 1 - y)
         rows = self._log_tail_pairs(avail + self.log_offset + 1)
         total = len(rows)
         start = max(0, total - avail - self.log_offset)
         end = min(total, start + avail)
-        y = 1
         for cp, text in rows[start:end]:
             if y >= WH - 1:
                 break
@@ -3942,7 +3949,7 @@ def run_tui(app):
     app.log("info", f"设置文件: {SETTINGS_FILE} (e 键修改环境变量)")
     app.log("info", f"步骤状态文件: {STATUS_FILE}; source 用环境脚本: {ENV_SH}")
     app.log("note", "流程来自《新版Semantic安装步骤》: 1 系统依赖 → 2 拉代码 → 3 构建 Server → "
-                    "4 登记 Runtime → 5 Robot 执行栈 → 6 启动 → 7 Studio 手动 → 8 日常再开")
+                    "4 登记 Runtime → 5 Robot 执行栈 → 6 启动 → 7 实操示例 → 8 日常再开")
     app.log("note", "sudo 步骤默认在 TUI 内弹掩码密码框 (sudo -S, 一次输入全程复用, P 键清除); "
                     "SUDO_AUTH=terminal 可改回终端模式")
 
