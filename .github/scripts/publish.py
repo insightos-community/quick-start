@@ -8,7 +8,10 @@ import os
 from pathlib import Path
 import subprocess
 
-root = Path("release-assets")
+roots = list(Path("release-assets").rglob("release.json"))
+if len(roots) != 1:
+    raise SystemExit("Expected exactly one release manifest in the downloaded artifact")
+root = roots[0].parent
 metadata = json.loads((root / "release.json").read_text())
 tag = os.environ["TARGET_TAG"]
 repo = os.environ["GITHUB_REPOSITORY"]
