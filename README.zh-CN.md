@@ -2,13 +2,25 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> R1 Pro 旧业务模型现已通过清单锁定的资产仓库提供 Git LFS 下载。第三方来源声明见[发布范围](PUBLICATION.md)。本源码版本仍不默认指向预编译安装包。
+> R1 Pro 旧业务模型现已通过清单锁定的资产仓库提供 Git LFS 下载。第三方来源声明见[发布范围](PUBLICATION.md)。组件与整包通过 GitHub Releases 发布，下载时保留第三方来源和许可声明。
 
 🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 13 个组件仓库，本身不是 Server。
 
 ## 从这里开始
 
-请从下面的公开源码工作区开始。[制品安装说明](artifacts/README.md)介绍如何安装另行提供的包；本次快照不发布完整二进制部署包。
+推荐使用当前 main 中的 Release 安装入口（Linux x86_64、Python 3.10+）：
+
+```bash
+git clone https://github.com/insightos-community/quick-start.git
+cd quick-start
+python3 semantic_installer.py --release --install-system-deps
+```
+
+默认下载 `v0.1.0` 整包，校验 SHA256 与来源提交后安装。无需克隆 13 个子仓库或安装 Go、Node、xmake；首次安装会下载独立 Python 运行环境。安装目录可用 `--dir` 指定，已有不同版本的实例不会被覆盖。管理员账号为 `admin`，Release 安装生成随机密码，使用 `semanticctl welcome` 查看。
+
+CI 从 `repo-versions.json` 锁定的组件 Releases 组装整包，并执行 Web/API、技能版本、MuJoCo Runtime 注册和重复安装冒烟检查；不代表真机、GPU 或大模型拆码垛任务验收。详见 [Release 流程](docs/release-ci.md)。
+
+如需从已验证的源码基线构建，使用下面的 Tag：
 
 ```bash
 git clone https://github.com/insightos-community/quick-start.git

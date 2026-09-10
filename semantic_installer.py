@@ -4013,7 +4013,11 @@ def run_tui(app):
 
 
 def main(argv):
+    if "--release" in argv:
+        script = Path(__file__).resolve().parent / "artifacts/install_release.py"
+        return subprocess.run([sys.executable, str(script), *[arg for arg in argv if arg != "--release"]]).returncode
     ap = argparse.ArgumentParser(description="Semantic 安装器 TUI (《新版Semantic安装步骤》)")
+    ap.add_argument("--release", action="store_true", help="从 GitHub Release 下载并安装整包；可追加 --dir、--yes 等制品安装参数")
     ap.add_argument("--list", action="store_true", help="列出全部阶段与步骤")
     ap.add_argument("--run-all", action="store_true", help="无头模式: 顺序执行全部")
     ap.add_argument("--stage", type=int, action="append", help="无头模式: 执行指定阶段 (可多次)")

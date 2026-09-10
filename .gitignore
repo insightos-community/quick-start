@@ -9,3 +9,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+
+# Release downloads and assembled packages
+.release-cache/
+artifacts/releases/
+artifacts/.build/
+artifacts/channels/

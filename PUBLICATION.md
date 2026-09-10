@@ -15,8 +15,11 @@ owner confirmed communication with the rights holder and instructed restoration
 of the existing model baseline via Git LFS. The updated asset pin supplies these
 models; see [downloads and attribution](https://github.com/insightos-community/mujoco-asset/blob/main/EXTERNAL_MODELS.md).
 No new upstream business version or blanket Apache-2.0 license for these models is implied.
-No prebuilt full-stack archive or newly verified end-to-end R1 Pro deployment is
-published by this source snapshot.
+The initial source snapshot did not include a full-stack archive. Subsequent CI
+publishes component Releases and assembles an installer from their pinned outputs.
+Historical tags stay unchanged; release metadata records both the source and assembly
+recipe commits. Installer smoke checks do not certify hardware or LLM task execution.
+See [release CI](docs/release-ci.md).
 
 中文：本仓库从上述旧业务维护 Tag 导出单次公开快照，不包含原提交历史及旧分支、旧
 Tag。公开 SHA 与原仓库不同，请以 quick-start 的公开清单为准。首次公开版本排除了
