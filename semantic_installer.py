@@ -45,6 +45,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 import traceback
 import unicodedata
@@ -3934,6 +3935,20 @@ def run_tui(app):
 
     os.environ.setdefault("ESCDELAY", str(ESC_GATHER_MS))
     prepare_terminal()
+
+    # 进入 curses 前保存 tty 原始模式; 退出时无条件写回, 不依赖 ncurses 内部状态
+    try:
+        saved_termios = termios.tcgetattr(sys.__stdin__.fileno())
+    except Exception:
+        saved_termios = None
+
+    # SIGTERM/SIGHUP 默认直接终止进程 (finally 不会执行), 转成异常保证终端被恢复
+    def _bail(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    for _sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(_sig, _bail)
+
     stdscr = curses.initscr()
     ok = False
     try:
@@ -3952,15 +3967,27 @@ def run_tui(app):
         ui.run(stdscr)
         ok = True
     finally:
-        for fn in (curses.endwin, curses.echo, curses.nocbreak):
-            try:
-                fn()
-            except curses.error:
-                pass
+        # 恢复顺序须与 curses.wrapper 一致: 先退出输入模式, 最后 endwin。
+        # 若先 endwin, 其后的 nocbreak/keypad 会把 termios 的 ECHO 位重新写回关闭状态,
+        # 退出后终端无回显 (实测复现)。
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
         try:
             stdscr.keypad(False)
         except curses.error:
             pass
+        for fn in (curses.nocbreak, curses.echo, curses.endwin):
+            try:
+                fn()
+            except curses.error:
+                pass
+        if saved_termios is not None:
+            try:
+                termios.tcsetattr(sys.__stdin__.fileno(), termios.TCSADRAIN, saved_termios)
+            except Exception:
+                pass
         if not ok:
             print("TUI 异常退出; 若终端显示错乱请执行 reset", file=sys.stderr)
 
