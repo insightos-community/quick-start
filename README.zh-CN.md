@@ -8,19 +8,47 @@
 
 ## 从这里开始
 
-推荐使用当前 main 中的 Release 安装入口（Linux x86_64、Python 3.10+）：
+使用预编译产物安装 Semantic，支持 **Linux x86_64**，已在 **Ubuntu 24.04** 验证。需要 Bash、curl 和 Python 3.10+，可选择以下下载来源：
+
+| 下载来源 | 独立安装脚本 | 默认版本 |
+|---|---|---|
+| 阿里云 OSS | [install.sh](install.sh)，中文提示 | OSS `stable` 通道 |
+| GitHub Releases | [install-en.sh](install-en.sh)，英文提示 | 已验证的 `v0.1.0` Release |
+
+### 从阿里云 OSS 安装
 
 ```bash
-git clone https://github.com/insightos-community/quick-start.git
-cd quick-start
-python3 semantic_installer.py --release --install-system-deps
+curl -fsSL https://semantic.insightos.cn/install.sh -o install.sh
+bash install.sh --install-system-deps
 ```
 
-默认下载 `v0.1.0` 整包，校验 SHA256 与来源提交后安装。无需克隆 13 个子仓库或安装 Go、Node、xmake；首次安装会下载独立 Python 运行环境。安装目录可用 `--dir` 指定，已有不同版本的实例不会被覆盖。管理员账号为 `admin`，Release 安装生成随机密码，使用 `semanticctl welcome` 查看。
+安装器读取公开 OSS 通道清单，从阿里云 OSS 下载整包并校验 SHA-256，无需 OSS 账号或凭据。可用 `--version <OSS版本号>` 选择已发布的 OSS 版本，或用 `--base-url <HTTPS地址>` 指定其他制品站点。
 
-CI 从 `repo-versions.json` 锁定的组件 Releases 组装整包，并执行 Web/API、技能版本、MuJoCo Runtime 注册和重复安装冒烟检查；不代表真机、GPU 或大模型拆码垛任务验收。详见 [Release 流程](docs/release-ci.md)。
+### 从 GitHub Releases 安装
 
-如需从已验证的源码基线构建，使用下面的 Tag：
+```bash
+curl -fsSL https://raw.githubusercontent.com/insightos-community/quick-start/main/install-en.sh -o install-en.sh
+bash install-en.sh --version v0.1.0 --install-system-deps
+```
+
+安装器下载 [GitHub Release](https://github.com/insightos-community/quick-start/releases/tag/v0.1.0)，校验文件哈希、发布身份和 `v0.1.0` 固定源码提交。模型缺失或仍为 LFS 指针时，按清单锁定的 GitHub 资产提交通过 Git LFS 补齐，并校验大小和 SHA-256；无需克隆组件仓库或安装 Git LFS 客户端。`--version` 对应 GitHub Tag，省略时也默认使用 `v0.1.0`。
+
+两个通道的版本号和发布时间各自独立，OSS `stable` 不一定与 GitHub `v0.1.0` 是同一构建。
+
+### 从仓库运行与实例管理
+
+当前 `main` 的仓库根目录也包含这两个脚本。克隆仓库后，选择其中一个执行：
+
+```bash
+bash ./install.sh --install-system-deps     # 阿里云 OSS
+bash ./install-en.sh --install-system-deps  # GitHub Releases
+```
+
+两个脚本均可单独复制到其他目录运行，不会再下载额外的安装器代码。可先查看脚本，再用 `bash install.sh --help` 或 `bash install-en.sh --help` 查看参数。无需 Go、Node 或 xmake 构建工具；首次安装会下载独立 Python 环境。`--install-system-deps` 可能需要 sudo，使用用户机器已配置的系统软件源，不改写源配置；英文安装器也保留用户的 uv 配置和包索引。
+
+用 `--dir /绝对路径/实例目录` 安装独立实例。预编译安装的管理员账号为 `admin`，密码随机生成，可用 `~/.local/share/semantic/bin/semanticctl welcome` 查看（自定义 `--dir` 时调整路径）。服务管理使用 `semanticctl start|stop|status|doctor`，详见[安装管理](artifacts/README.md)。
+
+如需从源码构建，使用已验证的公开基线：
 
 ```bash
 git clone https://github.com/insightos-community/quick-start.git
@@ -29,7 +57,7 @@ git checkout v0.1.0
 python3 semantic_installer.py --list
 ```
 
-原有部署基线面向 **Linux x86_64**，已在 **Ubuntu 24.04** 验证。下载模型后仍需完成源码构建、Bundle 激活与 Skill 发布，并非下载即完成部署。安装系统依赖可能需要 sudo。
+根目录安装脚本位于当前 `main`，已有 `v0.1.0` 源码 Tag 保持不变。源码构建下载模型后仍需完成 Bundle 激活与 Skill 发布。
 
 ## 🛠 源码构建
 

@@ -3,7 +3,17 @@
 这是与源码 TUI 安装器独立的**预编译产物部署**入口。安装端不克隆 Git、不运行
 Go/xmake/npm 构建；从构建机提取产物，在目标机初始化独立实例。
 
-当前公开发布入口为 [GitHub Releases](https://github.com/insightos-community/quick-start/releases)。在 quick-start 的当前 main 中运行：
+仓库根目录提供两个独立安装入口。在 quick-start 的当前 main 中按下载来源选择一个：
+
+```bash
+bash ./install.sh --install-system-deps     # 阿里云 OSS stable，中文提示
+bash ./install-en.sh --install-system-deps  # GitHub Releases v0.1.0，英文提示
+```
+
+两者均校验下载文件，首次安装需要下载独立 Python 环境。OSS 与 GitHub 的版本号各自独立；
+指定版本使用 `--version`。免克隆下载命令及平台要求见根目录[中文 README](../README.zh-CN.md#从这里开始)和[English README](../README.md#start-here)。
+
+原有 Python Release 入口仍可使用：
 
 ```bash
 python3 semantic_installer.py --release --install-system-deps
@@ -11,7 +21,17 @@ python3 semantic_installer.py --release --install-system-deps
 
 默认 `v0.1.0`，支持 `--tag`、`--dir`、`--yes` 等参数。下载组件用于组装时使用 `fetch_releases.py`；CI 使用 `build_from_releases.py`，无需重新编译子仓库。版本、校验与组装说明见 [Release CI](../docs/release-ci.md)。
 
-以下 OSS/站点部署说明保留供已有部署维护使用，GitHub Release 安装无需配置 OSS 凭据；另行发布到镜像的操作见 [OSS.md](OSS.md)。
+公开 OSS 与 GitHub Release 安装均无需 OSS 凭据；私有 OSS 对象可使用限时票据。
+向 OSS 发布制品的维护操作见 [OSS.md](OSS.md)。
+
+根目录脚本由安装器源码生成，不单独手改。修改 `artifacts/install.sh`、英文生成器或运行时模块后，运行：
+
+```bash
+python3 artifacts/build_installers.py
+python3 artifacts/build_installers.py --check
+```
+
+这会同步根目录的 `install.sh`、`install-en.sh` 和 `artifacts/install-en.sh`；CI 检查生成结果并验证独立脚本。
 
 介绍与安装入口：<https://semantic.insightos.cn/>。静态站点源码、Nginx 配置和维护/回滚说明见 [site/README.md](site/README.md)。
 

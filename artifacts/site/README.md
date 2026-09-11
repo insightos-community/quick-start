@@ -24,7 +24,7 @@ Both languages also state that more Linux distributions will be tested soon and 
 
 ## Installer generation
 
-`artifacts/install.sh` is the canonical bootstrap. Generate the English version using `artifacts/build_english_installer.py` and `artifacts/installer.en.json`; do not maintain a second installation implementation by hand.
+`artifacts/install.sh` is the canonical OSS bootstrap. Run `python3 artifacts/build_installers.py` to generate both repository-root scripts and `artifacts/install-en.sh`. The English generator uses `artifacts/installer.en.json`; do not maintain a second installation implementation by hand. Publish the root `install.sh` and `install-en.sh` to the matching website paths.
 
 The English bootstrap validates the original payload checksum and extracts it safely before running translated management modules from a separate temporary directory. It does not modify the verified archive. Installed management commands retain English messages; upstream package-manager and application logs remain in their native language.
 
@@ -57,9 +57,9 @@ Adapt [compose.yaml](compose.yaml), [nginx-static.conf](nginx-static.conf), and 
 Before publishing, from the quick-start root:
 
 ```bash
-bash -n artifacts/install.sh
-bash -n artifacts/install-en.sh
-python3 artifacts/build_english_installer.py --check
+bash -n install.sh
+bash -n install-en.sh
+python3 artifacts/build_installers.py --check
 node --check artifacts/site/site.js
 ```
 

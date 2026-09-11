@@ -26,14 +26,14 @@ class PublicationBoundaryTests(unittest.TestCase):
                      'robot/r1_pro_tote_gripper/config/model.xml'):
             module.reject_external_models(name)
 
-    def test_bootstraps_do_not_select_old_binary_channel(self):
-        for script in ('install.sh', 'install-en.sh'):
-            result = subprocess.run(['bash', str(ROOT / 'artifacts' / script)],
+    def test_bootstraps_document_approved_download_channels(self):
+        for script, source in [('install.sh', 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'),
+                               ('install-en.sh', 'GitHub Release v0.1.0')]:
+            result = subprocess.run(['bash', str(ROOT / 'artifacts' / script), '--help'],
                                     capture_output=True, text=True, timeout=20,
                                     env={'PATH': '/usr/bin:/bin'})
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('--base-url', result.stderr)
-            self.assertNotIn('Traceback', result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(source, result.stdout)
 
     def test_source_installer_checks_external_model_entry_files(self):
         import semantic_installer as installer
