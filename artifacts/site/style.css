@@ -83,4 +83,5 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8
 .musl-install p{font-size:13px;line-height:1.9;color:var(--muted);overflow-wrap:anywhere}
 .musl-install pre{max-width:100%;overflow-x:auto;text-align:left}
 .musl-install a{color:var(--green);text-decoration:underline}
+@media(min-width:1000px){.musl-install [data-i18n="muslIntro"],.musl-install [data-i18n="muslRuntime"]{min-height:3.8em}.musl-install [data-i18n="muslRender"]{min-height:5.7em}}
 @media(max-width:600px){.musl-install{padding:16px}.musl-install summary{font-size:14px}}
