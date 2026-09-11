@@ -306,6 +306,7 @@ p = argparse.ArgumentParser(description='Semantic verified bootstrap', add_help=
 p.add_argument('--base-url', default=os.environ.get('SEMANTIC_DOWNLOAD_BASE', 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'))
 p.add_argument('--version', default='stable')
 p.add_argument('--musl', action='store_true', help='Opt in to musl; default installs remain glibc')
+p.add_argument('--musl-runtime', choices=['bundled', 'system'])
 p.add_argument('--package', type=pathlib.Path)
 p.add_argument('--ticket', type=pathlib.Path, help='Private OSS download ticket; no long-lived credentials required')
 p.add_argument('--sha256')
@@ -313,11 +314,15 @@ p.add_argument('--allow-http', action='store_true', help='Only for local/private
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
 a, rest = p.parse_known_args()
+if a.musl_runtime and not a.musl:
+    raise SystemExit('--musl-runtime requires --musl')
+if a.musl_runtime and not a.configure_existing:
+    rest = ['--musl-runtime', a.musl_runtime, *rest]
 if a.musl and not a.configure_existing:
     rest = ['--musl', *rest]
 if a.help:
     print('Semantic: --base-url HTTPS_URL [--version VERSION] | --package FILE [--sha256 HASH]')
-    print('musl: --musl [--render-backend auto|mesa-gpu|software]; GitHub Release, Linux x86_64 musl only')
+    print('musl: --musl [--musl-runtime bundled|system] [--render-backend auto|mesa-gpu|software]; Linux x86_64; bundled works on glibc hosts')
     print('安装选项: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('网络: 新安装 Web 默认 0.0.0.0:3000（含本机与局域网）；API/WS 保持本机')
     print('自定义: --web-host IPv4 --web-port PORT；仅本机用 --web-host 127.0.0.1')
@@ -406,7 +411,7 @@ import urllib.request
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
 GITHUB_DEFAULT_TAG = 'v0.1.0'
-GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-2'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 

@@ -307,6 +307,7 @@ p = argparse.ArgumentParser(description='Semantic verified bootstrap', add_help=
 p.add_argument('--base-url', default='')
 p.add_argument('--version', default='stable')
 p.add_argument('--musl', action='store_true', help='Opt in to musl; default installs remain glibc')
+p.add_argument('--musl-runtime', choices=['bundled', 'system'])
 p.add_argument('--package', type=pathlib.Path)
 p.add_argument('--ticket', type=pathlib.Path, help='Private OSS download ticket; no long-lived credentials required')
 p.add_argument('--sha256')
@@ -314,11 +315,15 @@ p.add_argument('--allow-http', action='store_true', help='Only for local/private
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
 a, rest = p.parse_known_args()
+if a.musl_runtime and not a.musl:
+    raise SystemExit('--musl-runtime requires --musl')
+if a.musl_runtime and not a.configure_existing:
+    rest = ['--musl-runtime', a.musl_runtime, *rest]
 if a.musl and not a.configure_existing:
     rest = ['--musl', *rest]
 if a.help:
     print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')
-    print('musl: --musl [--render-backend auto|mesa-gpu|software]; GitHub Release, Linux x86_64 musl only')
+    print('musl: --musl [--musl-runtime bundled|system] [--render-backend auto|mesa-gpu|software]; Linux x86_64; bundled works on glibc hosts')
     print('Install: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('Network: new installs use Web 0.0.0.0:3000 (localhost and LAN); API/WS stay local')
     print('Customize: --web-host IPv4 --web-port PORT; localhost only: --web-host 127.0.0.1')
@@ -406,7 +411,7 @@ import urllib.request
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
 GITHUB_DEFAULT_TAG = 'v0.1.0'
-GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-2'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 
@@ -749,6 +754,77 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        raise RuntimeError(f'{name} failed ({result.returncode}); log: {log}{hint}')\n"
             '\n'
             '\n'
+            'def musl_runtime_mode(root, release):\n'
+            "    state = load(root/'install.json') if (root/'install.json').exists() else {}\n"
+            "    default = 'bundled' if (release/'python/bin/python3.13.musl-template').exists() else 'system'\n"
+            "    return state.get('musl_runtime', default)\n"
+            '\n'
+            '\n'
+            'def musl_python(root, release):\n'
+            "    name = 'python3.13-bundled' if musl_runtime_mode(root, release) == 'bundled' else 'python3.13'\n"
+            "    return release/'python/bin'/name\n"
+            '\n'
+            '\n'
+            'def relocated_musl_python(template, loader):\n'
+            '    """Fill the reserved ELF interpreter slot without needing a host patchelf."""\n'
+            '    import struct\n'
+            '    data = bytearray(template.read_bytes())\n'
+            "    if data[:6] != b'\\x7fELF\\x02\\x01' or struct.unpack_from('<H', data, 18)[0] != 62:\n"
+            "        raise ValueError('Invalid x86_64 musl Python template')\n"
+            "    offset = struct.unpack_from('<Q', data, 32)[0]\n"
+            "    size, count = struct.unpack_from('<HH', data, 54)\n"
+            '    slots = []\n'
+            '    for index in range(count):\n'
+            '        entry = offset + index*size\n'
+            '        if size < 56 or entry + size > len(data):\n'
+            "            raise ValueError('Invalid ELF program headers')\n"
+            "        if struct.unpack_from('<I', data, entry)[0] == 3:\n"
+            "            start = struct.unpack_from('<Q', data, entry+8)[0]\n"
+            "            length = struct.unpack_from('<Q', data, entry+32)[0]\n"
+            '            slots.append((start, length))\n'
+            '    if len(slots) != 1:\n'
+            "        raise ValueError('Missing unique musl interpreter slot')\n"
+            '    start, length = slots[0]\n'
+            "    if start + length > len(data) or not data[start:start+length].startswith(b'/__SEMANTIC_BUNDLED_MUSL__/'):\n"
+            "        raise ValueError('Unexpected musl interpreter template')\n"
+            '    path = os.fsencode(loader)\n'
+            "    if not loader.is_absolute() or b'\\0' in path or len(path) >= length:\n"
+            "        raise ValueError('Installation path exceeds the bundled musl interpreter capacity')\n"
+            '    data[start:start+length] = path + bytes(length-len(path))\n'
+            '    return bytes(data)\n'
+            '\n'
+            '\n'
+            'def prepare_musl_runtime(root, release):\n'
+            "    template = release/'python/bin/python3.13.musl-template'\n"
+            '    if not template.exists():\n'
+            '        return  # Releases predating the bundled loader keep the original behavior.\n'
+            '    python = musl_python(root, release)\n'
+            "    if musl_runtime_mode(root, release) == 'bundled':\n"
+            "        loader = release/'musl/lib/ld-musl-x86_64.so.1'\n"
+            '        expected = relocated_musl_python(template, loader)\n'
+            '        if python.exists():\n'
+            '            if python.is_symlink() or python.read_bytes() != expected:\n'
+            "                raise RuntimeError('Prepared musl Python was modified; use a new installation directory')\n"
+            '        else:\n'
+            '            import tempfile\n'
+            "            with tempfile.NamedTemporaryFile(dir=python.parent, prefix='.musl-python-', delete=False) as target:\n"
+            '                target.write(expected)\n'
+            '                temporary = Path(target.name)\n'
+            '            temporary.chmod(0o755)\n'
+            '            temporary.replace(python)\n'
+            "    launchers = root/'python-launchers'/release.name/'bin'\n"
+            '    launchers.mkdir(parents=True, exist_ok=True)\n'
+            "    for name in ('python', 'python3', 'python3.13'):\n"
+            '        alias = launchers/name\n'
+            '        if alias.is_symlink():\n'
+            '            if alias.readlink() != python:\n'
+            "                raise RuntimeError('Existing Python launcher selects a different musl runtime')\n"
+            '        elif alias.exists():\n'
+            "            raise RuntimeError('Unexpected file at the managed Python launcher path')\n"
+            '        else:\n'
+            '            alias.symlink_to(python)\n'
+            '\n'
+            '\n'
             'def environment(root, release):\n'
             '    env = dict(os.environ)\n'
             "    for key in ('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'CONDA_PREFIX'):\n"
@@ -763,6 +839,12 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "                   LD_LIBRARY_PATH=str(release/'musl/lib'),\n"
             "                   PYTHONPATH=str(release/'musl/lib/python3.13/site-packages'),\n"
             "                   PYOPENGL_PLATFORM='egl')\n"
+            "        if (release/'python/bin/python3.13.musl-template').exists():\n"
+            "            env['PATH'] = str(root/'python-launchers'/release.name/'bin') + os.pathsep + env['PATH']\n"
+            "            # The prepared interpreter's RPATH scopes musl libraries to Python.\n"
+            '            # In particular, host tar/zstd and shells must not load these libraries.\n'
+            "            env.pop('LD_LIBRARY_PATH', None)\n"
+            "            env.pop('LD_PRELOAD', None)\n"
             "        for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', 'MESA_LOADER_DRIVER_OVERRIDE',\n"
             "                    'LIBGL_DRIVERS_PATH', '__EGL_VENDOR_LIBRARY_FILENAMES',\n"
             "                    '__EGL_VENDOR_LIBRARY_DIRS', 'DRI_PRIME', 'EGL_PLATFORM', 'MUJOCO_EGL_DEVICE_ID'):\n"
@@ -788,12 +870,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        root/'logs/musl-render.log', environment(root, release))\n"
             '\n'
             '\n'
-            'def musl_host():\n'
-            '    try:\n'
-            "        names = [Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if '/' in line]\n"
-            '    except OSError:\n'
-            '        return False\n'
-            "    return any(name.startswith(('ld-musl-', 'libc.musl-')) for name in names)\n"
+            'def system_musl_available():\n'
+            "    loader = Path('/lib/ld-musl-x86_64.so.1')\n"
+            '    return loader.is_file() and os.access(loader, os.X_OK)\n'
             '\n'
             '\n'
             "def check_port(port, host='127.0.0.1'):\n"
@@ -882,6 +961,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    if not state.get('ready'):\n"
             "        raise RuntimeError('Installation is incomplete; run the installer again first')\n"
             "    release = root/'releases'/state['version']\n"
+            '    prepare_musl_runtime(root, release)\n'
             "    probe_musl(root, release, state.get('render_backend', 'auto'))\n"
             '    env = environment(root, release)\n'
             '    records = services(root)\n'
@@ -964,8 +1044,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    raise RuntimeError(f\'Automatic dependency installation is unsupported on this distribution: {distro or "unknown"}; ask an administrator to install dependencies manually\')\n'
             '\n'
             '\n'
-            'def dependency_commands(manager):\n'
-            '    packages = SYSTEM_PACKAGES[manager]\n'
+            'def dependency_commands(manager, musl=False):\n'
+            "    packages = ['ca-certificates', 'tar', 'zstd'] if musl else SYSTEM_PACKAGES[manager]\n"
             "    if manager == 'apk':\n"
             "        return [['apk', 'add', '--no-cache', *packages]]\n"
             "    if manager == 'apt-get':\n"
@@ -1021,7 +1101,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    note('Authorized')\n"
             '\n'
             '\n'
-            'def install_dependencies(log):\n'
+            'def install_dependencies(log, musl=False):\n'
             '    manager = package_manager()\n'
             "    sudo = [] if os.geteuid() == 0 else ['sudo', '-n']\n"
             "    if sudo and not shutil.which('sudo'):\n"
@@ -1031,7 +1111,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    if manager == 'pacman':\n"
             "        with Path(log).open('a') as output:\n"
             "            output.write('On Arch, ask an administrator to update the system first; this script does not refresh package databases or perform full system upgrades.\\n')\n"
-            '    for command in dependency_commands(manager):\n'
+            '    for command in dependency_commands(manager, musl):\n'
             "        with Path(log).open('a') as output:\n"
             '            output.write(f\'[{time.strftime("%H:%M:%S")}] Dependency command: {shlex.join([*sudo, *command])}\\n\')\n'
             '        if PROGRESS:\n'
@@ -1041,15 +1121,22 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        PROGRESS.detail = ''\n"
             '\n'
             '\n'
-            'def check_platform(manifest, musl=False):\n'
+            'def check_platform(manifest, musl=False, musl_runtime=None):\n'
             "    if platform.system() != 'Linux' or platform.machine() != 'x86_64':\n"
             "        raise RuntimeError('This artifact supports Linux x86_64 only')\n"
             "    variant = manifest.get('libc') == 'musl'\n"
             '    if variant != musl:\n'
             "        raise RuntimeError('The musl package requires --musl; --musl cannot install a glibc package')\n"
             '    if variant:\n'
-            "        if manifest.get('platform') != 'linux-musl-x86_64' or not musl_host():\n"
-            "            raise RuntimeError('--musl requires a Linux x86_64 musl host (for example Alpine)')\n"
+            "        mode = musl_runtime or ('bundled' if manifest.get('musl_runtime') else 'system')\n"
+            "        if manifest.get('platform') != 'linux-musl-x86_64':\n"
+            "            raise RuntimeError('Invalid musl package platform')\n"
+            "        if mode == 'bundled' and not manifest.get('musl_runtime'):\n"
+            "            raise RuntimeError('This release does not include musl; choose a newer release or --musl-runtime system')\n"
+            "        if mode == 'system' and not system_musl_available():\n"
+            "            raise RuntimeError('--musl-runtime system requires a musl host loader at /lib/ld-musl-x86_64.so.1; use --musl-runtime bundled otherwise')\n"
+            "        if mode not in ('bundled', 'system'):\n"
+            "            raise ValueError('Invalid musl runtime selection')\n"
             '        return\n'
             "    minimum = manifest.get('minimum_glibc', '2.39')\n"
             "    if not re.fullmatch(r'[0-9]+\\.[0-9]+', minimum):\n"
@@ -1065,7 +1152,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    manifest = verify_payload(payload)\n'
             "    if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?', manifest['version']):\n"
             "        raise ValueError('Invalid release version')\n"
-            "    check_platform(manifest, getattr(a, 'musl', False))\n"
+            "    if getattr(a, 'musl_runtime', None) and not getattr(a, 'musl', False):\n"
+            "        raise ValueError('--musl-runtime requires --musl')\n"
             "    if not getattr(a, 'musl', False) and getattr(a, 'render_backend', None) not in (None, 'auto'):\n"
             "        raise ValueError('--render-backend requires --musl')\n"
             '    raw = Path(a.dir).expanduser()\n'
@@ -1082,6 +1170,10 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    if len(set(ports)) != len(ports) or any(p < 1024 or p > 65535 for p in ports):\n'
             "        raise ValueError('Ports must be distinct numbers between 1024 and 65535')\n"
             "    old = load(root/'install.json') if (root/'install.json').exists() else {}\n"
+            "    runtime_mode = getattr(a, 'musl_runtime', None) or old.get('musl_runtime') or ('bundled' if manifest.get('musl_runtime') else 'system')\n"
+            "    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)\n"
+            "    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:\n"
+            "        raise ValueError('Changing musl runtime requires a new --dir')\n"
             "    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))\n"
             '    if a.web_host and old:\n'
             "        if host != old.get('web_host', '127.0.0.1'):\n"
@@ -1109,7 +1201,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        progress.log_path = str(log)\n'
             '        progress.next(tasks[0])\n'
             '        if a.install_system_deps:\n'
-            '            install_dependencies(log)\n'
+            "            install_dependencies(log, musl=manifest.get('libc') == 'musl')\n"
             '        missing = []\n'
             "        if not shutil.which('zstd'):\n"
             "            missing.append('zstd')\n"
@@ -1137,6 +1229,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        state.setdefault('web_host', host)\n"
             "        if manifest.get('libc') == 'musl':\n"
             "            state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')\n"
+            "            state['musl_runtime'] = runtime_mode\n"
             '        write_json(state_path, state)\n'
             "        release = root/'releases'/manifest['version']\n"
             '        if not release.exists():\n'
@@ -1146,6 +1239,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            for name, checksum in load(payload/'files.json').items():\n"
             '                if not (release/name).is_file() or digest(release/name) != checksum:\n'
             "                    raise RuntimeError('Installed artifact is incomplete or modified: '+name)\n"
+            '        prepare_musl_runtime(root, release)\n'
             '        env = environment(root, release)\n'
             '        progress.next(tasks[2])\n'
             "        if not state['ready']:\n"
@@ -1153,7 +1247,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            venv = bundle/'python/venv'\n"
             "            uv = release/'bin/uv'\n"
             "            run([uv, 'venv', '--allow-existing', '--python',\n"
-            "                 release/'python/bin/python3.13' if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)\n"
+            "                 musl_python(root, release) if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)\n"
             "            run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',\n"
             "                 *sorted((bundle/'wheels').glob('*.whl'))], log, env)\n"
             "            if manifest.get('libc') == 'musl':\n"
@@ -1282,7 +1376,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    p.add_argument('--yes', action='store_true')\n"
             "    p.add_argument('--no-start', action='store_true')\n"
             "    p.add_argument('--install-system-deps', action='store_true')\n"
-            "    p.add_argument('--musl', action='store_true', help='Use the optional musl release on a musl host')\n"
+            "    p.add_argument('--musl', action='store_true', help='Use the optional musl release')\n"
+            "    p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')\n"
             "    p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])\n"
             '    def presentation_options(p):\n'
             '        network = p.add_mutually_exclusive_group()\n'

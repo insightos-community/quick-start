@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import struct
 import sys
 import tarfile
 import zipfile
@@ -160,6 +161,22 @@ def assemble(args):
             shutil.copy2(unpacked/'build-manifest.json', prefix/'manifests'/f'{name}.json')
         if name == 'mesa':
             shutil.copytree(unpacked/'prefix/share/insightos-mesa', prefix/'share/insightos-mesa')
+    # The loader also implements libc. Bundle an immutable copy from the pinned
+    # Alpine image, plus its upstream license and distribution build recipe.
+    musl = upstream['musl_runtime']
+    loader = Path('/work/musl-loader/ld-musl-x86_64.so.1')
+    if not loader.exists():
+        loader = Path('/lib/ld-musl-x86_64.so.1')
+    if digest(loader) != musl['sha256']:
+        raise ValueError('Bundled musl loader differs from its pinned binary')
+    for name in ('ld-musl-x86_64.so.1', 'libc.so', 'libc.musl-x86_64.so.1'):
+        shutil.copy2(loader, prefix/'lib'/name)
+    source_tar = verified(musl['source'], musl['source_sha256'], cache/'upstream/musl-1.2.5.tar.gz')
+    notice = prefix/'licenses/musl'
+    notice.mkdir(parents=True)
+    with tarfile.open(source_tar) as source_archive:
+        (notice/'COPYRIGHT').write_bytes(source_archive.extractfile('musl-1.2.5/COPYRIGHT').read())
+    write_json(prefix/'manifests/musl.json', musl)
     # Unmodified GCC runtimes come from the pinned Alpine distribution packages.
     compiler = upstream['compiler_runtime']
     for library in ('libgcc_s.so.1', 'libstdc++.so.6', 'libgomp.so.1'):
@@ -175,6 +192,16 @@ def assemble(args):
     write_json(prefix/'manifests/compiler-runtime.json', {**compiler, 'actual_packages':actual})
     python_tree = extract(fetched['python'], work/'cpython')/'python'
     shutil.copytree(python_tree, payload/'python', symlinks=False)
+    # RPATH is scoped to Python, so host tar/zstd/shell processes never inherit a
+    # musl LD_LIBRARY_PATH on glibc systems. Keep original payload files immutable;
+    # installation creates a derived executable from the reserved-interpreter template.
+    for executable in (payload/'python/bin').glob('python*'):
+        if executable.is_file() and executable.open('rb').read(4) == b'\x7fELF':
+            run(['patchelf', '--force-rpath', '--set-rpath', '$ORIGIN/../../musl/lib', executable])
+    template = payload/'python/bin/python3.13.musl-template'
+    shutil.copy2(payload/'python/bin/python3.13', template)
+    placeholder = '/__SEMANTIC_BUNDLED_MUSL__/' + 'x'*4000 + '/ld-musl-x86_64.so.1'
+    run(['patchelf', '--set-interpreter', placeholder, template])
     uv_tree = extract(fetched['uv'], work/'uv')/'uv-x86_64-unknown-linux-musl'
     shutil.copy2(uv_tree/'uv', payload/'bin/uv')
     # Build the application wheels from the committed Python 3.13 adaptation.
@@ -237,7 +264,7 @@ def assemble(args):
     for filename in ('installer.py','install_support.py','uninstall.py'):
         shutil.copy2(ROOT/'artifacts/runtime'/filename, payload/filename)
     meta = {**old, 'tag':args.tag, 'version':args.version, 'platform':'linux-musl-x86_64',
-            'libc':'musl','minimum_musl':'1.2','robot_python':PYTHON,'runtime_python':PYTHON,
+            'libc':'musl','minimum_musl':'1.2','musl_runtime':{'default':'bundled','loader':'musl/lib/ld-musl-x86_64.so.1','template':'python/bin/python3.13.musl-template','package':musl['package']},'robot_python':PYTHON,'runtime_python':PYTHON,
             'runtime_pack':pack_name,'native_linkage':'static applications; musl shared Python and libraries',
             'distribution':'optional-musl-component-releases',
             'base_installer':upstream['installer'],
@@ -309,8 +336,23 @@ def elf_record(path, name):
     if re.search(r'\bGLIBC_[0-9]',versions):
         raise ValueError('glibc dependency: '+name)
     dynamic = subprocess.check_output(['readelf','-d',path],text=True)
-    headers = subprocess.check_output(['readelf','-l',path],text=True)
-    interpreters = re.findall(r'Requesting program interpreter: (.*?)\]',headers)
+    # readelf truncates long interpreter strings at 256 bytes, even with --wide.
+    # Read PT_INTERP directly so the reserved relocation slot is audited in full.
+    interpreters = []
+    with path.open('rb') as elf:
+        header = elf.read(64)
+        phoff = struct.unpack_from('<Q', header, 32)[0]
+        size, count = struct.unpack_from('<HH', header, 54)
+        for index in range(count):
+            elf.seek(phoff + index*size)
+            entry = elf.read(size)
+            if struct.unpack_from('<I', entry)[0] == 3:
+                offset = struct.unpack_from('<Q', entry, 8)[0]
+                length = struct.unpack_from('<Q', entry, 32)[0]
+                if not 1 <= length <= 4096:
+                    raise ValueError('Invalid interpreter size: '+name)
+                elf.seek(offset)
+                interpreters.append(elf.read(length).split(b'\0', 1)[0].decode())
     if any('ld-musl-x86_64' not in p for p in interpreters):
         raise ValueError('Non-musl interpreter: '+name)
     needed = re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic)

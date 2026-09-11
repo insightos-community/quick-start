@@ -41,6 +41,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--package', type=Path, required=True)
     p.add_argument('--musl', action='store_true', help='Exercise the explicitly selected musl variant')
+    p.add_argument('--musl-runtime', choices=['bundled', 'system'])
     p.add_argument('--offline', action='store_true', help='Test loopback only in a container without a network interface')
     p.add_argument('--dir', type=Path, help='New or previously managed smoke-test directory')
     p.add_argument('--port-base', type=int, default=28080)
@@ -53,6 +54,8 @@ def main():
                '--web-port', str(ports[2]), '--runtime-port', str(ports[3])]
     if a.musl:
         options.append('--musl')
+    if a.musl_runtime:
+        options.extend(['--musl-runtime', a.musl_runtime])
     if a.install_system_deps:
         options.append('--install-system-deps')
     report = {'directory': str(root), 'package': str(a.package.resolve()), 'checks': []}
@@ -88,16 +91,23 @@ def main():
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(HERE)))
         threading.Thread(target=server.serve_forever, daemon=True).start()
         mirror = f'http://127.0.0.1:{server.server_port}'
+        reinstall_options = list(options)
+        if a.musl_runtime:
+            index = reinstall_options.index('--musl-runtime')
+            del reinstall_options[index:index+2]
         try:
             curl = subprocess.Popen(['curl', '-fsSL', mirror+'/install.sh'], stdout=subprocess.PIPE)
             with curl.stdout:
                 result = subprocess.run(['bash', '-s', '--', '--base-url', mirror, '--allow-http',
-                    '--version', release['version'], *options], stdin=curl.stdout)
+                    '--version', release['version'], *reinstall_options], stdin=curl.stdout)
             assert curl.wait() == 0 and result.returncode == 0
         finally:
             server.shutdown()
             server.server_close()
         assert json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD'] == password
+        if a.musl_runtime:
+            assert json.loads((root/'install.json').read_text())['musl_runtime'] == a.musl_runtime
+            report['checks'].append('Reinstall without --musl-runtime preserves the chosen runtime')
         report['checks'].append('HTTP mirror curl pipe, archive SHA256 and same-version password preservation')
         # Management-only configuration must also work for older installed releases.
         config_package = a.configure_package or a.package

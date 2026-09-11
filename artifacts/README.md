@@ -103,7 +103,7 @@ R1 Pro Bundle。应用程序采用静态 ELF，glibc 门槛来自 uv/Python/Whee
 满足门槛不等于所有发行版都已通过产品验收。实测范围见 [PORTABILITY.md](PORTABILITY.md)。
 ARM64 和 Windows/macOS 尚不支持。
 
-Alpine/musl x86_64 使用额外的 `--musl` 参数；默认 glibc 路径不变。中英文脚本与 `python3 semantic_installer.py --release --musl` 均支持。可选包自带 CPython 3.13.15、NumPy 2.3.5、机器人依赖与 Mesa，详见 [musl/README.md](musl/README.md)。GPU 探测和软件回退入口见 [mesa/README.md](mesa/README.md)。
+Linux x86_64 使用额外的 `--musl` 参数可选择 musl 包；默认 glibc 路径不变。`--musl-runtime bundled`（默认）使用随包提供的 musl，可运行于 glibc 或 musl 宿主；`--musl-runtime system` 使用宿主已有的 musl。运行时选择保存在实例中，切换时使用新目录，不修改宿主 `/lib`。中英文脚本与 `python3 semantic_installer.py --release --musl` 均支持。可选包自带 CPython 3.13.15、NumPy 2.3.5、机器人依赖与 Mesa，详见 [musl/README.md](musl/README.md)。GPU 探测和软件回退入口见 [mesa/README.md](mesa/README.md)。
 
 入口形式参考 [Hermes 安装脚本](https://hermes-agent.nousresearch.com/install.sh)：
 支持管道启动、参数化路径和非交互安装；安装过程中从 `/dev/tty` 读取确认，

@@ -53,4 +53,4 @@ PR/main 组装后执行真实安装冒烟检查，覆盖 Web SPA、认证 API、
 
 默认 installer 及 `repo-versions.json` 继续使用现有 glibc 运行栈。额外的 `.github/workflows/musl-release.yml` 使用独立的 `musl-v*` Tag，发布供 `--musl` 选择的预发布包，不更新普通 latest Release 或 OSS stable。
 
-锁定的输入见 `artifacts/musl/releases.json`（组织内依赖 Release）、`upstream.json`（官方 musl Python/uv、基础安装包与源码）和 `python-wheels.json`（PyPI musl Wheel）。组装会验证 SHA-256、源码提交和平台，审计整个包及 Wheel 中的 ELF 依赖，然后在断网 Alpine 容器中测试中英文安装入口、Server/Web、Native MuJoCo 场景和机器人库联合运行。详见 [musl 构建说明](../artifacts/musl/README.md)。
+锁定的输入见 `artifacts/musl/releases.json`（组织内依赖 Release）、`upstream.json`（官方 musl Python/uv、基础安装包与源码）和 `python-wheels.json`（PyPI musl Wheel）。组装会验证 SHA-256、源码提交和平台，审计整个包及 Wheel 中的 ELF 依赖，包内还包含锁定版本的 musl 加载器、libc 及许可证。随后在断网 Alpine（包内/系统 musl）与没有系统 musl 的 Ubuntu 22.04（包内 musl）容器中测试中英文安装入口、Server/Web、Native MuJoCo 场景、机器人库联合运行和 Python 子进程。`--musl-runtime bundled|system` 选择运行时，默认 bundled。详见 [musl 构建说明](../artifacts/musl/README.md)。

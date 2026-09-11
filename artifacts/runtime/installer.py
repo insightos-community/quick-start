@@ -122,6 +122,77 @@ def run(command, log, env=None):
         raise RuntimeError(f'{name} 执行失败 ({result.returncode})，日志: {log}{hint}')
 
 
+def musl_runtime_mode(root, release):
+    state = load(root/'install.json') if (root/'install.json').exists() else {}
+    default = 'bundled' if (release/'python/bin/python3.13.musl-template').exists() else 'system'
+    return state.get('musl_runtime', default)
+
+
+def musl_python(root, release):
+    name = 'python3.13-bundled' if musl_runtime_mode(root, release) == 'bundled' else 'python3.13'
+    return release/'python/bin'/name
+
+
+def relocated_musl_python(template, loader):
+    """Fill the reserved ELF interpreter slot without needing a host patchelf."""
+    import struct
+    data = bytearray(template.read_bytes())
+    if data[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', data, 18)[0] != 62:
+        raise ValueError('Invalid x86_64 musl Python template')
+    offset = struct.unpack_from('<Q', data, 32)[0]
+    size, count = struct.unpack_from('<HH', data, 54)
+    slots = []
+    for index in range(count):
+        entry = offset + index*size
+        if size < 56 or entry + size > len(data):
+            raise ValueError('Invalid ELF program headers')
+        if struct.unpack_from('<I', data, entry)[0] == 3:
+            start = struct.unpack_from('<Q', data, entry+8)[0]
+            length = struct.unpack_from('<Q', data, entry+32)[0]
+            slots.append((start, length))
+    if len(slots) != 1:
+        raise ValueError('Missing unique musl interpreter slot')
+    start, length = slots[0]
+    if start + length > len(data) or not data[start:start+length].startswith(b'/__SEMANTIC_BUNDLED_MUSL__/'):
+        raise ValueError('Unexpected musl interpreter template')
+    path = os.fsencode(loader)
+    if not loader.is_absolute() or b'\0' in path or len(path) >= length:
+        raise ValueError('Installation path exceeds the bundled musl interpreter capacity')
+    data[start:start+length] = path + bytes(length-len(path))
+    return bytes(data)
+
+
+def prepare_musl_runtime(root, release):
+    template = release/'python/bin/python3.13.musl-template'
+    if not template.exists():
+        return  # Releases predating the bundled loader keep the original behavior.
+    python = musl_python(root, release)
+    if musl_runtime_mode(root, release) == 'bundled':
+        loader = release/'musl/lib/ld-musl-x86_64.so.1'
+        expected = relocated_musl_python(template, loader)
+        if python.exists():
+            if python.is_symlink() or python.read_bytes() != expected:
+                raise RuntimeError('Prepared musl Python was modified; use a new installation directory')
+        else:
+            import tempfile
+            with tempfile.NamedTemporaryFile(dir=python.parent, prefix='.musl-python-', delete=False) as target:
+                target.write(expected)
+                temporary = Path(target.name)
+            temporary.chmod(0o755)
+            temporary.replace(python)
+    launchers = root/'python-launchers'/release.name/'bin'
+    launchers.mkdir(parents=True, exist_ok=True)
+    for name in ('python', 'python3', 'python3.13'):
+        alias = launchers/name
+        if alias.is_symlink():
+            if alias.readlink() != python:
+                raise RuntimeError('Existing Python launcher selects a different musl runtime')
+        elif alias.exists():
+            raise RuntimeError('Unexpected file at the managed Python launcher path')
+        else:
+            alias.symlink_to(python)
+
+
 def environment(root, release):
     env = dict(os.environ)
     for key in ('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'CONDA_PREFIX'):
@@ -136,6 +207,12 @@ def environment(root, release):
                    LD_LIBRARY_PATH=str(release/'musl/lib'),
                    PYTHONPATH=str(release/'musl/lib/python3.13/site-packages'),
                    PYOPENGL_PLATFORM='egl')
+        if (release/'python/bin/python3.13.musl-template').exists():
+            env['PATH'] = str(root/'python-launchers'/release.name/'bin') + os.pathsep + env['PATH']
+            # The prepared interpreter's RPATH scopes musl libraries to Python.
+            # In particular, host tar/zstd and shells must not load these libraries.
+            env.pop('LD_LIBRARY_PATH', None)
+            env.pop('LD_PRELOAD', None)
         for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', 'MESA_LOADER_DRIVER_OVERRIDE',
                     'LIBGL_DRIVERS_PATH', '__EGL_VENDOR_LIBRARY_FILENAMES',
                     '__EGL_VENDOR_LIBRARY_DIRS', 'DRI_PRIME', 'EGL_PLATFORM', 'MUJOCO_EGL_DEVICE_ID'):
@@ -161,12 +238,9 @@ def probe_musl(root, release, backend='auto'):
         root/'logs/musl-render.log', environment(root, release))
 
 
-def musl_host():
-    try:
-        names = [Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if '/' in line]
-    except OSError:
-        return False
-    return any(name.startswith(('ld-musl-', 'libc.musl-')) for name in names)
+def system_musl_available():
+    loader = Path('/lib/ld-musl-x86_64.so.1')
+    return loader.is_file() and os.access(loader, os.X_OK)
 
 
 def check_port(port, host='127.0.0.1'):
@@ -255,6 +329,7 @@ def start(root, quiet=False):
     if not state.get('ready'):
         raise RuntimeError('安装尚未完成，请先重跑安装')
     release = root/'releases'/state['version']
+    prepare_musl_runtime(root, release)
     probe_musl(root, release, state.get('render_backend', 'auto'))
     env = environment(root, release)
     records = services(root)
@@ -337,8 +412,8 @@ def package_manager(info=None):
     raise RuntimeError(f'不支持自动安装系统依赖的发行版: {distro or "unknown"}；请由管理员手动安装依赖')
 
 
-def dependency_commands(manager):
-    packages = SYSTEM_PACKAGES[manager]
+def dependency_commands(manager, musl=False):
+    packages = ['ca-certificates', 'tar', 'zstd'] if musl else SYSTEM_PACKAGES[manager]
     if manager == 'apk':
         return [['apk', 'add', '--no-cache', *packages]]
     if manager == 'apt-get':
@@ -394,7 +469,7 @@ def authorize_dependencies(log):
     note('授权成功')
 
 
-def install_dependencies(log):
+def install_dependencies(log, musl=False):
     manager = package_manager()
     sudo = [] if os.geteuid() == 0 else ['sudo', '-n']
     if sudo and not shutil.which('sudo'):
@@ -404,7 +479,7 @@ def install_dependencies(log):
     if manager == 'pacman':
         with Path(log).open('a') as output:
             output.write('Arch 请先由管理员完成系统更新；本脚本不刷新数据库或执行全系统升级。\n')
-    for command in dependency_commands(manager):
+    for command in dependency_commands(manager, musl):
         with Path(log).open('a') as output:
             output.write(f'[{time.strftime("%H:%M:%S")}] 执行依赖命令: {shlex.join([*sudo, *command])}\n')
         if PROGRESS:
@@ -414,15 +489,22 @@ def install_dependencies(log):
         PROGRESS.detail = ''
 
 
-def check_platform(manifest, musl=False):
+def check_platform(manifest, musl=False, musl_runtime=None):
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         raise RuntimeError('本制品仅支持 Linux x86_64')
     variant = manifest.get('libc') == 'musl'
     if variant != musl:
         raise RuntimeError('The musl package requires --musl; --musl cannot install a glibc package')
     if variant:
-        if manifest.get('platform') != 'linux-musl-x86_64' or not musl_host():
-            raise RuntimeError('--musl requires a Linux x86_64 musl host (for example Alpine)')
+        mode = musl_runtime or ('bundled' if manifest.get('musl_runtime') else 'system')
+        if manifest.get('platform') != 'linux-musl-x86_64':
+            raise RuntimeError('Invalid musl package platform')
+        if mode == 'bundled' and not manifest.get('musl_runtime'):
+            raise RuntimeError('This release does not include musl; choose a newer release or --musl-runtime system')
+        if mode == 'system' and not system_musl_available():
+            raise RuntimeError('--musl-runtime system requires a musl host loader at /lib/ld-musl-x86_64.so.1; use --musl-runtime bundled otherwise')
+        if mode not in ('bundled', 'system'):
+            raise ValueError('Invalid musl runtime selection')
         return
     minimum = manifest.get('minimum_glibc', '2.39')
     if not re.fullmatch(r'[0-9]+\.[0-9]+', minimum):
@@ -438,7 +520,8 @@ def install(a):
     manifest = verify_payload(payload)
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', manifest['version']):
         raise ValueError('非法发布版本')
-    check_platform(manifest, getattr(a, 'musl', False))
+    if getattr(a, 'musl_runtime', None) and not getattr(a, 'musl', False):
+        raise ValueError('--musl-runtime requires --musl')
     if not getattr(a, 'musl', False) and getattr(a, 'render_backend', None) not in (None, 'auto'):
         raise ValueError('--render-backend requires --musl')
     raw = Path(a.dir).expanduser()
@@ -455,6 +538,10 @@ def install(a):
     if len(set(ports)) != len(ports) or any(p < 1024 or p > 65535 for p in ports):
         raise ValueError('端口必须是不同的 1024～65535 数字')
     old = load(root/'install.json') if (root/'install.json').exists() else {}
+    runtime_mode = getattr(a, 'musl_runtime', None) or old.get('musl_runtime') or ('bundled' if manifest.get('musl_runtime') else 'system')
+    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)
+    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:
+        raise ValueError('Changing musl runtime requires a new --dir')
     host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))
     if a.web_host and old:
         if host != old.get('web_host', '127.0.0.1'):
@@ -482,7 +569,7 @@ def install(a):
         progress.log_path = str(log)
         progress.next(tasks[0])
         if a.install_system_deps:
-            install_dependencies(log)
+            install_dependencies(log, musl=manifest.get('libc') == 'musl')
         missing = []
         if not shutil.which('zstd'):
             missing.append('zstd')
@@ -510,6 +597,7 @@ def install(a):
         state.setdefault('web_host', host)
         if manifest.get('libc') == 'musl':
             state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')
+            state['musl_runtime'] = runtime_mode
         write_json(state_path, state)
         release = root/'releases'/manifest['version']
         if not release.exists():
@@ -519,6 +607,7 @@ def install(a):
             for name, checksum in load(payload/'files.json').items():
                 if not (release/name).is_file() or digest(release/name) != checksum:
                     raise RuntimeError('已有安装制品不完整或被修改: '+name)
+        prepare_musl_runtime(root, release)
         env = environment(root, release)
         progress.next(tasks[2])
         if not state['ready']:
@@ -526,7 +615,7 @@ def install(a):
             venv = bundle/'python/venv'
             uv = release/'bin/uv'
             run([uv, 'venv', '--allow-existing', '--python',
-                 release/'python/bin/python3.13' if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)
+                 musl_python(root, release) if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)
             run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',
                  *sorted((bundle/'wheels').glob('*.whl'))], log, env)
             if manifest.get('libc') == 'musl':
@@ -655,7 +744,8 @@ def main():
     p.add_argument('--yes', action='store_true')
     p.add_argument('--no-start', action='store_true')
     p.add_argument('--install-system-deps', action='store_true')
-    p.add_argument('--musl', action='store_true', help='Use the optional musl release on a musl host')
+    p.add_argument('--musl', action='store_true', help='Use the optional musl release')
+    p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')
     p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])
     def presentation_options(p):
         network = p.add_mutually_exclusive_group()

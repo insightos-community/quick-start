@@ -2,7 +2,9 @@
 set -eu
 mkdir -p /work/logs
 exec > /work/logs/assemble.log 2>&1
-apk add --no-cache bash git binutils tar zstd libgcc=15.2.0-r2 libstdc++=15.2.0-r2 libgomp=15.2.0-r2
+mkdir -p /work/musl-loader
+cp -L /lib/ld-musl-x86_64.so.1 /work/musl-loader/
+apk add --no-cache bash git binutils patchelf tar zstd libgcc=15.2.0-r2 libstdc++=15.2.0-r2 libgomp=15.2.0-r2
 python -m pip install pyyaml==6.0.3
 # Bind the checkout read-only; all caches and source/wheel builds stay in /work.
 git config --global --add safe.directory /src

@@ -34,5 +34,13 @@
         "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
       }
     }
+  },
+  "musl_runtime": {
+    "package": "musl-1.2.5-r23",
+    "sha256": "99eab0629ed5e6bc258bea735a128d1de30c5a8b52f39eed4919452d03c6c4ee",
+    "source": "https://musl.libc.org/releases/musl-1.2.5.tar.gz",
+    "source_sha256": "a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4",
+    "build_recipe": "https://gitlab.alpinelinux.org/alpine/aports/-/tree/8aef0c37b0ad23dc4137f0e4755b97a59dc698b8/main/musl",
+    "image": "python:3.13-alpine3.23@sha256:75f27d686432419c9d42420b2b9ef605868c7a0682a6be10a6601fad46c2df01"
   }
 }

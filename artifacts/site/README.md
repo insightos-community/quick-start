@@ -18,15 +18,15 @@ Complete Releases already contain the Git LFS model objects. If an asset is miss
 
 System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper or Alpine APK configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
 
-The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04 and Alpine 3.23 with `--musl`**. Other package-manager support does not imply full validation of every distribution.
+The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04 (default), Ubuntu 22.04 and Alpine 3.23 (`--musl`)**. Other package-manager support does not imply full validation of every distribution.
 
 Both languages also state that more Linux distributions will be tested soon and compatibility results will be updated. This is a validation plan, not an expansion of the currently verified platform list.
 
 ## Optional musl installation
 
-The expandable Alpine / musl section has matching Chinese and English copy. Its command switches between `/install.sh` and `/install-en.sh` with the page language and adds `--musl`, using a separate instance directory. Both scripts download the optional `musl-v0.1.0-1` GitHub Release (approximately 617 MiB); the default OSS/glibc and English `v0.1.0` paths stay unchanged.
+The expandable musl runtime section has matching Chinese and English copy. Its command switches between `/install.sh` and `/install-en.sh` with the page language and adds `--musl --musl-runtime bundled`, using a separate instance directory. Both scripts download the optional `musl-v0.1.0-2` GitHub Release (approximately 626 MiB); the default OSS/glibc and English `v0.1.0` paths stay unchanged.
 
-The section documents Linux x86_64 / musl 1.2+, bundled CPython 3.13.15 and NumPy 2.3.5, unchanged system package sources, automatic Mesa GPU/software selection, and explicit rendering options. AMD hardware and software rendering have been tested; Intel/Nouveau still need hardware validation. Proprietary NVIDIA userspace drivers use the default glibc path.
+The section documents Linux x86_64 with bundled musl (default), or host musl 1.2+ via `--musl-runtime system`, bundled CPython 3.13.15 and NumPy 2.3.5, unchanged system package sources, automatic Mesa GPU/software selection, and explicit rendering options. AMD hardware and software rendering have been tested; Intel/Nouveau still need hardware validation. Proprietary NVIDIA userspace drivers use the default glibc path.
 
 ## Installer generation
 

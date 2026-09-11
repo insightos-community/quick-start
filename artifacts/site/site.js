@@ -28,18 +28,18 @@ const englishCopy = {
   terminal: '<span class="terminal-dot"></span> Run in your Linux terminal',
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
-  supportNote: "Linux x86_64 only · Verified on Ubuntu 24.04 / Alpine 3.23 (--musl)",
+  supportNote: "Linux x86_64 only · Ubuntu 24.04 verified; --musl tested on Ubuntu 22.04 / Alpine 3.23",
   supportRoadmap:
     "More Linux distributions will be tested soon, with compatibility results published as validation progresses.",
   installNote:
-    "Requires Bash, curl and Python 3.10+. The default installer needs glibc ≥ 2.28; musl systems should use the optional command below. You will be prompted for sudo before system dependencies are installed.<br>Review the script first. The installer confirms the directory and verifies the archive SHA-256.",
+    "Requires Bash, curl and Python 3.10+. The default installer needs glibc ≥ 2.28; the optional command below selects an independent musl runtime. You will be prompted for sudo before system dependencies are installed.<br>Review the script first. The installer confirms the directory and verifies the archive SHA-256.",
   preview: "Developer preview",
   downloadSize: "Approx. 346 MiB download",
-  muslTitle: "Alpine / musl: optional installation",
-  muslIntro: "On Linux x86_64 with musl 1.2+, add <code>--musl</code> to download the additional package from GitHub Releases. The default installation stays the same; use a separate directory.",
-  muslRuntime: "Includes CPython 3.13.15, NumPy 2.3.5, robot libraries and Mesa, with no source compilation required. Robot and simulation environments share one Python base. System packages use your existing repositories, including APK on Alpine; repository settings are preserved.",
+  muslTitle: "musl runtime: bundled or system (optional)",
+  muslIntro: "On Linux x86_64, add <code>--musl</code> to select the additional package. It uses bundled musl by default and also supports glibc hosts. The default installation stays the same; use a separate directory.",
+  muslRuntime: "<code>--musl-runtime bundled</code> uses the included musl 1.2.5; <code>--musl-runtime system</code> uses the host musl 1.2+ loader. Includes CPython 3.13.15, NumPy 2.3.5, robot libraries and Mesa, without source compilation. System /lib and package repositories are unchanged; use a new directory to switch runtimes.",
   muslRender: "By default, a working Mesa GPU is selected, with software rendering as a fallback. Add <code>--render-backend software</code> to force software rendering, or <code>--render-backend mesa-gpu</code> to require hardware rendering. AMD has been tested; Intel / Nouveau still need hardware validation. Use the default glibc installer for proprietary NVIDIA drivers.",
-  muslRelease: 'Optional prerelease <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-1">musl-v0.1.0-1 ↗</a> · Approx. 617 MiB · Offline installation and software rendering verified on Alpine 3.23.',
+  muslRelease: 'Optional prerelease <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-2">musl-v0.1.0-2 ↗</a> · Approx. 626 MiB · Offline installation and software rendering verified on Ubuntu 22.04 / Alpine 3.23.',
   demoTitle: "See the installation in action",
   demoLength: "35 seconds · 1080p · Silent",
   videoLabel: "Semantic installation demonstration",
@@ -86,10 +86,10 @@ const englishCopy = {
   requirementsIntro:
     "Currently Linux x86_64 only. Main application binaries are statically built, but Python, MuJoCo wheels and graphics libraries still have system dependencies.",
   validatedTitle: "Verified operating system",
-  validated: "Ubuntu 24.04; Alpine 3.23 (--musl, Linux x86_64)",
+  validated: "Ubuntu 24.04 (default); Ubuntu 22.04 / Alpine 3.23 (--musl, Linux x86_64)",
   compatibilityTitle: "Compatibility limits",
   compatibility:
-    "The default installation requires glibc ≥ 2.28. Alpine / musl 1.2+ requires the explicit --musl option. Other distributions need validation; macOS, Windows and ARM64 are not supported.",
+    "The default installation requires glibc ≥ 2.28. --musl defaults to a bundled runtime on either glibc or musl hosts; system mode requires host musl 1.2+. Other distributions need validation; macOS, Windows and ARM64 are not supported.",
   updatesTitle: "Downloads and updates",
   updates:
     "Prebuilt installers are downloaded from GitHub Releases. Missing model assets use pinned GitHub LFS objects with SHA-256 verification. Dependencies use your machine's configured package sources. For cross-version upgrades, install to a new directory and explicitly migrate data.",
