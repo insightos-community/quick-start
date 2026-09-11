@@ -130,9 +130,43 @@ def environment(root, release):
                UV_PYTHON_INSTALL_DIR=str(root/'python'), UV_NO_CONFIG='1',
                TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1', SEMANTIC_MUJOCO_GL='egl',
                MUJOCO_GL='egl')
+    if (release/'musl').is_dir():
+        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],
+                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',
+                   LD_LIBRARY_PATH=str(release/'musl/lib'),
+                   PYTHONPATH=str(release/'musl/lib/python3.13/site-packages'),
+                   PYOPENGL_PLATFORM='egl')
+        for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', 'MESA_LOADER_DRIVER_OVERRIDE',
+                    'LIBGL_DRIVERS_PATH', '__EGL_VENDOR_LIBRARY_FILENAMES',
+                    '__EGL_VENDOR_LIBRARY_DIRS', 'DRI_PRIME', 'EGL_PLATFORM', 'MUJOCO_EGL_DEVICE_ID'):
+            env.pop(key, None)
+        report = root/'configs/musl-render.json'
+        if report.exists():
+            selected = load(report)
+            env['MUJOCO_EGL_DEVICE_ID'] = str(selected['device'])
+            if selected['selected'] == 'software':
+                env.update(LIBGL_ALWAYS_SOFTWARE='1', GALLIUM_DRIVER='llvmpipe')
     if (root/'configs/secrets.json').exists():
         env.update(load(root/'configs/secrets.json'))
     return env
+
+
+def probe_musl(root, release, backend='auto'):
+    if not (release/'musl').is_dir():
+        return
+    manifest = load(release/'release.json')
+    python = release/'robot-bundles'/manifest['bundle_name']/'python/venv/bin/python'
+    run([python, release/'musl/share/insightos-mesa/launch.py', '--profile', backend,
+         '--mesa-prefix', release/'musl', '--check', '--report', root/'configs/musl-render.json'],
+        root/'logs/musl-render.log', environment(root, release))
+
+
+def musl_host():
+    try:
+        names = [Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if '/' in line]
+    except OSError:
+        return False
+    return any(name.startswith(('ld-musl-', 'libc.musl-')) for name in names)
 
 
 def check_port(port, host='127.0.0.1'):
@@ -221,6 +255,7 @@ def start(root, quiet=False):
     if not state.get('ready'):
         raise RuntimeError('安装尚未完成，请先重跑安装')
     release = root/'releases'/state['version']
+    probe_musl(root, release, state.get('render_backend', 'auto'))
     env = environment(root, release)
     records = services(root)
     host = web_host(state.get('web_host', '127.0.0.1'))
@@ -268,6 +303,7 @@ def start(root, quiet=False):
 
 # Native application binaries are static. These libraries serve Python Wheels and EGL.
 SYSTEM_PACKAGES = {
+    'apk': ['ca-certificates', 'tar', 'zstd'],
     'apt-get': ['ca-certificates', 'zstd', 'libstdc++6', 'libgcc-s1', 'libgomp1',
                 'libegl1', 'libgl1', 'libgl1-mesa-dri'],
     'dnf': ['ca-certificates', 'zstd', 'libstdc++', 'libgcc', 'libgomp',
@@ -287,6 +323,7 @@ def package_manager(info=None):
     families = [distro, *info.get('ID_LIKE', '').split()]
     for family in families:
         candidates = {
+            'alpine': ('apk',),
             'debian': ('apt-get',), 'ubuntu': ('apt-get',),
             'fedora': ('dnf', 'yum'), 'rhel': ('dnf', 'yum'), 'centos': ('dnf', 'yum'),
             'rocky': ('dnf', 'yum'), 'almalinux': ('dnf', 'yum'),
@@ -302,6 +339,8 @@ def package_manager(info=None):
 
 def dependency_commands(manager):
     packages = SYSTEM_PACKAGES[manager]
+    if manager == 'apk':
+        return [['apk', 'add', '--no-cache', *packages]]
     if manager == 'apt-get':
         return [['apt-get', 'update'], ['apt-get', 'install', '-y', '--no-install-recommends', *packages]]
     if manager in ('dnf', 'yum'):
@@ -375,15 +414,22 @@ def install_dependencies(log):
         PROGRESS.detail = ''
 
 
-def check_platform(manifest):
+def check_platform(manifest, musl=False):
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         raise RuntimeError('本制品仅支持 Linux x86_64')
+    variant = manifest.get('libc') == 'musl'
+    if variant != musl:
+        raise RuntimeError('The musl package requires --musl; --musl cannot install a glibc package')
+    if variant:
+        if manifest.get('platform') != 'linux-musl-x86_64' or not musl_host():
+            raise RuntimeError('--musl requires a Linux x86_64 musl host (for example Alpine)')
+        return
     minimum = manifest.get('minimum_glibc', '2.39')
     if not re.fullmatch(r'[0-9]+\.[0-9]+', minimum):
         raise ValueError('制品 minimum_glibc 无效')
     libc = platform.libc_ver()
     if libc[0] != 'glibc' or not libc[1] or tuple(map(int, libc[1].split('.'))) < tuple(map(int, minimum.split('.'))):
-        raise RuntimeError(f'本制品 Python/动态依赖需要 glibc >= {minimum}；musl/Alpine 不支持完整运行栈')
+        raise RuntimeError(f'本制品 Python/动态依赖需要 glibc >= {minimum}；musl/Alpine 请显式使用 --musl')
 
 
 def install(a):
@@ -392,11 +438,15 @@ def install(a):
     manifest = verify_payload(payload)
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', manifest['version']):
         raise ValueError('非法发布版本')
-    check_platform(manifest)
+    check_platform(manifest, getattr(a, 'musl', False))
+    if not getattr(a, 'musl', False) and getattr(a, 'render_backend', None) not in (None, 'auto'):
+        raise ValueError('--render-backend requires --musl')
     raw = Path(a.dir).expanduser()
     if not raw.is_absolute() or raw.is_symlink():
         raise ValueError('--dir 必须是绝对路径且不能是符号链接')
     root = raw.resolve()
+    if manifest.get('libc') == 'musl' and ':' in str(root):
+        raise ValueError('The musl install path must not contain a colon (library search separator)')
     if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):
         raise ValueError('拒绝使用根目录、用户主目录或含控制字符的目录作为安装目录')
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
@@ -436,7 +486,11 @@ def install(a):
         missing = []
         if not shutil.which('zstd'):
             missing.append('zstd')
-        for library in SYSTEM_LIBRARIES:
+        if manifest.get('libc') == 'musl':
+            tar = shutil.which('tar')
+            if not tar or '--zstd' not in subprocess.run([tar, '--help'], capture_output=True, text=True).stdout:
+                missing.append('GNU tar (--zstd)')
+        for library in (() if manifest.get('libc') == 'musl' else SYSTEM_LIBRARIES):
             try:
                 ctypes.CDLL(library)
             except OSError:
@@ -454,6 +508,8 @@ def install(a):
         state = state or dict(version=manifest['version'], payload_sha256=signature, ready=False,
                               http_port=a.http_port, ws_port=a.ws_port, web_port=a.web_port, runtime_port=a.runtime_port)
         state.setdefault('web_host', host)
+        if manifest.get('libc') == 'musl':
+            state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')
         write_json(state_path, state)
         release = root/'releases'/manifest['version']
         if not release.exists():
@@ -469,11 +525,19 @@ def install(a):
             bundle = release/'robot-bundles'/manifest['bundle_name']
             venv = bundle/'python/venv'
             uv = release/'bin/uv'
-            run([uv, 'venv', '--allow-existing', '--python', manifest['robot_python'], venv], log, env)
+            run([uv, 'venv', '--allow-existing', '--python',
+                 release/'python/bin/python3.13' if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)
             run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',
                  *sorted((bundle/'wheels').glob('*.whl'))], log, env)
-            run([venv/'bin/python', '-c', 'import ability_py, pinocchio, ruckig, websockets'], log, env)
+            if manifest.get('libc') == 'musl':
+                # Robot workers intentionally clear PYTHONPATH. Register the verified
+                # prefix in this managed venv, so that isolation still works.
+                site = venv/'lib/python3.13/site-packages'
+                (site/'semantic-musl.pth').write_text(str(release/'musl/lib/python3.13/site-packages')+'\n')
+            run([venv/'bin/python', '-c', 'import ability_py, pinocchio, ruckig, websockets'], log, {**env, 'PYTHONPATH': ''})
             run([bundle/'bin/AbilityFramework', '--version'], log, env)
+            probe_musl(root, release, state.get('render_backend', 'auto'))
+            env = environment(root, release)
             progress.next(tasks[3])
             cli = release/'bin/semantic'
             config = root/'configs/semantic-server.yaml'
@@ -591,6 +655,8 @@ def main():
     p.add_argument('--yes', action='store_true')
     p.add_argument('--no-start', action='store_true')
     p.add_argument('--install-system-deps', action='store_true')
+    p.add_argument('--musl', action='store_true', help='Use the optional musl release on a musl host')
+    p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])
     def presentation_options(p):
         network = p.add_mutually_exclusive_group()
         network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Web 监听所有 IPv4 网卡，仅对可信局域网开放防火墙')

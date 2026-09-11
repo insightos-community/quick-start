@@ -306,6 +306,7 @@ if '--purge' in arguments or '--dry-run' in arguments:
 p = argparse.ArgumentParser(description='Semantic verified bootstrap', add_help=False)
 p.add_argument('--base-url', default='')
 p.add_argument('--version', default='stable')
+p.add_argument('--musl', action='store_true', help='Opt in to musl; default installs remain glibc')
 p.add_argument('--package', type=pathlib.Path)
 p.add_argument('--ticket', type=pathlib.Path, help='Private OSS download ticket; no long-lived credentials required')
 p.add_argument('--sha256')
@@ -313,8 +314,11 @@ p.add_argument('--allow-http', action='store_true', help='Only for local/private
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
 a, rest = p.parse_known_args()
+if a.musl and not a.configure_existing:
+    rest = ['--musl', *rest]
 if a.help:
     print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')
+    print('musl: --musl [--render-backend auto|mesa-gpu|software]; GitHub Release, Linux x86_64 musl only')
     print('Install: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('Network: new installs use Web 0.0.0.0:3000 (localhost and LAN); API/WS stay local')
     print('Customize: --web-host IPv4 --web-port PORT; localhost only: --web-host 127.0.0.1')
@@ -387,6 +391,7 @@ def digest(path):
     with path.open('rb') as f:
         while block := f.read(1024 * 1024): h.update(block)
     return h.hexdigest()
+# BEGIN GENERATED GITHUB HELPERS
 # Copyright 2026 InsightOS
 # SPDX-License-Identifier: Apache-2.0
 """GitHub Release and LFS helpers embedded in the standalone English installer."""
@@ -401,6 +406,7 @@ import urllib.request
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
 GITHUB_DEFAULT_TAG = 'v0.1.0'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 
@@ -413,10 +419,19 @@ def github_digest(path):
     return digest.hexdigest()
 
 
-def github_archive(work, version, download, requested_sha=None):
+def github_archive(work, version, download, requested_sha=None, musl=False):
     tag = GITHUB_DEFAULT_TAG if version == 'stable' else 'v' + version.removeprefix('v')
-    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
+    if not musl and not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
         raise ValueError('Invalid GitHub release version')
+    release_version = tag[1:]
+    target_platform = 'linux-x86_64'
+    if musl:
+        tag = GITHUB_MUSL_TAG if version == 'stable' else version
+        match = re.fullmatch(r'musl-v([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)', tag)
+        if not match:
+            raise ValueError('Use --version musl-vMAJOR.MINOR.PATCH-REVISION with --musl')
+        release_version = match[1] + '-musl.' + match[2]
+        target_platform = 'linux-musl-x86_64'
     base = f'https://github.com/{GITHUB_INSTALLER_REPO}/releases/download/{tag}/'
     download(base+'SHA256SUMS', work/'SHA256SUMS', 1024*1024)
     sums = {}
@@ -429,12 +444,14 @@ def github_archive(work, version, download, requested_sha=None):
     if github_digest(work/'release.json') != sums.get('release.json'):
         raise ValueError('GitHub release metadata checksum mismatch')
     metadata = json.loads((work/'release.json').read_text())
-    if (metadata.get('tag') != tag or metadata.get('version') != tag[1:] or
-            metadata.get('component') != 'semantic-installer' or metadata.get('platform') != 'linux-x86_64'):
+    if (metadata.get('tag') != tag or metadata.get('version') != release_version or
+            metadata.get('component') != 'semantic-installer' or metadata.get('platform') != target_platform):
         raise ValueError('GitHub release identity or platform mismatch')
+    if musl and metadata.get('libc') != 'musl':
+        raise ValueError('Release does not declare musl support')
     if tag == GITHUB_DEFAULT_TAG and metadata.get('source_commit') != GITHUB_BASELINE_COMMIT:
         raise ValueError('GitHub release differs from the verified source baseline')
-    name = f'semantic-{tag[1:]}-linux-x86_64.tar.gz'
+    name = f'semantic-{release_version}-{target_platform}.tar.gz'
     expected = sums.get(name)
     if expected is None or (requested_sha and requested_sha != expected):
         raise ValueError('GitHub archive checksum is missing or differs from --sha256')
@@ -538,13 +555,15 @@ def hydrate_github_assets(payload, download):
             staged.replace(target)
             target.chmod(0o644)
     return len(pending)
-
+# END GENERATED GITHUB HELPERS
 with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
     work = pathlib.Path(temporary)
     if a.package:
         archive = a.package.expanduser().resolve(strict=True)
         sidecar = pathlib.Path(str(archive) + '.sha256')
         expected = a.sha256 or (sidecar.read_text().split()[0] if sidecar.exists() else '')
+    elif a.musl and not a.ticket and not any(arg == '--base-url' or arg.startswith('--base-url=') for arg in arguments) and not os.environ.get('SEMANTIC_DOWNLOAD_BASE'):
+        archive, expected = github_archive(work, a.version, download, a.sha256, musl=True)
     elif not a.base_url and not a.ticket:
         archive, expected = github_archive(work, a.version, download, a.sha256)
     else:
@@ -557,10 +576,12 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             if a.version != 'stable' and a.version != m['version']:
                 raise ValueError('Download ticket version does not match --version')
         else:
-            suffix = 'channels/stable.json' if a.version == 'stable' else f'releases/{a.version}/linux-x86_64/manifest.json'
+            selected_platform = 'linux-musl-x86_64' if a.musl else 'linux-x86_64'
+            channel = 'musl-stable' if a.musl else 'stable'
+            suffix = f'channels/{channel}.json' if a.version == 'stable' else f'releases/{a.version}/{selected_platform}/manifest.json'
             download(a.base_url.rstrip('/') + '/' + suffix, work/'manifest.json', 1024*1024)
             m = json.loads((work/'manifest.json').read_text())
-        if m.get('platform') != 'linux-x86_64': raise ValueError('Unsupported artifact platform')
+        if m.get('platform') != ('linux-musl-x86_64' if a.musl else 'linux-x86_64'): raise ValueError('Unsupported artifact platform')
         path = pathlib.PurePosixPath(m['archive'])
         if path.is_absolute() or '..' in path.parts or not re.fullmatch(r'[A-Za-z0-9/_.-]+', str(path)):
             raise ValueError('Invalid artifact download path')
@@ -736,9 +757,43 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "               UV_PYTHON_INSTALL_DIR=str(root/'python'),\n"
             "               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1', SEMANTIC_MUJOCO_GL='egl',\n"
             "               MUJOCO_GL='egl')\n"
+            "    if (release/'musl').is_dir():\n"
+            "        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],\n"
+            "                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',\n"
+            "                   LD_LIBRARY_PATH=str(release/'musl/lib'),\n"
+            "                   PYTHONPATH=str(release/'musl/lib/python3.13/site-packages'),\n"
+            "                   PYOPENGL_PLATFORM='egl')\n"
+            "        for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', 'MESA_LOADER_DRIVER_OVERRIDE',\n"
+            "                    'LIBGL_DRIVERS_PATH', '__EGL_VENDOR_LIBRARY_FILENAMES',\n"
+            "                    '__EGL_VENDOR_LIBRARY_DIRS', 'DRI_PRIME', 'EGL_PLATFORM', 'MUJOCO_EGL_DEVICE_ID'):\n"
+            '            env.pop(key, None)\n'
+            "        report = root/'configs/musl-render.json'\n"
+            '        if report.exists():\n'
+            '            selected = load(report)\n'
+            "            env['MUJOCO_EGL_DEVICE_ID'] = str(selected['device'])\n"
+            "            if selected['selected'] == 'software':\n"
+            "                env.update(LIBGL_ALWAYS_SOFTWARE='1', GALLIUM_DRIVER='llvmpipe')\n"
             "    if (root/'configs/secrets.json').exists():\n"
             "        env.update(load(root/'configs/secrets.json'))\n"
             '    return env\n'
+            '\n'
+            '\n'
+            "def probe_musl(root, release, backend='auto'):\n"
+            "    if not (release/'musl').is_dir():\n"
+            '        return\n'
+            "    manifest = load(release/'release.json')\n"
+            "    python = release/'robot-bundles'/manifest['bundle_name']/'python/venv/bin/python'\n"
+            "    run([python, release/'musl/share/insightos-mesa/launch.py', '--profile', backend,\n"
+            "         '--mesa-prefix', release/'musl', '--check', '--report', root/'configs/musl-render.json'],\n"
+            "        root/'logs/musl-render.log', environment(root, release))\n"
+            '\n'
+            '\n'
+            'def musl_host():\n'
+            '    try:\n'
+            "        names = [Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if '/' in line]\n"
+            '    except OSError:\n'
+            '        return False\n'
+            "    return any(name.startswith(('ld-musl-', 'libc.musl-')) for name in names)\n"
             '\n'
             '\n'
             "def check_port(port, host='127.0.0.1'):\n"
@@ -827,6 +882,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    if not state.get('ready'):\n"
             "        raise RuntimeError('Installation is incomplete; run the installer again first')\n"
             "    release = root/'releases'/state['version']\n"
+            "    probe_musl(root, release, state.get('render_backend', 'auto'))\n"
             '    env = environment(root, release)\n'
             '    records = services(root)\n'
             "    host = web_host(state.get('web_host', '127.0.0.1'))\n"
@@ -874,6 +930,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '# Native application binaries are static. These libraries serve Python Wheels and EGL.\n'
             'SYSTEM_PACKAGES = {\n'
+            "    'apk': ['ca-certificates', 'tar', 'zstd'],\n"
             "    'apt-get': ['ca-certificates', 'zstd', 'libstdc++6', 'libgcc-s1', 'libgomp1',\n"
             "                'libegl1', 'libgl1', 'libgl1-mesa-dri'],\n"
             "    'dnf': ['ca-certificates', 'zstd', 'libstdc++', 'libgcc', 'libgomp',\n"
@@ -893,6 +950,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    families = [distro, *info.get('ID_LIKE', '').split()]\n"
             '    for family in families:\n'
             '        candidates = {\n'
+            "            'alpine': ('apk',),\n"
             "            'debian': ('apt-get',), 'ubuntu': ('apt-get',),\n"
             "            'fedora': ('dnf', 'yum'), 'rhel': ('dnf', 'yum'), 'centos': ('dnf', 'yum'),\n"
             "            'rocky': ('dnf', 'yum'), 'almalinux': ('dnf', 'yum'),\n"
@@ -908,6 +966,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             'def dependency_commands(manager):\n'
             '    packages = SYSTEM_PACKAGES[manager]\n'
+            "    if manager == 'apk':\n"
+            "        return [['apk', 'add', '--no-cache', *packages]]\n"
             "    if manager == 'apt-get':\n"
             "        return [['apt-get', 'update'], ['apt-get', 'install', '-y', '--no-install-recommends', *packages]]\n"
             "    if manager in ('dnf', 'yum'):\n"
@@ -981,15 +1041,22 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        PROGRESS.detail = ''\n"
             '\n'
             '\n'
-            'def check_platform(manifest):\n'
+            'def check_platform(manifest, musl=False):\n'
             "    if platform.system() != 'Linux' or platform.machine() != 'x86_64':\n"
             "        raise RuntimeError('This artifact supports Linux x86_64 only')\n"
+            "    variant = manifest.get('libc') == 'musl'\n"
+            '    if variant != musl:\n'
+            "        raise RuntimeError('The musl package requires --musl; --musl cannot install a glibc package')\n"
+            '    if variant:\n'
+            "        if manifest.get('platform') != 'linux-musl-x86_64' or not musl_host():\n"
+            "            raise RuntimeError('--musl requires a Linux x86_64 musl host (for example Alpine)')\n"
+            '        return\n'
             "    minimum = manifest.get('minimum_glibc', '2.39')\n"
             "    if not re.fullmatch(r'[0-9]+\\.[0-9]+', minimum):\n"
             "        raise ValueError('Invalid artifact minimum_glibc')\n"
             '    libc = platform.libc_ver()\n'
             "    if libc[0] != 'glibc' or not libc[1] or tuple(map(int, libc[1].split('.'))) < tuple(map(int, minimum.split('.'))):\n"
-            "        raise RuntimeError(f'Python/dynamic dependencies in this artifact require glibc >= {minimum}; the full runtime stack does not support musl/Alpine')\n"
+            "        raise RuntimeError(f'Python/dynamic dependencies in this artifact require glibc >= {minimum}; use --musl explicitly on musl/Alpine')\n"
             '\n'
             '\n'
             'def install(a):\n'
@@ -998,11 +1065,15 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    manifest = verify_payload(payload)\n'
             "    if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?', manifest['version']):\n"
             "        raise ValueError('Invalid release version')\n"
-            '    check_platform(manifest)\n'
+            "    check_platform(manifest, getattr(a, 'musl', False))\n"
+            "    if not getattr(a, 'musl', False) and getattr(a, 'render_backend', None) not in (None, 'auto'):\n"
+            "        raise ValueError('--render-backend requires --musl')\n"
             '    raw = Path(a.dir).expanduser()\n'
             '    if not raw.is_absolute() or raw.is_symlink():\n'
             "        raise ValueError('--dir must be an absolute path, not a symlink')\n"
             '    root = raw.resolve()\n'
+            "    if manifest.get('libc') == 'musl' and ':' in str(root):\n"
+            "        raise ValueError('The musl install path must not contain a colon (library search separator)')\n"
             "    if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):\n"
             "        raise ValueError('Refusing root, home or paths containing control characters as the installation directory')\n"
             "    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():\n"
@@ -1042,7 +1113,11 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        missing = []\n'
             "        if not shutil.which('zstd'):\n"
             "            missing.append('zstd')\n"
-            '        for library in SYSTEM_LIBRARIES:\n'
+            "        if manifest.get('libc') == 'musl':\n"
+            "            tar = shutil.which('tar')\n"
+            "            if not tar or '--zstd' not in subprocess.run([tar, '--help'], capture_output=True, text=True).stdout:\n"
+            "                missing.append('GNU tar (--zstd)')\n"
+            "        for library in (() if manifest.get('libc') == 'musl' else SYSTEM_LIBRARIES):\n"
             '            try:\n'
             '                ctypes.CDLL(library)\n'
             '            except OSError:\n'
@@ -1060,6 +1135,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        state = state or dict(version=manifest['version'], payload_sha256=signature, ready=False,\n"
             '                              http_port=a.http_port, ws_port=a.ws_port, web_port=a.web_port, runtime_port=a.runtime_port)\n'
             "        state.setdefault('web_host', host)\n"
+            "        if manifest.get('libc') == 'musl':\n"
+            "            state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')\n"
             '        write_json(state_path, state)\n'
             "        release = root/'releases'/manifest['version']\n"
             '        if not release.exists():\n'
@@ -1075,11 +1152,19 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            bundle = release/'robot-bundles'/manifest['bundle_name']\n"
             "            venv = bundle/'python/venv'\n"
             "            uv = release/'bin/uv'\n"
-            "            run([uv, 'venv', '--allow-existing', '--python', manifest['robot_python'], venv], log, env)\n"
+            "            run([uv, 'venv', '--allow-existing', '--python',\n"
+            "                 release/'python/bin/python3.13' if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)\n"
             "            run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',\n"
             "                 *sorted((bundle/'wheels').glob('*.whl'))], log, env)\n"
-            "            run([venv/'bin/python', '-c', 'import ability_py, pinocchio, ruckig, websockets'], log, env)\n"
+            "            if manifest.get('libc') == 'musl':\n"
+            '                # Robot workers intentionally clear PYTHONPATH. Register the verified\n'
+            '                # prefix in this managed venv, so that isolation still works.\n'
+            "                site = venv/'lib/python3.13/site-packages'\n"
+            "                (site/'semantic-musl.pth').write_text(str(release/'musl/lib/python3.13/site-packages')+'\\n')\n"
+            "            run([venv/'bin/python', '-c', 'import ability_py, pinocchio, ruckig, websockets'], log, {**env, 'PYTHONPATH': ''})\n"
             "            run([bundle/'bin/AbilityFramework', '--version'], log, env)\n"
+            "            probe_musl(root, release, state.get('render_backend', 'auto'))\n"
+            '            env = environment(root, release)\n'
             '            progress.next(tasks[3])\n'
             "            cli = release/'bin/semantic'\n"
             "            config = root/'configs/semantic-server.yaml'\n"
@@ -1197,6 +1282,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    p.add_argument('--yes', action='store_true')\n"
             "    p.add_argument('--no-start', action='store_true')\n"
             "    p.add_argument('--install-system-deps', action='store_true')\n"
+            "    p.add_argument('--musl', action='store_true', help='Use the optional musl release on a musl host')\n"
+            "    p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])\n"
             '    def presentation_options(p):\n'
             '        network = p.add_mutually_exclusive_group()\n'
             "        network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Listen on all IPv4 interfaces; allow only trusted LAN traffic through the firewall')\n"

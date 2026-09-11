@@ -236,5 +236,6 @@
   "停止": "Stop",
   "跳过": "skipped",
   "安装": "installation",
-  "无": "None"
+  "无": "None",
+  "；musl/Alpine 请显式使用 --musl": "; use --musl explicitly on musl/Alpine"
 }

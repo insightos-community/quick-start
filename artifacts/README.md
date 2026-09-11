@@ -10,7 +10,7 @@ bash ./install.sh --install-system-deps     # 阿里云 OSS stable，中文提�
 bash ./install-en.sh --install-system-deps  # GitHub Releases v0.1.0，英文提示
 ```
 
-两者均校验下载文件，首次安装需要下载独立 Python 环境。OSS 与 GitHub 的版本号各自独立；
+两者均校验下载文件，默认 glibc 安装需要下载独立 Python 环境。OSS 与 GitHub 的版本号各自独立；
 指定版本使用 `--version`。免克隆下载命令及平台要求见根目录[中文 README](../README.zh-CN.md#从这里开始)和[English README](../README.md#start-here)。
 
 原有 Python Release 入口仍可使用：
@@ -101,7 +101,9 @@ curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --install-syste
 当前制品目标：Linux x86_64、glibc >= 2.28，完整 Server + Web + Native MuJoCo +
 R1 Pro Bundle。应用程序采用静态 ELF，glibc 门槛来自 uv/Python/Wheel 运行栈；
 满足门槛不等于所有发行版都已通过产品验收。实测范围见 [PORTABILITY.md](PORTABILITY.md)。
-ARM64、Alpine/musl 完整运行栈及 Windows/macOS 尚不支持。
+ARM64 和 Windows/macOS 尚不支持。
+
+Alpine/musl x86_64 使用额外的 `--musl` 参数；默认 glibc 路径不变。中英文脚本与 `python3 semantic_installer.py --release --musl` 均支持。可选包自带 CPython 3.13.15、NumPy 2.3.5、机器人依赖与 Mesa，详见 [musl/README.md](musl/README.md)。GPU 探测和软件回退入口见 [mesa/README.md](mesa/README.md)。
 
 入口形式参考 [Hermes 安装脚本](https://hermes-agent.nousresearch.com/install.sh)：
 支持管道启动、参数化路径和非交互安装；安装过程中从 `/dev/tty` 读取确认，

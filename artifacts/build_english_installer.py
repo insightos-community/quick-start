@@ -97,9 +97,6 @@ def render():
     python = replace_once(python,
         "print('Semantic: --base-url HTTPS_URL [--version VERSION] | --package FILE [--sha256 HASH]')",
         "print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')")
-    marker = "with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:"
-    python = replace_once(python, marker,
-        (HERE/'github_bootstrap.py').read_text()+'\n'+marker)
     marker = "    else:\n        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', a.version):"
     python = replace_once(python, marker,
         "    elif not a.base_url and not a.ticket:\n        archive, expected = github_archive(work, a.version, download, a.sha256)\n"+marker)

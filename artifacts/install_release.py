@@ -14,9 +14,14 @@ from fetch_releases import download, fetch
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog='Other arguments, such as --dir, --yes and --install-system-deps, are forwarded to install.sh.')
-    parser.add_argument('--tag', default='v0.1.0')
+    parser.add_argument('--tag')
+    parser.add_argument('--musl', action='store_true', help='Select the additional musl release')
     parser.add_argument('--cache', type=Path, default=Path.home()/'.cache/semantic/installers')
     args, options = parser.parse_known_args()
+    if args.musl:
+        return subprocess.run(['bash', str(Path(__file__).with_name('install.sh')), '--musl',
+                               '--version', args.tag or 'stable', *options]).returncode
+    args.tag = args.tag or 'v0.1.0'
     if not re.fullmatch(r'v[0-9][0-9A-Za-z._+-]*', args.tag):
         parser.error('Invalid release tag')
     # The verified baseline has a fixed source SHA. Other explicitly requested versions

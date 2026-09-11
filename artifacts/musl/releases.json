@@ -1,0 +1,175 @@
+{
+  "pinocchio": {
+    "repository": "insightos-community/pinocchio",
+    "tag": "musl-v3.9.0-1",
+    "source_commit": "2e5854965571237a17934e1baca13d856d053b3c",
+    "assets": {
+      "build-manifest.json": "780fe5bb7758580093ce6ec5eca31412cbff5e48aef13b3fbb0a5489a3fdca29",
+      "pinocchio-3.9.0-cp313-musl-x86_64-prefix.tar.gz": "d6a32eb1950b87ee24ae64c944b92056944f05de188ca9d6b0f53d4b42705b40",
+      "SHA256SUMS": "1500479abeb67b3c87ca85e0d3cabd00fc863529a1bde490fad9b6570f2fd803"
+    }
+  },
+  "ruckig": {
+    "repository": "insightos-community/ruckig",
+    "tag": "musl-v0.19.4-2",
+    "source_commit": "950e957a51f217ac5fe04bb93fea23e3decb5d6f",
+    "assets": {
+      "build-manifest.json": "f8ae8bc473ee7cbb8e96143196ac8f0943d6147846708730e10f1e0e6763cd7d",
+      "ruckig-0.19.4-cp313-cp313-musllinux_1_2_x86_64.whl": "f78537e4e66ee42034baefc09bf4b083a13c5635395e02b23ba7e8bbc5847ec8",
+      "ruckig-0.19.4-musl-x86_64-cpp.tar.gz": "f64232748adee6d8d6f744db4ad0e22315401779944410cc60d44f722c79a422",
+      "SHA256SUMS": "6ca8814b6a7aeed874a08648ec537bb475172e91dce0a4a67b50c8809210de6f"
+    }
+  },
+  "assimp": {
+    "repository": "insightos-community/assimp",
+    "tag": "musl-v6.0.4-2",
+    "source_commit": "5c44654deee264983c1ffcc74bc47e251221fb29",
+    "assets": {
+      "assimp-6.0.4-musl-x86_64-prefix.tar.gz": "14273d98199469e6c4283d28765e405f5dbacdf0694cc85b67d765f8402152a1",
+      "build-manifest.json": "0016306dc1e9218ee8bc3e5732c2ee3c168ca424a0d89c2559c0d9d151b1d14a",
+      "SHA256SUMS": "9b7a206ba877b18641c84f3f186c0157e1aedf018dd9a33a7472be5add60a729"
+    }
+  },
+  "qhull": {
+    "repository": "insightos-community/qhull",
+    "tag": "musl-v8.0.2-1",
+    "source_commit": "7019dc8a86147f874a0a493237a8101ebbae7d87",
+    "assets": {
+      "build-manifest.json": "e2a68890c5b5af8ff8425d2da652c2abd0dcfd8555244a12cc7efd380ead891e",
+      "qhull-8.0.2-musl-x86_64-prefix.tar.gz": "9bfd39e3d8fb5606a0bcda1176a5f1747e8654f98545028512b621c0f5e03322",
+      "SHA256SUMS": "bd592e9b4017476de6fdc36f9b63a2b743e4d641d5cdbd9675c5d9f0b143d1af"
+    }
+  },
+  "tinyxml2": {
+    "repository": "insightos-community/tinyxml2",
+    "tag": "musl-v11.0.0-1",
+    "source_commit": "72f639a28c70c056bde46c7ad7d80631a70dfd99",
+    "assets": {
+      "build-manifest.json": "0cf645e3695d57baff985ec479cb0fdda685be4a16b093adabaff1e88ffc009f",
+      "SHA256SUMS": "6218a9e8aa62888362fd898e613594b3187a6aa6f331dc64343def4fe0725958",
+      "tinyxml2-11.0.0-musl-x86_64-prefix.tar.gz": "fc4cc528d1ea11209d2e82db8aa9343a5a027987283161b21830f70508ac913a"
+    }
+  },
+  "zlib": {
+    "repository": "insightos-community/zlib",
+    "tag": "musl-v1.3.2-1",
+    "source_commit": "9b5d8702a2cc520623d723f521f3ceecc80ea3e1",
+    "assets": {
+      "build-manifest.json": "def4198969da0994388ae079b37fb7b2d7bf1bc0da8f113cc7452aa79a255ce3",
+      "SHA256SUMS": "56c1b3943806c650c1617bbc50eb556a8d8553062b8d2eae1b0ee3983712c12b",
+      "zlib-1.3.2-musl-x86_64-prefix.tar.gz": "95aea6af7bc91f7f2aca2ef23f2b22d11faac7786b4c4d5a3d772e1a403238aa"
+    }
+  },
+  "libdrm": {
+    "repository": "insightos-community/libdrm",
+    "tag": "musl-v2.4.131-1",
+    "source_commit": "5ec6b8fd15fc375eb864e536ee21fd61227287b2",
+    "assets": {
+      "build-manifest.json": "a56c5bcecf35ba8204ab62d932e95310ce35147074ba6b1320357f62fc3e49c0",
+      "libdrm-2.4.131-musl-x86_64-prefix.tar.gz": "7322f21f7ccf546d94dcf33246eea62f4bf4f97df4c978670f1b2a63c02dc55e",
+      "SHA256SUMS": "8f3f07f190ee37d63d5caeebf8155a3948413536b9caaabb9c1f4648f43159d2"
+    }
+  },
+  "libexpat": {
+    "repository": "insightos-community/libexpat",
+    "tag": "musl-v2.8.4-2",
+    "source_commit": "dea639c8b216e3799c46f41d9ffe046cd31d8289",
+    "assets": {
+      "build-manifest.json": "8eea57b95f16db50267e15677c027a72b7996130942cad158dd819735085fdd7",
+      "expat-2.8.4-musl-x86_64-prefix.tar.gz": "91a5dd28bc59105e78ac0807908460df9c130d711c9c041f98f56c70e5bbd1ae",
+      "SHA256SUMS": "a3650f71cf0c94eae7df99809a76311847dfa8fbdbe13efa870b7db60b7c22e3"
+    }
+  },
+  "libffi": {
+    "repository": "insightos-community/libffi",
+    "tag": "musl-v3.5.2-2",
+    "source_commit": "63e1a907afd2a4192b29532621cef7106fea6015",
+    "assets": {
+      "build-manifest.json": "95e1d22759cb274f68d4a757f95d4c5c78cd880f46a4e91b7ccf40d9d465fb2e",
+      "libffi-3.5.2-musl-x86_64-prefix.tar.gz": "6e3ffaec5e16a932e3cb6046ce059ee990fa82897b616826600a82fc5e917f8d",
+      "SHA256SUMS": "161fde7902ec01d3e0e6035cb2774f7cb2df9d0baf793006c15936a6322b9fc5"
+    }
+  },
+  "xz": {
+    "repository": "insightos-community/xz",
+    "tag": "musl-v5.8.4-1",
+    "source_commit": "ce694abc3b514581b02bf0a313d8765f2b3aa840",
+    "assets": {
+      "build-manifest.json": "37d1898eba41a7230ffb9b142850772418fb519b04eebed85b23a341e1220346",
+      "SHA256SUMS": "a3135ef5487da261fc5b9fbb8e98a1d3a8938613c9afa6b6ac65413416794341",
+      "xz-5.8.4-musl-x86_64-prefix.tar.gz": "65e34a6850bad0e14ca472e0cd414e1803623a2219f1ee9d0464573394b27245"
+    }
+  },
+  "libxml2": {
+    "repository": "insightos-community/libxml2",
+    "tag": "musl-v2.13.9-1",
+    "source_commit": "d108dd94a475ccfaa76f58a3f9e819e00a38f88f",
+    "assets": {
+      "build-manifest.json": "5d96dd3617146112463030038e979fa505b221e4b03f04ab61380afa8c9415de",
+      "libxml2-2.13.9-musl-x86_64-prefix.tar.gz": "743dbb569c39be61381905abc88b78440ea23588d1b44b72334b9416d174eda9",
+      "SHA256SUMS": "fb343998147660e994aca536fa4c47df8a667392ce88d8ebac5579fb1a00a7f4"
+    }
+  },
+  "elfutils": {
+    "repository": "insightos-community/elfutils",
+    "tag": "musl-v0.194-1",
+    "source_commit": "85a42cb23311175881c3f69e5b7215006943d466",
+    "assets": {
+      "build-manifest.json": "a58f6ec20678081d02bbf37c575944d652afeb1bc9f887a0de72021d50525e54",
+      "libelf-0.194-musl-x86_64-prefix.tar.gz": "c7ddfa3a7aed52e5def7e9c45ced54c1af1e4d30cc91b1c89c45b17eb0b14a5b",
+      "SHA256SUMS": "7415d22408c51c1902d91c9ca20a29672ba930139bd51bccc46c925b71cbdad2"
+    }
+  },
+  "zstd": {
+    "repository": "insightos-community/zstd",
+    "tag": "musl-v1.5.7-3",
+    "source_commit": "ba14a635b285b80403dfb92f85e2d36dcea07b84",
+    "assets": {
+      "build-manifest.json": "11d302e943742abf993fbcb867384cba731ef779e2825b0341e4b6a91d4bf68f",
+      "SHA256SUMS": "3e2cafd9547cd8e0bbaf26ecd3b5c7dffe00cb7aee8fb4c334ec448422c34a54",
+      "zstd-1.5.7-musl-x86_64-prefix.tar.gz": "81f9f9a31d2a5d8535f6045b2b14db19eb16be2a7536237b25e923f8046d9dc6"
+    }
+  },
+  "SPIRV-Tools": {
+    "repository": "insightos-community/SPIRV-Tools",
+    "tag": "musl-v2025.3-4",
+    "source_commit": "0b2241da2e8b1b54bd729bfbcd1e17271c848a64",
+    "assets": {
+      "build-manifest.json": "d34120d3a4fa6b93079a193b43b39528630257489b447094a42ab6c9252ba9c0",
+      "SHA256SUMS": "04095e6b19bc513ffb8505b4bec9e1fc79cb51548cbc98ded8a826cdf30b5a97",
+      "spirv-tools-2025.3-musl-x86_64-prefix.tar.gz": "8743073e9e39f54774f8c25b1f8b7e43703fa0dfe23e9bb3c670ef7f4ddfd083"
+    }
+  },
+  "llvm-project": {
+    "repository": "insightos-community/llvm-project",
+    "tag": "musl-v21.1.2-1",
+    "source_commit": "bf34d4037a24448468ce46ee56c8a0c0bee802e3",
+    "assets": {
+      "build-manifest.json": "5118976ba76ee89aab0e45206417f498c288077f6a76f10d8f9979c0bb94c96d",
+      "llvm-21.1.2-musl-x86_64-prefix.tar.gz": "70af1b23d6302a6ceaf3ed2402b7c2d0ede60a9e711204c51add5d319b7e6ee7",
+      "SHA256SUMS": "fa5f09b5e6e0190d84097fceefca96fd17f0996ba0f622eb92840dbf9b9410a9"
+    }
+  },
+  "mujoco": {
+    "repository": "insightos-community/mujoco",
+    "tag": "musl-v3.4.0-4",
+    "source_commit": "90b2103196b4e25a883b56599f0cdb54c48d3130",
+    "assets": {
+      "build-manifest.json": "d5e9eca94fc1c3eb81afca782da63f7e55aa3d4ef4d74c98d59e0c68041e85e3",
+      "glfw-2.10.2-py3-none-any.whl": "10658cd51781cd75fcf45f6febbf39e2a2625af4610279e18d4c9af323c3983f",
+      "mujoco-3.4.0-cp313-cp313-musllinux_1_2_x86_64.whl": "e12c146cdd76db793e4d1c932199c2c7233e9ce1aeebc5dc52833866660b94da",
+      "mujoco-3.4.0-musl-x86_64-prefix.tar.gz": "046ff19ad4660a784d4bbc2cec2fcaf09a95cde0735e46a252561209afbdb8e4",
+      "SHA256SUMS": "6cb410bdbf0f2cfeff35b4f881a56216b60fbee05e0f5edbc2f0ebcd993d86cc"
+    }
+  },
+  "mesa": {
+    "repository": "insightos-community/mesa",
+    "tag": "musl-v25.2.7-4",
+    "source_commit": "d17dc137ffde4b7314a14504306cb39ff092a9b1",
+    "assets": {
+      "build-manifest.json": "973860baf2a9d8b761b69d56db0e9d7119b8666a952f0ef1a47c15263940b16f",
+      "mesa-25.2.7-musl-x86_64-prefix.tar.gz": "42471a246614a1b7f498e79cc076094c854a83850b64eaed565293073b11d6ce",
+      "SHA256SUMS": "3b354bebd18db180b04bcf3f3415d3768394a6ffb37fb8a6c670a5aeded8cd6d"
+    }
+  }
+}

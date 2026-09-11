@@ -12,6 +12,7 @@ import urllib.request
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
 GITHUB_DEFAULT_TAG = 'v0.1.0'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 
@@ -24,10 +25,19 @@ def github_digest(path):
     return digest.hexdigest()
 
 
-def github_archive(work, version, download, requested_sha=None):
+def github_archive(work, version, download, requested_sha=None, musl=False):
     tag = GITHUB_DEFAULT_TAG if version == 'stable' else 'v' + version.removeprefix('v')
-    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
+    if not musl and not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
         raise ValueError('Invalid GitHub release version')
+    release_version = tag[1:]
+    target_platform = 'linux-x86_64'
+    if musl:
+        tag = GITHUB_MUSL_TAG if version == 'stable' else version
+        match = re.fullmatch(r'musl-v([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)', tag)
+        if not match:
+            raise ValueError('Use --version musl-vMAJOR.MINOR.PATCH-REVISION with --musl')
+        release_version = match[1] + '-musl.' + match[2]
+        target_platform = 'linux-musl-x86_64'
     base = f'https://github.com/{GITHUB_INSTALLER_REPO}/releases/download/{tag}/'
     download(base+'SHA256SUMS', work/'SHA256SUMS', 1024*1024)
     sums = {}
@@ -40,12 +50,14 @@ def github_archive(work, version, download, requested_sha=None):
     if github_digest(work/'release.json') != sums.get('release.json'):
         raise ValueError('GitHub release metadata checksum mismatch')
     metadata = json.loads((work/'release.json').read_text())
-    if (metadata.get('tag') != tag or metadata.get('version') != tag[1:] or
-            metadata.get('component') != 'semantic-installer' or metadata.get('platform') != 'linux-x86_64'):
+    if (metadata.get('tag') != tag or metadata.get('version') != release_version or
+            metadata.get('component') != 'semantic-installer' or metadata.get('platform') != target_platform):
         raise ValueError('GitHub release identity or platform mismatch')
+    if musl and metadata.get('libc') != 'musl':
+        raise ValueError('Release does not declare musl support')
     if tag == GITHUB_DEFAULT_TAG and metadata.get('source_commit') != GITHUB_BASELINE_COMMIT:
         raise ValueError('GitHub release differs from the verified source baseline')
-    name = f'semantic-{tag[1:]}-linux-x86_64.tar.gz'
+    name = f'semantic-{release_version}-{target_platform}.tar.gz'
     expected = sums.get(name)
     if expected is None or (requested_sha and requested_sha != expected):
         raise ValueError('GitHub archive checksum is missing or differs from --sha256')

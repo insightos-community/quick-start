@@ -35,6 +35,21 @@ The installer downloads the [GitHub Release](https://github.com/insightos-commun
 
 The two channels have separate version names and publication schedules; OSS `stable` does not necessarily contain the same build as GitHub `v0.1.0`.
 
+### Optional musl installation (Alpine)
+
+The default installation remains glibc-based. On **Linux x86_64 with musl 1.2+**, explicitly select the additional musl Release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/insightos-community/quick-start/main/install-en.sh -o install-en.sh
+bash install-en.sh --musl --install-system-deps
+```
+
+The Chinese `install.sh` also accepts `--musl`; this option defaults to GitHub Releases in both scripts. It includes one relocatable CPython 3.13.15 base and NumPy 2.3.5 for the separate Robot and MuJoCo environments, plus the verified musl robot libraries and Mesa. No Python download or source compilation is required during installation. Alpine dependencies use the machine's existing APK repositories; the installer does not rewrite package sources.
+
+`--render-backend auto` tests Mesa GPU rendering and falls back to llvmpipe. Use `--render-backend software` to force software rendering, or `--render-backend mesa-gpu` to require a working GPU. AMD radeonsi was tested locally; Intel and Nouveau drivers are included but have not been tested on hardware. NVIDIA's proprietary driver path remains available through the default glibc installation. See [musl release contents and validation](artifacts/musl/README.md).
+
+Use a separate `--dir` when trying another variant. `--musl --version musl-v0.1.0-1` selects the pinned optional Release; the normal `v0.1.0` installer and OSS stable channel are unchanged.
+
 ### Run from a checkout and manage an instance
 
 The scripts are also included at the repository root on current `main`. After cloning this repository, choose one:
@@ -44,7 +59,7 @@ bash ./install.sh --install-system-deps     # Alibaba Cloud OSS
 bash ./install-en.sh --install-system-deps  # GitHub Releases
 ```
 
-Each script can run by itself outside the checkout; it does not fetch additional installer code. Review the downloaded script and run `bash install.sh --help` or `bash install-en.sh --help` for options. No Go, Node or xmake build is needed. Initial installation downloads isolated Python environments. `--install-system-deps` may require sudo and uses the machine's configured system package sources without rewriting them. The English installer also preserves the user's uv configuration and package indexes.
+Each script can run by itself outside the checkout; it does not fetch additional installer code. Review the downloaded script and run `bash install.sh --help` or `bash install-en.sh --help` for options. No Go, Node or xmake build is needed. The default glibc installation downloads isolated Python environments. `--install-system-deps` may require sudo and uses the machine's configured system package sources without rewriting them. The English installer also preserves the user's uv configuration and package indexes.
 
 Use `--dir /absolute/instance/path` for a separate instance. Prebuilt installations use the username `admin` and generate a random password; run `~/.local/share/semantic/bin/semanticctl welcome` to view it (adjust the path for a custom `--dir`). Manage services with `semanticctl start|stop|status|doctor`; see [installation management](artifacts/README.md).
 

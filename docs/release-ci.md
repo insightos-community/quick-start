@@ -48,3 +48,9 @@ python3 artifacts/build_from_releases.py \
 输出目录必须不存在，缓存命中也重新校验哈希。版本清单中的源码 SHA 必须与 Release 元数据一致；不同组件的依赖 pins 也必须一致。归档解包拒绝路径穿越、链接和重复文件，静态应用程序与 uv 的 glibc 基线在组装时检查。模型和第三方 Wheel 保留来源、许可声明，不重新授权。
 
 PR/main 组装后执行真实安装冒烟检查，覆盖 Web SPA、认证 API、三个精确技能版本、原生 MuJoCo 注册/场景 smoke、重复安装和管理配置更新。通过后才允许 Tag/manual 发布。它不执行真机任务、GPU 验收或 LLM 拆码垛任务。Release 中的内部 Python 包版本继续沿用原业务基线，不强行改成维护 Tag 后缀。
+
+## 可选 musl Release
+
+默认 installer 及 `repo-versions.json` 继续使用现有 glibc 运行栈。额外的 `.github/workflows/musl-release.yml` 使用独立的 `musl-v*` Tag，发布供 `--musl` 选择的预发布包，不更新普通 latest Release 或 OSS stable。
+
+锁定的输入见 `artifacts/musl/releases.json`（组织内依赖 Release）、`upstream.json`（官方 musl Python/uv、基础安装包与源码）和 `python-wheels.json`（PyPI musl Wheel）。组装会验证 SHA-256、源码提交和平台，审计整个包及 Wheel 中的 ELF 依赖，然后在断网 Alpine 容器中测试中英文安装入口、Server/Web、Native MuJoCo 场景和机器人库联合运行。详见 [musl 构建说明](../artifacts/musl/README.md)。
