@@ -12,6 +12,12 @@ The language selector supports `?lang=zh|en`, a saved preference, and browser la
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --install-system-deps
 ```
 
+The English script defaults to the verified GitHub `v0.1.0` installer Release. `--version 0.1.0` (or `v0.1.0`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
+
+Complete Releases already contain the Git LFS model objects. If an asset is missing or is a pointer, the English bootstrap uses the asset repository commit in `release-lock.json`, reads its GitHub pointer and downloads the object through the [Git LFS Batch API](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md). Both object size and SHA-256 must match the original `files.json`; the archive and integrity inventory are never rewritten. No Git or Git LFS executable is needed on the installation target.
+
+System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
+
 The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04**. Other package-manager support does not imply full validation of every distribution.
 
 Both languages also state that more Linux distributions will be tested soon and compatibility results will be updated. This is a validation plan, not an expansion of the currently verified platform list.
