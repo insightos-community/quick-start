@@ -200,7 +200,8 @@ class UninstallTests(unittest.TestCase):
         self.assertTrue(directory.is_dir())
 
     def test_deleted_cwd_does_not_hide_a_live_instance_executable(self):
-        binary = self.root/'releases/v1/busy-worker'
+        # Multicall coreutils/BusyBox dispatch by argv[0], so retain the applet name.
+        binary = self.root/'releases/v1/sleep'
         shutil.copy2('/bin/sleep', binary)
         directory = self.root/'logs/removed'
         directory.mkdir()

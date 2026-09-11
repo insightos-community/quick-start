@@ -35,6 +35,21 @@ bash install-en.sh --version v0.1.0 --install-system-deps
 
 两个通道的版本号和发布时间各自独立，OSS `stable` 不一定与 GitHub `v0.1.0` 是同一构建。
 
+### 可选 musl 安装（Alpine）
+
+默认安装方式仍使用 glibc。在 **Linux x86_64、musl 1.2+** 系统上，显式添加 `--musl` 选择额外的安装包：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/insightos-community/quick-start/main/install.sh -o install.sh
+bash install.sh --musl --install-system-deps
+```
+
+中英文脚本均支持此参数，并默认从 GitHub Release 下载 musl 制品。Robot 与 MuJoCo 的独立虚拟环境共用一套随包提供的 CPython 3.13.15，均使用 NumPy 2.3.5；同时包含验证过的 musl 机器人依赖与 Mesa。安装期间无需下载 Python 或编译源码。Alpine 软件包依赖通过用户机器现有的 APK 源安装，不改写源配置。
+
+默认 `--render-backend auto` 会测试 Mesa GPU 渲染，不可用时回退到 llvmpipe；`--render-backend software` 强制软件渲染，`--render-backend mesa-gpu` 要求 GPU 测试成功。AMD radeonsi 已完成本地实机测试；包含的 Intel、Nouveau 驱动尚未经过对应硬件验证。NVIDIA 专有驱动仍使用默认 glibc 安装路径。详见 [musl 制品与验证说明](artifacts/musl/README.md)。
+
+尝试不同变体请使用独立的 `--dir`。`--musl --version musl-v0.1.0-1` 指定可选版本；普通 `v0.1.0` 和 OSS stable 安装渠道保持原样。
+
 ### 从仓库运行与实例管理
 
 当前 `main` 的仓库根目录也包含这两个脚本。克隆仓库后，选择其中一个执行：

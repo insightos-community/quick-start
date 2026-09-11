@@ -305,6 +305,7 @@ if '--purge' in arguments or '--dry-run' in arguments:
 p = argparse.ArgumentParser(description='Semantic verified bootstrap', add_help=False)
 p.add_argument('--base-url', default=os.environ.get('SEMANTIC_DOWNLOAD_BASE', 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'))
 p.add_argument('--version', default='stable')
+p.add_argument('--musl', action='store_true', help='Opt in to musl; default installs remain glibc')
 p.add_argument('--package', type=pathlib.Path)
 p.add_argument('--ticket', type=pathlib.Path, help='Private OSS download ticket; no long-lived credentials required')
 p.add_argument('--sha256')
@@ -312,8 +313,11 @@ p.add_argument('--allow-http', action='store_true', help='Only for local/private
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
 a, rest = p.parse_known_args()
+if a.musl and not a.configure_existing:
+    rest = ['--musl', *rest]
 if a.help:
     print('Semantic: --base-url HTTPS_URL [--version VERSION] | --package FILE [--sha256 HASH]')
+    print('musl: --musl [--render-backend auto|mesa-gpu|software]; GitHub Release, Linux x86_64 musl only')
     print('安装选项: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('网络: 新安装 Web 默认 0.0.0.0:3000（含本机与局域网）；API/WS 保持本机')
     print('自定义: --web-host IPv4 --web-port PORT；仅本机用 --web-host 127.0.0.1')
@@ -387,12 +391,179 @@ def digest(path):
     with path.open('rb') as f:
         while block := f.read(1024 * 1024): h.update(block)
     return h.hexdigest()
+# BEGIN GENERATED GITHUB HELPERS
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+"""GitHub Release and LFS helpers embedded in the standalone English installer."""
+import hashlib
+import json
+from pathlib import Path
+import re
+import tempfile
+import urllib.parse
+import urllib.request
+
+GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
+GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
+GITHUB_DEFAULT_TAG = 'v0.1.0'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
+GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
+LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
+
+
+def github_digest(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as source:
+        while block := source.read(1024 * 1024):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def github_archive(work, version, download, requested_sha=None, musl=False):
+    tag = GITHUB_DEFAULT_TAG if version == 'stable' else 'v' + version.removeprefix('v')
+    if not musl and not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
+        raise ValueError('Invalid GitHub release version')
+    release_version = tag[1:]
+    target_platform = 'linux-x86_64'
+    if musl:
+        tag = GITHUB_MUSL_TAG if version == 'stable' else version
+        match = re.fullmatch(r'musl-v([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)', tag)
+        if not match:
+            raise ValueError('Use --version musl-vMAJOR.MINOR.PATCH-REVISION with --musl')
+        release_version = match[1] + '-musl.' + match[2]
+        target_platform = 'linux-musl-x86_64'
+    base = f'https://github.com/{GITHUB_INSTALLER_REPO}/releases/download/{tag}/'
+    download(base+'SHA256SUMS', work/'SHA256SUMS', 1024*1024)
+    sums = {}
+    for line in (work/'SHA256SUMS').read_text().splitlines():
+        checksum, name = line.split('  ', 1)
+        if not re.fullmatch(r'[a-f0-9]{64}', checksum) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', name) or name in sums:
+            raise ValueError('Invalid GitHub release checksum inventory')
+        sums[name] = checksum
+    download(base+'release.json', work/'release.json', 1024*1024)
+    if github_digest(work/'release.json') != sums.get('release.json'):
+        raise ValueError('GitHub release metadata checksum mismatch')
+    metadata = json.loads((work/'release.json').read_text())
+    if (metadata.get('tag') != tag or metadata.get('version') != release_version or
+            metadata.get('component') != 'semantic-installer' or metadata.get('platform') != target_platform):
+        raise ValueError('GitHub release identity or platform mismatch')
+    if musl and metadata.get('libc') != 'musl':
+        raise ValueError('Release does not declare musl support')
+    if tag == GITHUB_DEFAULT_TAG and metadata.get('source_commit') != GITHUB_BASELINE_COMMIT:
+        raise ValueError('GitHub release differs from the verified source baseline')
+    name = f'semantic-{release_version}-{target_platform}.tar.gz'
+    expected = sums.get(name)
+    if expected is None or (requested_sha and requested_sha != expected):
+        raise ValueError('GitHub archive checksum is missing or differs from --sha256')
+    archive = work/name
+    download(base+name, archive, 8*1024**3)
+    # The canonical bootstrap verifies this digest again before extracting anything.
+    if github_digest(archive) != expected:
+        raise ValueError('GitHub archive SHA256 mismatch')
+    return archive, expected
+
+
+class GithubHTTPSRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme != 'https':
+            raise ValueError('GitHub LFS refuses non-HTTPS redirects')
+        redirected = super().redirect_request(request, response, code, message, headers, newurl)
+        if urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(request.full_url).netloc:
+            for name in list(redirected.headers):
+                if name.lower() in ('authorization', 'cookie'):
+                    redirected.remove_header(name)
+        return redirected
+
+
+def github_open(request):
+    if urllib.parse.urlsplit(request.full_url).scheme != 'https':
+        raise ValueError('GitHub LFS requires HTTPS')
+    return urllib.request.build_opener(GithubHTTPSRedirect()).open(request, timeout=60)
+
+
+def github_lfs_object(pointer, destination, expected):
+    match = re.fullmatch(rb'version https://git-lfs.github.com/spec/v1\noid sha256:([a-f0-9]{64})\nsize ([0-9]+)\n?', pointer)
+    if not match:
+        raise ValueError('Invalid Git LFS pointer')
+    oid, size = match[1].decode(), int(match[2])
+    if oid != expected or not 0 < size <= 2*1024**3:
+        raise ValueError('LFS pointer differs from the verified payload inventory')
+    data = json.dumps({'operation':'download', 'transfers':['basic'], 'objects':[{'oid':oid,'size':size}]}).encode()
+    request = urllib.request.Request(f'https://github.com/{GITHUB_ASSET_REPO}.git/info/lfs/objects/batch',
+                                    data=data, headers={'Accept':'application/vnd.git-lfs+json', 'Content-Type':'application/vnd.git-lfs+json'})
+    with github_open(request) as response:
+        batch = json.loads(response.read(1024*1024))
+    objects = batch.get('objects', [])
+    if len(objects) != 1 or objects[0].get('oid') != oid or objects[0].get('size') != size or 'error' in objects[0]:
+        raise ValueError('GitHub LFS returned an unexpected object')
+    action = objects[0]['actions']['download']
+    request = urllib.request.Request(action['href'], headers=action.get('header', {}))
+    count = 0
+    with github_open(request) as response, destination.open('wb') as target:
+        while block := response.read(1024*1024):
+            count += len(block)
+            if count > size:
+                raise ValueError('GitHub LFS object exceeds its declared size')
+            target.write(block)
+    if count != size or github_digest(destination) != oid:
+        raise ValueError('GitHub LFS size or SHA256 mismatch')
+
+
+def hydrate_github_assets(payload, download):
+    """Restore missing/LFS-pointer assets using immutable pins and original file hashes.
+
+    Complete Release archives already contain the LFS objects, so need no extra
+    model downloads. Neither files.json nor the archive itself is rewritten.
+    """
+    if not (payload/'release-lock.json').is_file():
+        return 0  # Older explicitly supplied packages have no GitHub provenance.
+    records = json.loads((payload/'files.json').read_text())
+    pending = []
+    for name, checksum in records.items():
+        if not name.startswith('assets/mujoco/'):
+            continue
+        relative = Path(name.removeprefix('assets/mujoco/'))
+        if relative.is_absolute() or '..' in relative.parts or not relative.parts or not re.fullmatch(r'[a-f0-9]{64}', checksum):
+            raise ValueError('Invalid asset inventory path or checksum')
+        target = payload/name
+        if target.is_file():
+            with target.open('rb') as source:
+                if not source.read(128).startswith(LFS_POINTER_PREFIX):
+                    continue
+        # Generated release metadata is not a Git-tracked asset.
+        if relative.parts[0] not in ('robot','scene','assets','asset-catalog.v1.json'):
+            raise ValueError('Missing non-source asset metadata')
+        pending.append((relative, target, checksum))
+    if not pending:
+        return 0
+    pin = json.loads((payload/'release-lock.json').read_text())['semantic-scene/mujoco-asset']
+    commit = pin['source_commit']
+    if pin['repository'] != GITHUB_ASSET_REPO or not re.fullmatch(r'[a-f0-9]{40}', commit):
+        raise ValueError('Invalid pinned GitHub asset repository')
+    with tempfile.TemporaryDirectory(prefix='github-lfs-', dir=payload.parent) as temporary:
+        for relative, target, checksum in pending:
+            staged = Path(temporary)/'asset'
+            url = f'https://raw.githubusercontent.com/{GITHUB_ASSET_REPO}/{commit}/' + urllib.parse.quote(relative.as_posix(), safe='/')
+            download(url, staged, 2*1024**3)
+            with staged.open('rb') as source:
+                pointer = source.read(1024)
+            if pointer.startswith(LFS_POINTER_PREFIX):
+                github_lfs_object(pointer, staged, checksum)
+            if github_digest(staged) != checksum:
+                raise ValueError('GitHub asset differs from the verified payload SHA256')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            staged.replace(target)
+            target.chmod(0o644)
+    return len(pending)
+# END GENERATED GITHUB HELPERS
 with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
     work = pathlib.Path(temporary)
     if a.package:
         archive = a.package.expanduser().resolve(strict=True)
         sidecar = pathlib.Path(str(archive) + '.sha256')
         expected = a.sha256 or (sidecar.read_text().split()[0] if sidecar.exists() else '')
+    elif a.musl and not a.ticket and not any(arg == '--base-url' or arg.startswith('--base-url=') for arg in arguments) and not os.environ.get('SEMANTIC_DOWNLOAD_BASE'):
+        archive, expected = github_archive(work, a.version, download, a.sha256, musl=True)
     else:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', a.version): raise ValueError('非法版本')
         if a.ticket:
@@ -403,10 +574,12 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             if a.version != 'stable' and a.version != m['version']:
                 raise ValueError('下载票据版本与 --version 不一致')
         else:
-            suffix = 'channels/stable.json' if a.version == 'stable' else f'releases/{a.version}/linux-x86_64/manifest.json'
+            selected_platform = 'linux-musl-x86_64' if a.musl else 'linux-x86_64'
+            channel = 'musl-stable' if a.musl else 'stable'
+            suffix = f'channels/{channel}.json' if a.version == 'stable' else f'releases/{a.version}/{selected_platform}/manifest.json'
             download(a.base_url.rstrip('/') + '/' + suffix, work/'manifest.json', 1024*1024)
             m = json.loads((work/'manifest.json').read_text())
-        if m.get('platform') != 'linux-x86_64': raise ValueError('不支持的制品平台')
+        if m.get('platform') != ('linux-musl-x86_64' if a.musl else 'linux-x86_64'): raise ValueError('不支持的制品平台')
         path = pathlib.PurePosixPath(m['archive'])
         if path.is_absolute() or '..' in path.parts or not re.fullmatch(r'[A-Za-z0-9/_.-]+', str(path)):
             raise ValueError('非法制品下载路径')

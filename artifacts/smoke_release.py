@@ -40,6 +40,8 @@ def request(base, path, data=None, token=None):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--package', type=Path, required=True)
+    p.add_argument('--musl', action='store_true', help='Exercise the explicitly selected musl variant')
+    p.add_argument('--offline', action='store_true', help='Test loopback only in a container without a network interface')
     p.add_argument('--dir', type=Path, help='New or previously managed smoke-test directory')
     p.add_argument('--port-base', type=int, default=28080)
     p.add_argument('--install-system-deps', action='store_true', help='Opt-in, intended for disposable containers')
@@ -49,6 +51,8 @@ def main():
     ports = [a.port_base+i for i in range(4)]
     options = ['--dir', str(root), '--yes', '--http-port', str(ports[0]), '--ws-port', str(ports[1]),
                '--web-port', str(ports[2]), '--runtime-port', str(ports[3])]
+    if a.musl:
+        options.append('--musl')
     if a.install_system_deps:
         options.append('--install-system-deps')
     report = {'directory': str(root), 'package': str(a.package.resolve()), 'checks': []}
@@ -62,7 +66,7 @@ def main():
             assert b'<html' in r.read().lower()
         report['checks'].append('Web SPA routing and same-origin authenticated API')
         state = json.loads((root/'install.json').read_text())
-        if state.get('web_host') == '0.0.0.0':
+        if state.get('web_host') == '0.0.0.0' and not a.offline:
             with __import__('socket').socket(__import__('socket').AF_INET, __import__('socket').SOCK_DGRAM) as sock:
                 sock.connect(('192.0.2.1', 9))
                 lan_ip = sock.getsockname()[0]
@@ -110,12 +114,12 @@ def main():
             assert (root/'current/files.json').read_bytes() == signature
             assert json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD'] == password
             assert json.loads((root/'run/services.json').read_text())['server'] == server_identity
-            if host == '0.0.0.0':
+            if host == '0.0.0.0' and not a.offline:
                 with __import__('socket').socket(__import__('socket').AF_INET, __import__('socket').SOCK_DGRAM) as sock:
                     sock.connect(('192.0.2.1', 9))  # Routing lookup only; no packet sent.
                     lan_ip = sock.getsockname()[0]
                 assert request(f'http://{lan_ip}:{web_port}', '/api/v1/system/healthz')
-        report['checks'].append('LAN Web interface and proxied API; management-only update preserves app version, payload and password')
+        report['checks'].append(('Loopback verification of Web listen settings' if a.offline else 'LAN Web interface') + ' and proxied API; management-only update preserves app version, payload and password')
         assert (root/'configs/secrets.json').stat().st_mode & 0o777 == 0o600
         report['success'] = True
     finally:

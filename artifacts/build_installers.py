@@ -14,6 +14,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Reject stale generated installers')
     args = parser.parse_args()
+    canonical = HERE/'install.sh'
+    text = canonical.read_text()
+    before, remaining = text.split('# BEGIN GENERATED GITHUB HELPERS\n', 1)
+    _, after = remaining.split('# END GENERATED GITHUB HELPERS\n', 1)
+    expected = before+'# BEGIN GENERATED GITHUB HELPERS\n'+(HERE/'github_bootstrap.py').read_text()+'# END GENERATED GITHUB HELPERS\n'+after
+    if args.check and text != expected:
+        raise SystemExit('Embedded GitHub helpers are stale; run artifacts/build_installers.py')
+    if not args.check:
+        canonical.write_text(expected)
     english = render()
     outputs = {
         HERE.parent/'install.sh': (HERE/'install.sh').read_text(),

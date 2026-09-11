@@ -1,0 +1,38 @@
+{
+  "installer": {
+    "url": "https://github.com/insightos-community/quick-start/releases/download/v0.1.0/semantic-0.1.0-linux-x86_64.tar.gz",
+    "sha256": "00a93549dd710fdc62f6341b3832755b9855ba0ad51f13e328cb15f7840f8131",
+    "source_commit": "ee0619eae2bce808d4b76b829dfb937440a964a4"
+  },
+  "python": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "6d26dd7e3adaf613565cc703e0096774154d761c65523d373e6a36bc478dd4d5"
+  },
+  "uv": {
+    "url": "https://github.com/astral-sh/uv/releases/download/0.12.12/uv-x86_64-unknown-linux-musl.tar.gz",
+    "sha256": "0b0bbd7144f91d9b694e29c920fca3a060322bd134e8507e5eb92049a3e2edf0"
+  },
+  "mujoco_runtime": {
+    "repository": "https://github.com/insightos-community/mujoco-runtime.git",
+    "commit": "782172a10be68c1b14a247bb8b93d30d98aeadd2"
+  },
+  "compiler_runtime": {
+    "packages": [
+      "libgcc-15.2.0-r2",
+      "libstdc++-15.2.0-r2",
+      "libgomp-15.2.0-r2"
+    ],
+    "source": "https://gcc.gnu.org/releases.html",
+    "build_recipe": "https://gitlab.alpinelinux.org/alpine/aports/-/tree/9d63bf4e11abd32e2affeb295e5244314955b463/main/gcc",
+    "licenses": {
+      "COPYING3": {
+        "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING3",
+        "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+      },
+      "COPYING.RUNTIME": {
+        "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING.RUNTIME",
+        "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+      }
+    }
+  }
+}

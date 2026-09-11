@@ -1,0 +1,111 @@
+name: Optional musl installer
+
+on:
+  push:
+    tags: ['musl-v*']
+  pull_request:
+    paths:
+      - 'artifacts/musl/**'
+      - 'artifacts/mesa/**'
+      - 'artifacts/runtime/**'
+      - 'artifacts/*install*'
+      - 'artifacts/github_bootstrap.py'
+      - '.github/workflows/musl-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: musl-installer-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MUSL_IMAGE: python:3.13-alpine3.23@sha256:75f27d686432419c9d42420b2b9ef605868c7a0682a6be10a6601fad46c2df01
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Select optional version
+        shell: bash
+        env:
+          SOURCE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'musl-v0.1.0-1' }}
+        run: |
+          [[ "$SOURCE_TAG" =~ ^musl-v([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)$ ]]
+          echo "MUSL_TAG=$SOURCE_TAG" >> "$GITHUB_ENV"
+          echo "MUSL_VERSION=${BASH_REMATCH[1]}-musl.${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+      - name: Validate installers and rendering selection
+        run: |
+          python3 artifacts/build_installers.py --check
+          python3 -m unittest discover -s tests -p test_musl_installer.py
+          python3 -m unittest discover -s tests -p test_mesa_profiles.py
+          python3 -m unittest discover -s tests -p test_github_bootstrap.py
+      - name: Assemble verified component releases
+        run: |
+          mkdir -p "$RUNNER_TEMP/musl"
+          docker run --rm --cpus=2 --memory=12g --memory-swap=12g --pids-limit=1024 \
+            -e MUSL_TAG -e MUSL_VERSION -e GITHUB_REPOSITORY -e GITHUB_RUN_ID \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/src,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
+            "$MUSL_IMAGE" sh /src/artifacts/musl/build.sh
+      - name: Install and test in clean offline musl container
+        run: |
+          mkdir -p "artifacts/releases/$MUSL_VERSION/linux-musl-x86_64"
+          cp "$RUNNER_TEMP/musl/dist/"* "artifacts/releases/$MUSL_VERSION/linux-musl-x86_64/"
+          docker build -t semantic-musl-smoke -f artifacts/musl/Clean.Dockerfile .
+          docker run --rm --network none --cpus=2 --memory=8g --pids-limit=1024 \
+            -e MUSL_VERSION \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/src,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
+            semantic-musl-smoke sh -ec '
+              python /src/artifacts/musl/smoke.py --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/install-smoke > /work/logs/install-smoke.log 2>&1
+              bash /src/install-en.sh --musl --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/english-smoke --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut > /work/logs/english-smoke.log 2>&1
+            '
+      - name: Upload verified release files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: musl-installer
+          path: ${{ runner.temp }}/musl/dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: musl-installer-logs
+          path: |
+            ${{ runner.temp }}/musl/logs/
+            ${{ runner.temp }}/musl/install-smoke/*report.json
+            ${{ runner.temp }}/musl/install-smoke/logs/
+            ${{ runner.temp }}/musl/english-smoke/logs/
+          if-no-files-found: warn
+          retention-days: 14
+  publish:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/musl-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: musl-installer
+          path: dist
+      - name: Publish the additional musl release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2>/dev/null; then
+            python3 -c 'import json; assert json.load(open("release-state.json"))["isDraft"], "Refusing to replace a published release"'
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "$RELEASE_TAG" --notes 'Optional Linux x86_64 musl installer. Use install.sh --musl or install-en.sh --musl. Python 3.13 / NumPy 2.3.5, source-built robot libraries and Mesa. The default glibc installer is unchanged. See musl-releases.json for immutable dependency versions and SHA256SUMS for checksums.'
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
