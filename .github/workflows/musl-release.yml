@@ -33,7 +33,7 @@ jobs:
       - name: Select optional version
         shell: bash
         env:
-          SOURCE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'musl-v0.1.0-1' }}
+          SOURCE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'musl-v0.1.0-2' }}
         run: |
           [[ "$SOURCE_TAG" =~ ^musl-v([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]*)$ ]]
           echo "MUSL_TAG=$SOURCE_TAG" >> "$GITHUB_ENV"
@@ -63,7 +63,21 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
             semantic-musl-smoke sh -ec '
               python /src/artifacts/musl/smoke.py --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/install-smoke > /work/logs/install-smoke.log 2>&1
+              python /src/artifacts/musl/smoke.py --musl-runtime system --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/system-smoke > /work/logs/system-smoke.log 2>&1
               bash /src/install-en.sh --musl --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/english-smoke --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut > /work/logs/english-smoke.log 2>&1
+            '
+      - name: Install with bundled musl on a glibc host
+        run: |
+          docker build -t semantic-musl-glibc-smoke -f artifacts/musl/Glibc.Dockerfile artifacts/musl
+          docker run --rm --network none --cpus=2 --memory=8g --pids-limit=1024 \
+            -e MUSL_VERSION \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/src,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
+            semantic-musl-glibc-smoke sh -ec '
+              test ! -e /lib/ld-musl-x86_64.so.1
+              python3 /src/artifacts/musl/smoke.py --musl-runtime bundled --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/glibc-smoke > /work/logs/glibc-smoke.log 2>&1
+              bash /src/install-en.sh --musl --musl-runtime bundled --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/glibc-english --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut > /work/logs/glibc-english.log 2>&1
+              test ! -e /lib/ld-musl-x86_64.so.1
             '
       - name: Export readable test diagnostics
         if: always()
@@ -73,7 +87,7 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
             "$MUSL_IMAGE" sh -ec '
               mkdir -p /work/logs/instances
-              for instance in install-smoke english-smoke; do
+              for instance in install-smoke system-smoke english-smoke glibc-smoke glibc-english; do
                 mkdir -p "/work/logs/instances/$instance"
                 for report in /work/$instance/*report.json; do
                   if [ -f "$report" ]; then cp "$report" "/work/logs/instances/$instance/"; fi
@@ -120,7 +134,7 @@ jobs:
           if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2>/dev/null; then
             python3 -c 'import json; assert json.load(open("release-state.json"))["isDraft"], "Refusing to replace a published release"'
           else
-            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "$RELEASE_TAG" --notes 'Optional Linux x86_64 musl installer. Use install.sh --musl or install-en.sh --musl. Python 3.13 / NumPy 2.3.5, source-built robot libraries and Mesa. The default glibc installer is unchanged. See musl-releases.json for immutable dependency versions and SHA256SUMS for checksums.'
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --latest=false --title "$RELEASE_TAG" --notes 'Optional Linux x86_64 musl installer. Use install.sh --musl or install-en.sh --musl. Bundled musl works on glibc and musl hosts; --musl-runtime system selects host musl. Python 3.13 / NumPy 2.3.5, source-built robot libraries and Mesa. The default glibc installer is unchanged. See musl-releases.json for immutable dependency versions and SHA256SUMS for checksums.'
           fi
           gh release upload "$RELEASE_TAG" dist/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false

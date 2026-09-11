@@ -13,10 +13,11 @@ import sys
 HERE = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--package', type=Path, required=True)
+parser.add_argument('--musl-runtime', choices=['bundled', 'system'], default='bundled')
 parser.add_argument('--dir', type=Path, required=True)
 args = parser.parse_args()
 subprocess.run([sys.executable, HERE.parent/'smoke_release.py', '--musl', '--offline', '--package', args.package,
-                '--dir', args.dir, '--port-base', '29080'], check=True)
+                '--dir', args.dir, '--port-base', '29080', '--musl-runtime', args.musl_runtime], check=True)
 spec = importlib.util.spec_from_file_location('musl_installer', HERE.parent/'runtime/installer.py')
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
@@ -29,6 +30,20 @@ import ctypes, inspect, json, os, runpy, sys, tempfile
 from pathlib import Path
 import numpy as np, pinocchio as pin, coal, ruckig, mujoco, ability_py, websockets
 assert sys.version_info[:2] == (3,13)
+# Subprocesses and multiprocessing must follow the same prepared ELF interpreter.
+import subprocess
+child = subprocess.check_output([sys.executable, '-c', 'import sys,numpy; print(sys.base_prefix)'], text=True).strip()
+assert Path(child).resolve() == Path(os.environ['EXPECTED_PYTHON']).resolve()
+import multiprocessing
+worker = multiprocessing.get_context('spawn').Process(target=os.getpid)
+worker.start(); worker.join(20)
+if worker.is_alive():
+    worker.terminate(); worker.join()
+    raise AssertionError('Spawned Python did not exit')
+assert worker.exitcode == 0
+# Host tools must remain usable without inheriting musl library search paths.
+subprocess.run(['tar', '--version'], check=True, stdout=subprocess.DEVNULL)
+subprocess.run(['zstd', '--version'], check=True, stdout=subprocess.DEVNULL)
 assert np.__version__ == '2.3.5'
 assert Path(sys.base_prefix).resolve() == Path(os.environ['EXPECTED_PYTHON']).resolve()
 checks = runpy.run_path(os.environ['ROBOT_CHECKS'])
@@ -62,13 +77,16 @@ with mujoco.Renderer(model,64,64) as renderer:
     assert np.isfinite(depth).all() and depth.min() > 0
 maps = Path('/proc/self/maps').read_text()
 assert 'ld-musl-x86_64' in maps or 'libc.musl-x86_64' in maps
+assert 'libc.so.6' not in maps
+loader = str(Path(os.environ['EXPECTED_PYTHON']).parent/'musl/lib/ld-musl-x86_64.so.1')
+assert (loader in maps) == (os.environ['EXPECTED_MUSL_RUNTIME'] == 'bundled')
 loaded = {line.split()[-1] for line in maps.splitlines() if '/' in line}
 for library in ('libassimp.so.', 'libqhull_r.so.', 'libtinyxml2.so.', 'libz.so.', 'libLLVM.so.'):
     paths = [Path(path) for path in loaded if Path(path).name.startswith(library)]
     assert paths and all(path.is_relative_to(Path(os.environ['EXPECTED_PYTHON']).parent/'musl/lib') for path in paths), (library, paths)
 print(json.dumps({'python':sys.version,'base_prefix':sys.base_prefix,'numpy':np.__version__, 'pinocchio':pin.__version__, 'mujoco':mujoco.__version__, 'robot_and_render':'passed'}))
 '''
-env.update(EXPECTED_PYTHON=str(release/'python'), ROBOT_CHECKS=str(HERE/'robot_checks.py'), PYTHONPATH='', PYTHONNOUSERSITE='1')
+env.update(EXPECTED_MUSL_RUNTIME=args.musl_runtime, EXPECTED_PYTHON=str(release/'python'), ROBOT_CHECKS=str(HERE/'robot_checks.py'), PYTHONPATH='', PYTHONNOUSERSITE='1')
 result = subprocess.check_output([python, '-c', code], env=env, text=True)
 # The CLI-created native environment must resolve to the SAME bundled interpreter.
 venvs = [p for p in args.dir.rglob('pyvenv.cfg') if p.parent != python.parent.parent]

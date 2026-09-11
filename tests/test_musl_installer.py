@@ -21,20 +21,42 @@ class MuslInstallerTests(unittest.TestCase):
     def test_platform_selection_is_explicit_and_does_not_accept_glibc(self):
         musl={'libc':'musl','platform':'linux-musl-x86_64'}
         glibc={'minimum_glibc':'2.28','platform':'linux-x86_64'}
-        with patch.object(installer.platform,'system',return_value='Linux'), patch.object(installer.platform,'machine',return_value='x86_64'), patch.object(installer,'musl_host',return_value=True):
+        with patch.object(installer.platform,'system',return_value='Linux'), patch.object(installer.platform,'machine',return_value='x86_64'), patch.object(installer,'system_musl_available',return_value=True):
             installer.check_platform(musl,True)
             with self.assertRaisesRegex(RuntimeError,'requires --musl'):installer.check_platform(musl)
             with self.assertRaisesRegex(RuntimeError,'glibc package'):installer.check_platform(glibc,True)
-        with patch.object(installer,'musl_host',return_value=False):
+        with patch.object(installer,'system_musl_available',return_value=False):
             with self.assertRaisesRegex(RuntimeError,'musl host'):installer.check_platform(musl,True)
         with patch.object(installer.platform,'libc_ver',return_value=('glibc','2.28')):
             installer.check_platform(glibc)
+
+    def test_bundled_runtime_accepts_glibc_but_system_mode_requires_musl(self):
+        manifest={'libc':'musl','platform':'linux-musl-x86_64','musl_runtime':{'default':'bundled'}}
+        with patch.object(installer.platform,'system',return_value='Linux'), patch.object(installer.platform,'machine',return_value='x86_64'), patch.object(installer,'system_musl_available',return_value=False):
+            installer.check_platform(manifest,True)
+            installer.check_platform(manifest,True,'bundled')
+            with self.assertRaisesRegex(RuntimeError,'system requires a musl host'):
+                installer.check_platform(manifest,True,'system')
+            with self.assertRaisesRegex(RuntimeError,'does not include musl'):
+                installer.check_platform({'libc':'musl','platform':'linux-musl-x86_64'},True,'bundled')
+
+    def test_new_runtime_does_not_expose_musl_search_paths_to_host_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);release=root/'releases/test'
+            (release/'musl').mkdir(parents=True)
+            (release/'python/bin').mkdir(parents=True)
+            (release/'python/bin/python3.13.musl-template').touch()
+            with patch.dict(os.environ,{'LD_LIBRARY_PATH':'/host/libs','LD_PRELOAD':'/host/preload.so'},clear=True):
+                env=installer.environment(root,release)
+            self.assertNotIn('LD_LIBRARY_PATH',env)
+            self.assertNotIn('LD_PRELOAD',env)
+            self.assertTrue(env['PATH'].startswith(str(root/'python-launchers/test/bin')))
 
     def test_optional_download_uses_separate_tag_and_requires_musl_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory=Path(tmp)
             tag=github.GITHUB_MUSL_TAG
-            version='0.1.0-musl.1'
+            version='0.1.0-musl.2'
             archive=f'semantic-{version}-linux-musl-x86_64.tar.gz'
             metadata={'component':'semantic-installer','tag':tag,'version':version,'platform':'linux-musl-x86_64','libc':'musl'}
             def fixture():

@@ -12,7 +12,7 @@ import urllib.request
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
 GITHUB_DEFAULT_TAG = 'v0.1.0'
-GITHUB_MUSL_TAG = 'musl-v0.1.0-1'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-2'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 
