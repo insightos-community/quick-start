@@ -71,6 +71,10 @@ jobs:
 
         python3 -m unittest discover -s tests -p test_artifact_uninstall.py
 
+        python3 -m unittest discover -s tests -p test_artifact_english.py
+
+        python3 -m unittest discover -s tests -p test_github_bootstrap.py
+
         go test artifacts/gateway/main.go artifacts/gateway/main_test.go
 
         '
@@ -95,6 +99,9 @@ jobs:
         --dir "$RUNNER_TEMP/semantic-install-smoke" --port-base 28080
 
         '
+    - name: Install with the English manager and user package configuration
+      run: |
+        bash automation/artifacts/install-en.sh --package "source/artifacts/releases/$INSTALLER_VERSION/linux-x86_64/semantic-$INSTALLER_VERSION-linux-x86_64.tar.gz" --dir "$RUNNER_TEMP/semantic-english-smoke" --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut
     - name: Upload installer and component lock
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
