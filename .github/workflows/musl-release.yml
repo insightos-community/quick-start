@@ -65,6 +65,25 @@ jobs:
               python /src/artifacts/musl/smoke.py --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/install-smoke > /work/logs/install-smoke.log 2>&1
               bash /src/install-en.sh --musl --package "/work/dist/semantic-$MUSL_VERSION-linux-musl-x86_64.tar.gz" --dir /work/english-smoke --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut > /work/logs/english-smoke.log 2>&1
             '
+      - name: Export readable test diagnostics
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/musl"
+          docker run --rm --network none \
+            --mount "type=bind,src=$RUNNER_TEMP/musl,dst=/work" \
+            "$MUSL_IMAGE" sh -ec '
+              mkdir -p /work/logs/instances
+              for instance in install-smoke english-smoke; do
+                mkdir -p "/work/logs/instances/$instance"
+                for report in /work/$instance/*report.json; do
+                  if [ -f "$report" ]; then cp "$report" "/work/logs/instances/$instance/"; fi
+                done
+                if [ -d "/work/$instance/logs" ]; then
+                  cp -R "/work/$instance/logs" "/work/logs/instances/$instance/"
+                fi
+              done
+              chmod -R a+rX /work/logs
+            '
       - name: Upload verified release files
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -77,11 +96,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: musl-installer-logs
-          path: |
-            ${{ runner.temp }}/musl/logs/
-            ${{ runner.temp }}/musl/install-smoke/*report.json
-            ${{ runner.temp }}/musl/install-smoke/logs/
-            ${{ runner.temp }}/musl/english-smoke/logs/
+          path: ${{ runner.temp }}/musl/logs/
           if-no-files-found: warn
           retention-days: 14
   publish:
