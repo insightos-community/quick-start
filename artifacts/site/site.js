@@ -24,9 +24,9 @@ const englishCopy = {
   headline:
     'From semantics<span class="comma">,</span><br>to <span class="accent">action.</span>',
   intro:
-    "A robotics application stack, installed with one command.<br>From orchestration to simulation, bring your ideas to life.",
+    '<span class="hero-copy-line">A robotics application stack, installed with one command.</span><span class="hero-copy-line">From orchestration to simulation, bring your ideas to life.</span>',
   terminal: '<span class="terminal-dot"></span> Run in your Linux terminal',
-  downloadRegion: "Downloads via Alibaba Cloud OSS · China",
+  downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
   supportNote: "Linux x86_64 only · Verified on Ubuntu 24.04",
   supportRoadmap:
@@ -87,7 +87,7 @@ const englishCopy = {
     "glibc ≥ 2.28 is a baseline, not a guarantee that other distributions have passed full validation. Full deployment on macOS, Windows, ARM64 or Alpine is not currently supported.",
   updatesTitle: "Downloads and updates",
   updates:
-    "Artifacts use public HTTPS URLs on China-region OSS; no AccessKey is required. Global distribution via GitHub Releases is not yet available. For cross-version upgrades, install to a new directory and explicitly migrate data.",
+    "Prebuilt installers are downloaded from GitHub Releases. Missing model assets use pinned GitHub LFS objects with SHA-256 verification. Dependencies use your machine's configured package sources. For cross-version upgrades, install to a new directory and explicitly migrate data.",
   faqTitle: "Frequently asked questions",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",

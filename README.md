@@ -8,19 +8,47 @@
 
 ## Start here
 
-Use the Release installer from current main on Linux x86_64 with Python 3.10+:
+Install prebuilt Semantic on **Linux x86_64** (verified on **Ubuntu 24.04**). You need Bash, curl and Python 3.10+. Choose a download source:
+
+| Download source | Standalone script | Default version |
+|---|---|---|
+| Alibaba Cloud OSS | [install.sh](install.sh), Chinese prompts | OSS `stable` channel |
+| GitHub Releases | [install-en.sh](install-en.sh), English prompts | Verified `v0.1.0` Release |
+
+### Install from Alibaba Cloud OSS
 
 ```bash
-git clone https://github.com/insightos-community/quick-start.git
-cd quick-start
-python3 semantic_installer.py --release --install-system-deps
+curl -fsSL https://semantic.insightos.cn/install.sh -o install.sh
+bash install.sh --install-system-deps
 ```
 
-This downloads the `v0.1.0` installer, verifies checksums and source identity, then installs without cloning the 13 components or requiring Go, Node or xmake. Initial installation downloads isolated Python environments. Set `--dir` for a separate instance. The Release installer generates a random password for `admin`; use `semanticctl welcome` to view it.
+The installer reads the public OSS channel manifest, downloads the archive from Alibaba Cloud OSS and verifies its SHA-256. No OSS account or credentials are required. Use `--version <OSS-version>` to select an existing OSS release, or `--base-url <HTTPS-URL>` to use another artifact server.
 
-CI assembles the component Releases pinned by `repo-versions.json` and smoke-tests Web/API, skill versions, MuJoCo Runtime registration and repeat installation. This does not certify physical robots, GPU execution or LLM task completion. See [release CI](docs/release-ci.md).
+### Install from GitHub Releases
 
-For a source build from the verified baseline, check out the existing tag:
+```bash
+curl -fsSL https://raw.githubusercontent.com/insightos-community/quick-start/main/install-en.sh -o install-en.sh
+bash install-en.sh --version v0.1.0 --install-system-deps
+```
+
+The installer downloads the [GitHub Release](https://github.com/insightos-community/quick-start/releases/tag/v0.1.0), verifies checksums and release identity, and checks the fixed source commit for `v0.1.0`. Missing model files or LFS pointers are restored through the pinned GitHub asset revision and Git LFS, with size and SHA-256 verification. No component checkout or Git LFS client is required. `--version` selects a GitHub tag; omitting it also selects `v0.1.0`.
+
+The two channels have separate version names and publication schedules; OSS `stable` does not necessarily contain the same build as GitHub `v0.1.0`.
+
+### Run from a checkout and manage an instance
+
+The scripts are also included at the repository root on current `main`. After cloning this repository, choose one:
+
+```bash
+bash ./install.sh --install-system-deps     # Alibaba Cloud OSS
+bash ./install-en.sh --install-system-deps  # GitHub Releases
+```
+
+Each script can run by itself outside the checkout; it does not fetch additional installer code. Review the downloaded script and run `bash install.sh --help` or `bash install-en.sh --help` for options. No Go, Node or xmake build is needed. Initial installation downloads isolated Python environments. `--install-system-deps` may require sudo and uses the machine's configured system package sources without rewriting them. The English installer also preserves the user's uv configuration and package indexes.
+
+Use `--dir /absolute/instance/path` for a separate instance. Prebuilt installations use the username `admin` and generate a random password; run `~/.local/share/semantic/bin/semanticctl welcome` to view it (adjust the path for a custom `--dir`). Manage services with `semanticctl start|stop|status|doctor`; see [installation management](artifacts/README.md).
+
+For a source build instead, use the verified public baseline:
 
 ```bash
 git clone https://github.com/insightos-community/quick-start.git
@@ -29,7 +57,7 @@ git checkout v0.1.0
 python3 semantic_installer.py --list
 ```
 
-The existing deployment baseline targets **Linux x86_64** and was verified on **Ubuntu 24.04**. Model downloads do not replace the source build, Bundle activation and Skill publication steps. System dependency installation may require sudo.
+The root shell scripts are available on current `main`; the existing `v0.1.0` source tag is unchanged. Source builds still require Bundle activation and Skill publication after downloading models.
 
 ## 🛠 Build from source
 

@@ -65,7 +65,11 @@ jobs:
         '
     - name: Test release verification and existing installer
       working-directory: automation
-      run: 'python3 -m unittest discover -s tests -p test_release_downloads.py
+      run: 'python3 artifacts/build_installers.py --check
+
+        python3 -m unittest discover -s tests -p test_install_entrypoints.py
+
+        python3 -m unittest discover -s tests -p test_release_downloads.py
 
         python3 -m unittest discover -s tests -p test_artifact_installer.py
 
@@ -101,7 +105,7 @@ jobs:
         '
     - name: Install with the English manager and user package configuration
       run: |
-        bash automation/artifacts/install-en.sh --package "source/artifacts/releases/$INSTALLER_VERSION/linux-x86_64/semantic-$INSTALLER_VERSION-linux-x86_64.tar.gz" --dir "$RUNNER_TEMP/semantic-english-smoke" --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut
+        bash automation/install-en.sh --package "source/artifacts/releases/$INSTALLER_VERSION/linux-x86_64/semantic-$INSTALLER_VERSION-linux-x86_64.tar.gz" --dir "$RUNNER_TEMP/semantic-english-smoke" --yes --no-start --web-host 127.0.0.1 --no-desktop-shortcut
     - name: Upload installer and component lock
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
