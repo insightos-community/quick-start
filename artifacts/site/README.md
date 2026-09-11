@@ -4,7 +4,7 @@ Public entry: <https://semantic.insightos.cn/>. This is a static bilingual landi
 
 ## Files and language selection
 
-Publish only `index.html`, `style.css`, `site.js`, `favicon.svg`, `install.sh`, and `install-en.sh` into the web root. Do not upload the whole artifacts workspace, environment files, credentials, signing material, or private deployment records.
+Publish only `index.html`, `style.css`, `site.js`, `favicon.svg`, `brand-logo-aa437690722d.png`, `install.sh`, and `install-en.sh` into the web root. Do not upload the whole artifacts workspace, environment files, credentials, signing material, or private deployment records.
 
 The language selector supports `?lang=zh|en`, a saved preference, and browser language, in that order. Without JavaScript the Chinese page and native video remain usable.
 
@@ -16,11 +16,17 @@ The English script defaults to the verified GitHub `v0.1.0` installer Release. `
 
 Complete Releases already contain the Git LFS model objects. If an asset is missing or is a pointer, the English bootstrap uses the asset repository commit in `release-lock.json`, reads its GitHub pointer and downloads the object through the [Git LFS Batch API](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md). Both object size and SHA-256 must match the original `files.json`; the archive and integrity inventory are never rewritten. No Git or Git LFS executable is needed on the installation target.
 
-System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
+System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper or Alpine APK configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
 
-The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04**. Other package-manager support does not imply full validation of every distribution.
+The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04 and Alpine 3.23 with `--musl`**. Other package-manager support does not imply full validation of every distribution.
 
 Both languages also state that more Linux distributions will be tested soon and compatibility results will be updated. This is a validation plan, not an expansion of the currently verified platform list.
+
+## Optional musl installation
+
+The expandable Alpine / musl section has matching Chinese and English copy. Its command switches between `/install.sh` and `/install-en.sh` with the page language and adds `--musl`, using a separate instance directory. Both scripts download the optional `musl-v0.1.0-1` GitHub Release (approximately 617 MiB); the default OSS/glibc and English `v0.1.0` paths stay unchanged.
+
+The section documents Linux x86_64 / musl 1.2+, bundled CPython 3.13.15 and NumPy 2.3.5, unchanged system package sources, automatic Mesa GPU/software selection, and explicit rendering options. AMD hardware and software rendering have been tested; Intel/Nouveau still need hardware validation. Proprietary NVIDIA userspace drivers use the default glibc path.
 
 ## Installer generation
 

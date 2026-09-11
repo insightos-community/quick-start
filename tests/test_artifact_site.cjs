@@ -22,7 +22,9 @@ const { createHash } = require('node:crypto');
 
 (async () => {
   const base = process.env.SEMANTIC_SITE_URL || 'https://semantic.insightos.cn';
-  const browser = await chromium.launch({ channel: 'chrome' });
+  const browser = await chromium.launch(process.env.SEMANTIC_BROWSER_PATH
+    ? { executablePath: process.env.SEMANTIC_BROWSER_PATH }
+    : { channel: 'chrome' });
   try {
     const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     const page = await context.newPage();
@@ -35,6 +37,11 @@ const { createHash } = require('node:crypto');
       assert.equal(response.status(), 200);
       assert.match(await page.title(), /Semantic/);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `overflow at ${width}px`);
+      await page.locator('#musl-install summary').click();
+      assert.match(await page.locator('#musl-command').textContent(), /install\.sh.*[\s\S]*--musl/);
+      assert.match(await page.locator('#musl-install').textContent(), /617 MiB/);
+      assert.ok(!/--musl/.test(await page.locator('#install-command').textContent()));
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `expanded musl overflow at ${width}px`);
       await page.locator('#copy-command').click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.locator('#install-command').textContent());
       assert.match(await page.locator('.support-note').textContent(), /仅支持 Linux x86_64.*Ubuntu 24.04/);
@@ -59,6 +66,9 @@ const { createHash } = require('node:crypto');
       assert.ok(await page.locator('.police-filing img').evaluate(element => element.complete && element.naturalWidth > 0));
       assert.ok(await page.locator('.footer-legal').isVisible());
       assert.equal(await page.locator('#script-link').getAttribute('href'), '/install-en.sh');
+      assert.match(await page.locator('#musl-command').textContent(), /install-en\.sh.*[\s\S]*--musl/);
+      assert.match(await page.locator('#musl-install').textContent(), /Alpine.*musl/);
+      assert.equal(await page.locator('.musl-release a').getAttribute('href'), 'https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-1');
       for (const text of await page.locator('[data-i18n]').allTextContents()) {
         assert.ok(!/[\u4e00-\u9fff]/.test(text), `Untranslated English copy: ${text}`);
         assert.ok(!text.includes('undefined'), 'Missing translation');
@@ -69,7 +79,7 @@ const { createHash } = require('node:crypto');
       await page.locator('#copy-command-en').click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.locator('#install-command-en').textContent());
       assert.match(await page.locator('#install-command-en').textContent(), /\/install-en\.sh/);
-      const faq = page.locator('details').first();
+      const faq = page.locator('.faq details').first();
       await faq.locator('summary').click();
       assert.equal(await faq.getAttribute('open'), '');
       console.log(`PASS layout, clipboard, FAQ: ${width}px`);

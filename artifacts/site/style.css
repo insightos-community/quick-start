@@ -46,6 +46,41 @@ limitations under the License.
 
 @media(max-width:760px){.nav{height:auto;min-height:90px;flex-wrap:wrap;padding-top:18px;padding-bottom:18px}.nav nav{order:3;flex-basis:100%;justify-content:center;margin-left:0}.language-switch{margin-left:auto}.demo-heading,.install-demo figcaption{flex-direction:column;align-items:flex-start;gap:8px}.demo-heading h2{font-size:18px}.flow div{min-width:0}.flow span{overflow-wrap:anywhere}.support-note{font-size:12px}}
 
+/* Header repository link */
+.nav-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.github-link{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid var(--line);border-radius:8px;color:var(--ink);flex-shrink:0}
+.github-link:hover{color:var(--green);background:#eaece2;border-color:var(--green)}
+.github-link svg{display:block}
+@media(max-width:760px){.nav-actions{margin-left:auto;gap:8px}.nav-actions .language-switch{margin-left:0}}
+@media(max-width:400px){.nav{gap:12px}.nav .brand{font-size:20px;gap:8px}.nav-actions{gap:6px}.nav-actions .language-switch button{padding:7px}.github-link{width:40px;height:40px}}
+
+/* Semantic brand: original blue and gold logo, with a warm neutral canvas. */
+:root{--paper:#f7f8fc;--ink:#152447;--muted:#64718a;--line:#dce2ef;--green:#164ed8;--acid:#ffda58}
+.brand-logo{display:block;width:48px;height:32px;object-fit:contain;mix-blend-mode:multiply;flex-shrink:0}
+.hero-logo{display:block;width:114px;height:76px;object-fit:contain;mix-blend-mode:multiply;margin:0 auto 24px}
+.hero{padding-top:48px;background-image:radial-gradient(ellipse at 45% 25%,#e1eaff99,transparent 60%),radial-gradient(ellipse at 70% 10%,#fff0bc55,transparent 40%)}
+.accent{color:#164ed8}.comma{color:#9aadd6}.live-dot{background:#ffc400;box-shadow:0 0 0 3px #ffc40020}
+.install-box{background:#0d1934;border-color:#233963;box-shadow:0 16px 35px #142c5718}
+.terminal-head{border-color:#263958;color:#c0cbe0}.platform{color:#9aaac6}
+.command-row button{background:#223962;border-color:#46618b;color:#edf2ff}.command-row button:hover{background:#2e4a7f}
+.install-foot{background:#14223f;color:#a4b4cf}.install-foot a{color:#ffda78}
+.release-pill{border-color:#ccd8f3;background:#edf2ff}.hero-tags i{color:#a7b4d0}
+.cards article{background:#ffffff99}.card-number{color:#4c6fc2}.mini-terminal em{color:#889bc2}
+pre{background:#edf1f9;border-color:#dce2ef}.flow b{color:#9aadd6}
+.github-link:hover{background:#e9efff}.language-switch button[aria-pressed="true"]{background:#164ed8;color:#fff}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8}
+.cta{background:#164ed8}.cta:hover{background:#0b36a7}
+@media(max-width:760px){.hero{padding-top:36px}.hero-logo{width:96px;height:64px;margin-bottom:20px}}
+@media(max-width:400px){.nav .brand-logo{width:40px;height:28px}}
+
 /* Shared title scale and sentence rows keep language switching stable. */
 .hero-copy-line{display:flex;align-items:center;justify-content:center;min-height:1.9em;text-wrap:balance}
 @media(max-width:600px){.hero-copy{max-width:18em}.hero-copy-line{min-height:3.8em}}
+
+/* Optional installation details share one layout across both languages. */
+.musl-install{max-width:970px;margin:28px auto 0;padding:20px 24px;border:1px solid var(--line);border-radius:10px;text-align:left;background:#ffffff99}
+.musl-install summary{font-size:15px;font-weight:600;color:var(--green);cursor:pointer}
+.musl-install p{font-size:13px;line-height:1.9;color:var(--muted);overflow-wrap:anywhere}
+.musl-install pre{max-width:100%;overflow-x:auto;text-align:left}
+.musl-install a{color:var(--green);text-decoration:underline}
+@media(max-width:600px){.musl-install{padding:16px}.musl-install summary{font-size:14px}}
