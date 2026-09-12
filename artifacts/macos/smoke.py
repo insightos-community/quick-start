@@ -25,6 +25,13 @@ def main() -> None:
     mass = pin.crba(model, data, q)
     assert np.isfinite(mass).all() and np.linalg.eigvalsh(mass).min() > 0
 
+    urdf_model = pin.buildModelFromXML('''<robot name="native-urdf">
+      <link name="base"/><link name="tip"/>
+      <joint name="hinge" type="revolute"><parent link="base"/><child link="tip"/>
+      <axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+      </robot>''')
+    assert urdf_model.nq == 1
+
     otg, inp, out = Ruckig(1, 0.01), InputParameter(1), OutputParameter(1)
     inp.current_position = [0.0]
     inp.current_velocity = [0.0]
@@ -51,7 +58,7 @@ def main() -> None:
     report = {
         "system": platform.system(), "machine": platform.machine(), "python": sys.version,
         "executable": sys.executable,
-        "checks": {"pinocchio_dynamics": "passed", "ruckig_trajectory": "passed", "mujoco_physics": "passed"},
+        "checks": {"pinocchio_dynamics": "passed", "pinocchio_urdf": "passed", "ruckig_trajectory": "passed", "mujoco_physics": "passed"},
         "packages": {name: importlib.metadata.version(name) for name in ("numpy", "pin", "ruckig", "mujoco")},
         "scope": "Native dependency validation; not a complete installer or GPU qualification",
     }
