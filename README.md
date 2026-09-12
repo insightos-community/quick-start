@@ -6,6 +6,8 @@
 
 🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
 
+Native **macOS Apple Silicon** adaptation has started. See [development validation and remaining work](artifacts/macos/README.md); the public installer currently supports Linux only.
+
 ## Start here
 
 Install prebuilt Semantic on **Linux x86_64** (verified on **Ubuntu 24.04**). You need Bash, curl and Python 3.10+. Choose a download source:
