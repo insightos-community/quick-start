@@ -1,0 +1,5 @@
+# Native Apple Silicon baseline shared by Robot and MuJoCo.
+numpy==2.3.5
+pin==3.9.0
+ruckig==0.19.4
+mujoco==3.4.0

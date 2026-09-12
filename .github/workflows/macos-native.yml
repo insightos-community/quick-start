@@ -1,0 +1,80 @@
+name: Native macOS foundation
+on:
+  pull_request:
+    paths: ['artifacts/macos/**', '.github/workflows/macos-native.yml']
+  push:
+    branches: [main, feat/macos-native]
+    paths: ['artifacts/macos/**', '.github/workflows/macos-native.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: 0.12.12
+          enable-cache: true
+      - name: Install shared native Python and hash-locked wheels
+        run: |
+          test "$(uname -m)" = arm64
+          uv venv --python 3.13.15 .venv-macos
+          uv pip sync --python .venv-macos/bin/python --require-hashes --only-binary :all: artifacts/macos/requirements.lock
+      - name: Exercise dynamics, trajectory generation, and simulation together
+        run: .venv-macos/bin/python artifacts/macos/smoke.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-arm64-python-evidence
+          path: |
+            .output/macos/dependencies.json
+            artifacts/macos/requirements.lock
+          if-no-files-found: error
+  framework:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: automation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: insightos-community/Semantic-Framework
+          ref: 81ea016480f099f9db95bd48c083ee99d8806a4d
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.25.8
+          cache-dependency-path: source/go.sum
+      - name: Build native server, pilot, CLI, and web gateway
+        working-directory: source
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          test "$(uname -m)" = arm64
+          mkdir -p .output/bin
+          for name in semantic-server semantic-pilot semantic; do
+            go build -p 2 -trimpath -o ".output/bin/$name" "./cmd/$name"
+          done
+          CGO_ENABLED=0 go build -trimpath -o .output/bin/semantic-web-gateway ../automation/artifacts/gateway/main.go
+          file .output/bin/*
+          .output/bin/semantic-server --help
+          .output/bin/semantic-pilot --help
+          status=0
+          .output/bin/semantic --help || status=$?
+          test "$status" = 0 || test "$status" = 2
+      - name: Run Framework tests on macOS
+        working-directory: source
+        run: go test -p 2 ./... -count=1 -timeout=10m
+      - name: Upload native development binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: semantic-framework-macos-arm64-development
+          path: source/.output/bin/*
+          if-no-files-found: error
