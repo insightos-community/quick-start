@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: insightos-community/Semantic-Framework
-          ref: 81ea016480f099f9db95bd48c083ee99d8806a4d
+          ref: 394cf1c21f01c1fd2cd95fda1d6862e15727441c
           path: source
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e

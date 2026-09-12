@@ -35,6 +35,16 @@ packaging its native dependencies, replacing Linux `/proc` process identity chec
 Mach-O/dylib dependencies, portable service management, and signing/notarization
 for distribution. Linux's current release manifest remains the supported default.
 
+## Component changes
+
+- [MuJoCo Runtime #5](https://github.com/insightos-community/mujoco-runtime/pull/5):
+  merged native CGL defaults, CPU/API CI, and a separate physical-Mac graphics job.
+- [Framework #4](https://github.com/insightos-community/Semantic-Framework/pull/4):
+  native process groups, libproc identity checks, and monotonic message ordering.
+  The macOS workflow pins its adaptation commit independently of the Linux manifest.
+- [AbilityFramework #3](https://github.com/insightos-community/AbilityFramework/pull/3):
+  native network discovery, load sampling, and compiler validation.
+
 A dedicated Mac mini is not a runtime requirement: each user runs Semantic on
 their own Mac. GitHub macOS runners can build/test the port. A physical MacBook,
 iMac or Mac mini is useful for desktop installation, graphics and long-running
