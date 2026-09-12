@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['artifacts/macos/**', '.github/workflows/macos-native.yml']
   push:
-    branches: [main, feat/macos-native]
+    branches: [main]
     paths: ['artifacts/macos/**', '.github/workflows/macos-native.yml']
   workflow_dispatch:
 permissions:
@@ -72,9 +72,14 @@ jobs:
       - name: Run Framework tests on macOS
         working-directory: source
         run: go test -p 2 ./... -count=1 -timeout=10m
+      - name: Archive native development binaries with executable modes
+        working-directory: source/.output
+        run: |
+          tar -czf semantic-framework-macos-arm64-development.tar.gz -C bin .
+          shasum -a 256 semantic-framework-macos-arm64-development.tar.gz > semantic-framework-macos-arm64-development.tar.gz.sha256
       - name: Upload native development binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: semantic-framework-macos-arm64-development
-          path: source/.output/bin/*
+          path: source/.output/semantic-framework-macos-arm64-development.tar.gz*
           if-no-files-found: error

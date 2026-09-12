@@ -22,14 +22,16 @@ and MuJoCo physics in that same environment, and builds/tests the pinned
 Framework and gateway as native arm64 executables. CI artifacts are development
 outputs, not signed application bundles or production releases.
 
-MuJoCo Runtime's native macOS workflow separately tests the service and CGL
-rendering. CGL uses macOS OpenGL; the Linux Mesa/EGL bundle is not needed.
+MuJoCo Runtime's native macOS workflow tests the service and CPU physics.
+CGL rendering and the real pallet scene have a separate physical-Mac qualification
+job: the standard hosted runner returned `CGLError: invalid pixel format`. CGL uses macOS OpenGL; the Linux Mesa/EGL bundle is not needed.
 Hosted-runner rendering evidence alone does not qualify physical Apple GPU
 performance. Validate the real pallet scene and camera streams on a physical
 Mac before advertising full simulation support.
 
-Remaining installer work includes AbilityFramework's native dependencies and
-network discovery, replacing Linux `/proc` process identity checks, packaging
+AbilityFramework network discovery and system load sampling are being ported and
+compiled in its own macOS CI. Remaining installer work includes validating and
+packaging its native dependencies, replacing Linux `/proc` process identity checks, packaging
 Mach-O/dylib dependencies, portable service management, and signing/notarization
 for distribution. Linux's current release manifest remains the supported default.
 
