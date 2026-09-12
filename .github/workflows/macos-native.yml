@@ -33,6 +33,7 @@ jobs:
           path: |
             .output/macos/dependencies.json
             artifacts/macos/requirements.lock
+          include-hidden-files: true
           if-no-files-found: error
   framework:
     runs-on: macos-15
@@ -82,4 +83,5 @@ jobs:
         with:
           name: semantic-framework-macos-arm64-development
           path: source/.output/semantic-framework-macos-arm64-development.tar.gz*
+          include-hidden-files: true
           if-no-files-found: error
