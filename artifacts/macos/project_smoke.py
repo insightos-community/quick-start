@@ -26,11 +26,13 @@ def check_project(root, base, token, report):
     project_path = '/projects/'+project['id']+'/simulation'
     diagnostics = {}
     try:
-        request(project_path+'/runtime/ensure', {})
         instance = request(project_path+'/scenes/palletizing_depalletizing_tote_v1/instances', {
             'request_id':'macos-ability-startup', 'runtime_profile_id':'native-mujoco',
             'layout':'layout001', 'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
         diagnostics['instance'] = instance
+        scene_robots = request(project_path+'/instances/'+instance['instance_id']+'/robots')['robots']
+        expected_ids = {robot['robot_id'] for robot in scene_robots}
+        assert expected_ids, 'Scene has no robots'
         deadline = time.monotonic()+180
         while True:
             devices = request('/devices')['devices']
@@ -48,7 +50,8 @@ def check_project(root, base, token, report):
             if time.monotonic() >= deadline:
                 raise AssertionError('Project devices did not become ready: '+json.dumps(diagnostics))
             time.sleep(1)
-        assert len(devices) >= 2, 'Expected both scene robots'
+        assert {device['robot_id'] for device in devices} == expected_ids
+        assert len(states) == len(expected_ids)
         diagnostics['success'] = True
     finally:
         report.write_text(json.dumps(diagnostics, indent=2)+'\n')
