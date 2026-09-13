@@ -178,10 +178,27 @@ import hashlib
 import ipaddress
 import json
 import os
+import platform
+import subprocess
 from pathlib import Path
 import re
 import socket
 import tempfile
+
+
+def macos_listener_conflict(port, host):
+    # Darwin permits wildcard and specific-address listeners to coexist with
+    # SO_REUSEADDR. Inspect active listeners too, without rejecting TIME_WAIT.
+    result = subprocess.run(['/usr/sbin/lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-Fn'],
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode not in (0, 1):
+        raise RuntimeError('Cannot inspect listening ports: '+result.stderr.strip())
+    for line in result.stdout.splitlines():
+        if line.startswith('n'):
+            address = line[1:].rsplit(':', 1)[0].strip('[]')
+            if host == '0.0.0.0' or address in ('*', '0.0.0.0', '::', host):
+                return True
+    return False
 
 
 def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
@@ -220,6 +237,8 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
         with socket.socket() as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
+                if platform.system() == 'Darwin' and macos_listener_conflict(port, address):
+                    raise OSError('Active listener already exists')
                 probe.bind((address, port))
                 probe.listen(1)  # BSD can defer wildcard-address conflicts until listen.
             except OSError as error:
@@ -821,10 +840,27 @@ import hashlib
 import ipaddress
 import json
 import os
+import platform
+import subprocess
 from pathlib import Path
 import re
 import socket
 import tempfile
+
+
+def macos_listener_conflict(port, host):
+    # Darwin permits wildcard and specific-address listeners to coexist with
+    # SO_REUSEADDR. Inspect active listeners too, without rejecting TIME_WAIT.
+    result = subprocess.run(['/usr/sbin/lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-Fn'],
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode not in (0, 1):
+        raise RuntimeError('Cannot inspect listening ports: '+result.stderr.strip())
+    for line in result.stdout.splitlines():
+        if line.startswith('n'):
+            address = line[1:].rsplit(':', 1)[0].strip('[]')
+            if host == '0.0.0.0' or address in ('*', '0.0.0.0', '::', host):
+                return True
+    return False
 
 
 def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
@@ -863,6 +899,8 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
         with socket.socket() as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
+                if platform.system() == 'Darwin' and macos_listener_conflict(port, address):
+                    raise OSError('Active listener already exists')
                 probe.bind((address, port))
                 probe.listen(1)  # BSD can defer wildcard-address conflicts until listen.
             except OSError as error:
@@ -1407,11 +1445,28 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    return loader.is_file() and os.access(loader, os.X_OK)\n'
             '\n'
             '\n'
+            'def macos_listener_conflict(port, host):\n'
+            '    # Darwin permits wildcard and specific-address listeners to coexist with\n'
+            '    # SO_REUSEADDR. Inspect active listeners too, without rejecting TIME_WAIT.\n'
+            "    result = subprocess.run(['/usr/sbin/lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-Fn'],\n"
+            '                            capture_output=True, text=True, timeout=10)\n'
+            '    if result.returncode not in (0, 1):\n'
+            "        raise RuntimeError('Cannot inspect listening ports: '+result.stderr.strip())\n"
+            '    for line in result.stdout.splitlines():\n'
+            "        if line.startswith('n'):\n"
+            "            address = line[1:].rsplit(':', 1)[0].strip('[]')\n"
+            "            if host == '0.0.0.0' or address in ('*', '0.0.0.0', '::', host):\n"
+            '                return True\n'
+            '    return False\n'
+            '\n'
+            '\n'
             "def check_port(port, host='127.0.0.1'):\n"
             '    with socket.socket() as s:\n'
             "        # Match the server's reuse behavior: TIME_WAIT is not an active listener.\n"
             '        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n'
             '        try:\n'
+            "            if platform.system() == 'Darwin' and macos_listener_conflict(port, host):\n"
+            "                raise OSError('Active listener already exists')\n"
             '            s.bind((host, port))\n'
             '            s.listen(1)  # Also detect BSD wildcard/specific-address listener conflicts.\n'
             '        except OSError as e:\n'
