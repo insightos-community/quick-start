@@ -25,18 +25,26 @@ const englishCopy = {
     'From semantics<span class="comma">,</span><br>to <span class="accent">action.</span>',
   intro:
     '<span class="hero-copy-line">A robotics application stack, installed with one command.</span><span class="hero-copy-line">From orchestration to simulation, bring your ideas to life.</span>',
-  terminal: '<span class="terminal-dot"></span> Run in your Linux terminal',
+  platformLabel: "Installation platform",
+  tagLabel: "Release tag / default channel",
+  tagHelp: "stable keeps the default Linux channel; enter a Release tag to pin a version. musl/macOS use GitHub Releases.",
+  macosTitle: "Native macOS installation (Apple Silicon)",
+  macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. No OSS mirror is available yet; downloads come from GitHub with checksum verification.",
+  macosRuntime: "Bundles Python 3.13.15, NumPy 2.3.5, MuJoCo and robot dependencies. No Homebrew or host Python is required. Web requests auto and the Runtime uses configured CGL. This preview is not notarized; physical GPU rendering still needs testing.",
+  macosUpgrade: "Stop the old instance before installing another tag into a new <code>--dir</code>, then reload the browser. The installer neither overwrites other versions nor migrates databases automatically; old configuration and data remain in the original directory.",
+  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2\">macos-v0.1.0-rc.2 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
+  terminal: "<span class=\"terminal-dot\"></span> Run on the target machine",
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
-  supportNote: "Linux x86_64 only · Ubuntu 24.04 verified; --musl tested on Ubuntu 22.04 / Alpine 3.23",
+  supportNote: "Linux x86_64 (glibc / musl) · Native macOS 15.5+ Apple Silicon preview",
   supportRoadmap:
     "More Linux distributions will be tested soon, with compatibility results published as validation progresses.",
   installNote:
-    "Requires Bash, curl and Python 3.10+. The default installer needs glibc ≥ 2.28; the optional command below selects an independent musl runtime. You will be prompted for sudo before system dependencies are installed.<br>Review the script first. The installer confirms the directory and verifies the archive SHA-256.",
+    "Linux requires Bash, curl and Python 3.10+. macOS uses bundled Python; no Homebrew is needed. Select a platform and tag, then copy the command.<br>Archives are SHA-256 verified. System dependencies use your existing package repositories.",
   preview: "Developer preview",
-  downloadSize: "Approx. 346 MiB download",
+  downloadSize: "Download size varies by platform and version",
   muslTitle: "musl runtime: bundled or system (optional)",
-  muslIntro: "On Linux x86_64, add <code>--musl</code> to select the additional package. It uses bundled musl by default and also supports glibc hosts. The default installation stays the same; use a separate directory.",
+  muslIntro: "On Linux x86_64, <code>--tag musl-v0.1.0-2</code> selects the musl package automatically; the existing <code>--musl</code> option remains available. Bundled musl works on glibc hosts too; use a separate directory.",
   muslRuntime: "<code>--musl-runtime bundled</code> uses the included musl 1.2.5; <code>--musl-runtime system</code> uses the host musl 1.2+ loader. Includes CPython 3.13.15, NumPy 2.3.5, robot libraries and Mesa, without source compilation. System /lib and package repositories are unchanged; use a new directory to switch runtimes.",
   muslRender: "By default, a working Mesa GPU is selected, with software rendering as a fallback. Add <code>--render-backend software</code> to force software rendering, or <code>--render-backend mesa-gpu</code> to require hardware rendering. AMD has been tested; Intel / Nouveau still need hardware validation. Use the default glibc installer for proprietary NVIDIA drivers.",
   muslRelease: 'Optional prerelease <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-2">musl-v0.1.0-2 ↗</a> · Approx. 626 MiB · Offline installation and software rendering verified on Ubuntu 22.04 / Alpine 3.23.',
@@ -68,31 +76,31 @@ const englishCopy = {
     "Verified archives, isolated instance directories, diagnostics and file logs. Uninstall while keeping data, or explicitly confirm a complete removal.",
   guideTitle: "Get up and running.",
   guideIntro:
-    "Installs to <code>~/.local/share/semantic</code> by default.<br>Run commands on your own machine. Never enter credentials on this website.",
+    "Linux defaults to <code>~/.local/share/semantic</code>; macOS to <code>~/Library/Application Support/Semantic</code>. Run installation commands on your own machine.",
   stepInstallTitle: "Choose a directory and install",
   stepInstall:
     "The command above asks for confirmation. Add <code>--yes</code> for unattended installation; use an absolute path for a custom directory.",
   stepPackages:
-    "Dependency installation supports apt-get, dnf/yum, pacman and zypper, plus APK for musl / Alpine. Existing repositories are preserved; no full system upgrade is performed.",
+    "Linux supports apt-get, dnf/yum, pacman, zypper and APK, using existing repositories. macOS bundles its dependencies and needs no package manager.",
   stepWebTitle: "Open your console",
   stepWeb:
-    "New installs support both <code>http://127.0.0.1:3000</code> and LAN access at <code>http://HOST_IP:3000</code>. The username is <code>admin</code>. A random password is shown in the interactive terminal and saved to <code>configs/secrets.json</code> in the instance directory, never to installation logs.",
+    "Open <code>http://127.0.0.1:3000</code> and sign in as <code>admin</code>. The random password appears in the interactive terminal and is saved to <code>configs/secrets.json</code> in the instance directory, never to installation logs.",
   stepNetwork:
-    "Web listens on <code>0.0.0.0:3000</code> by default. Use <code>--web-host 127.0.0.1</code> for localhost only, or <code>--web-port</code> for another port. Allow only trusted LAN traffic; API/WS remain local. Use an HTTPS reverse proxy or SSH tunnel for remote access.",
+    "Linux Web defaults to <code>0.0.0.0:3000</code>; macOS defaults to <code>127.0.0.1:3000</code>. Customize with <code>--web-host</code> / <code>--web-port</code>. API/WS stay local; expose Web only to trusted networks.",
   stepManageTitle: "Check services and configure tasks",
   stepManage:
     "Replace these paths if you chose a custom directory. The default model is a mock; configure a real model separately. Installation does not create application tasks or start physical robots.",
   requirementsTitle: "Check first. Deploy next.",
   requirementsIntro:
-    "Currently Linux x86_64 only. Main application binaries are statically built, but Python, MuJoCo wheels and graphics libraries still have system dependencies.",
+    "Separate installer distributions support Linux x86_64 glibc/musl and native macOS Apple Silicon arm64. Each uses its own runtime and dependency set; binaries are not interchangeable.",
   validatedTitle: "Verified operating system",
-  validated: "Ubuntu 24.04 (default); Ubuntu 22.04 / Alpine 3.23 (--musl, Linux x86_64)",
+  validated: "Ubuntu 24.04 (glibc); Ubuntu 22.04 / Alpine 3.23 (musl); macOS 15.5+ Apple Silicon (installation, API and physics checks)",
   compatibilityTitle: "Compatibility limits",
   compatibility:
-    "The default installation requires glibc ≥ 2.28. --musl defaults to a bundled runtime on either glibc or musl hosts; system mode requires host musl 1.2+. Other distributions need validation; macOS, Windows and ARM64 are not supported.",
+    "glibc baseline ≥ 2.28; musl is bundled by default, while system mode needs host musl 1.2+. macOS uses system CGL; physical GPU rendering still needs validation. Intel Mac, Windows and Linux ARM64 are not supported.",
   updatesTitle: "Downloads and updates",
   updates:
-    "Prebuilt installers are downloaded from GitHub Releases. Missing model assets use pinned GitHub LFS objects with SHA-256 verification. Dependencies use your machine's configured package sources. For cross-version upgrades, install to a new directory and explicitly migrate data.",
+    "The Chinese default Linux channel uses Aliyun OSS; English defaults to GitHub Releases. An explicit --tag selects its GitHub Release by default. musl/macOS have no OSS artifacts yet and use GitHub Releases. Install other versions/platforms into a new directory and migrate data explicitly.",
   faqTitle: "Frequently asked questions",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",
@@ -107,7 +115,7 @@ const englishCopy = {
     "New management tools also support <code>semanticctl uninstall</code>. If a terminal is using the instance directory, run <code>cd ~</code> there. Deleted working directories do not block uninstall; no manual kill is needed. Only explicit <code>--purge</code> with confirmation permanently deletes the entire instance. System packages are not removed.",
   faqTroubleTitle: "What should I check if installation fails?",
   faqTrouble:
-    "Check Python, CPU architecture, disk space and network connectivity. Runtime logs are in the instance <code>logs/</code> directory. Use <code>semanticctl doctor</code> for diagnostics and <code>bash semantic-install.sh --help</code> for installer options.",
+    "On Linux, check Python 3.10+; on macOS, check Apple Silicon and the OS version. Check disk space and networking, use <code>semanticctl doctor</code> and the instance <code>logs/</code>, or run the script with <code>--help</code>.",
   faqSiteTitle: "Is this a hosted robot console?",
   faqSite:
     "No. This is the Semantic introduction and installation site; it does not run your robot services. Your console, model keys and robot data belong to your own deployment. Configure access controls, network isolation and backups for production use.",
@@ -141,6 +149,43 @@ const video = document.getElementById("install-video");
 const videoSource = video.querySelector("source");
 const videoError = document.getElementById("video-error");
 let toastTimer;
+const installPlatform = document.getElementById("install-platform");
+const installTag = document.getElementById("install-tag");
+const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.2" };
+function updateInstallCommand() {
+  const target = installPlatform.value;
+  const tag = installTag.value.trim();
+  const en = currentLanguage === "en";
+  const patterns = {
+    glibc: /^(stable|v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._+-]*)$/,
+    musl: /^musl-v[0-9]+\.[0-9]+\.[0-9]+-[1-9][0-9]*$/,
+    macos: /^macos-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/,
+  };
+  const valid = patterns[target].test(tag);
+  const error = document.getElementById("tag-error");
+  error.hidden = valid;
+  error.textContent = en ? "Enter a valid tag for the selected platform." : "请输入与所选平台匹配的版本标签。";
+  installTag.setAttribute("aria-invalid", String(!valid));
+  for (const lang of ["zh", "en"]) {
+    const button = document.getElementById(lang === "en" ? "copy-command-en" : "copy-command");
+    button.disabled = !valid;
+    const command = document.getElementById(lang === "en" ? "install-command-en" : "install-command");
+    if (!valid) { command.textContent = ""; continue; }
+    const oss = target === "glibc" && tag === "stable" && lang === "zh";
+    const release = tag === "stable" ? "v0.1.0" : tag;
+    const source = oss ? "--source oss --version stable" : `--source github --tag ${release}`;
+    const options = target === "macos" ? ' --dir "$HOME/semantic-macos"'
+      : target === "musl" ? ' --install-system-deps --dir "$HOME/semantic-musl"'
+      : " --install-system-deps";
+    command.textContent = `curl -fsSL https://semantic.insightos.cn/install${lang === "en" ? "-en" : ""}.sh | bash -s -- ${source}${options}`;
+  }
+  document.getElementById("install-architecture").textContent = target === "macos" ? "arm64" : "x86_64";
+  document.querySelector('[data-i18n="downloadRegion"]').textContent = target === "glibc" && tag === "stable" && !en
+    ? "默认 Linux 渠道 · 阿里云 OSS" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
+}
+installPlatform.addEventListener("change", () => { installTag.value = platformDefaults[installPlatform.value]; updateInstallCommand(); });
+installTag.addEventListener("input", updateInstallCommand);
+
 function setLanguage(language, persist = false) {
   currentLanguage = language === "en" ? "en" : "zh";
   const en = currentLanguage === "en";
@@ -170,6 +215,7 @@ function setLanguage(language, persist = false) {
   document.getElementById("script-link").href = en
     ? "/install-en.sh"
     : "/install.sh";
+  updateInstallCommand();
   const videoUrl = (en ? videoSource.dataset.srcEn : videoSource.dataset.srcZh)
     || videoSource.getAttribute("src");
   document.querySelector("#demo-caption a").href = videoUrl;

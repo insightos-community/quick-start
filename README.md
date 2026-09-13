@@ -189,6 +189,43 @@ physical Mac CGL rendering and complete AI-driven pallet tasks remain pending.
 Intel Mac, LIBERO/Robosuite and hardware vendor drivers are outside this release.
 See [macOS build details](artifacts/macos/README.md).
 
+
+## Select an installer platform and Release tag
+
+The website and both entry scripts support the same tags. Run the command on the target platform; macOS is detected before Python checks and uses the bundled interpreter.
+
+Linux x86_64 / glibc:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  --source github --tag v0.1.0 --install-system-deps --dir "$HOME/semantic-glibc"
+```
+
+Linux x86_64 / musl:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
+```
+
+macOS 15.5+ / Apple Silicon arm64:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"
+```
+
+The glibc OSS channel remains available in either language:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  --source oss --version stable --install-system-deps
+```
+
+`--tag` infers the platform; do not combine it with `--version`. Existing `--musl`, `--version`, `--package`, `--base-url` and private OSS tickets remain available on Linux. `--source auto` preserves the Chinese OSS / English GitHub default for untagged glibc; explicit tags and musl use GitHub unless an explicit source/mirror is selected. musl/macOS OSS artifacts are currently absent, so use GitHub for those releases. macOS accepts `auto`/`github` or a checksummed offline `--package`; explicit OSS inputs are rejected. Linux system dependencies use existing package sources; macOS needs no Homebrew or host Python.
+
+Stop the old instance and use a new `--dir` when changing versions; automatic database migration and cross-version replacement are not supported. Older musl tags may need `--musl-runtime system` on a musl host; bundled runtime support begins with `musl-v0.1.0-2`. See the [website guide](artifacts/site/README.md) and [all Releases](https://github.com/insightos-community/quick-start/releases).
+
 ## Reproducible platform builds
 
 See [glibc, musl and macOS build instructions](README.build.md) for pinned source revisions, exact scripts, tool requirements, local commands, CI reproduction and platform support boundaries.

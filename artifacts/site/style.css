@@ -85,3 +85,13 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8
 .musl-install a{color:var(--green);text-decoration:underline}
 @media(min-width:1000px){.musl-install [data-i18n="muslIntro"],.musl-install [data-i18n="muslRuntime"]{min-height:3.8em}.musl-install [data-i18n="muslRender"]{min-height:5.7em}}
 @media(max-width:600px){.musl-install{padding:16px}.musl-install summary{font-size:14px}}
+
+/* Keep platform/tag controls aligned across both languages and narrow screens. */
+.install-selectors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 24px 0; text-align: left; }
+.install-selectors label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 13px; }
+.install-selectors input, .install-selectors select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #ccd8ed; border-radius: 8px; padding: 10px; background: #fff; color: #14284f; font: inherit; }
+.install-selectors input[aria-invalid="true"] { border-color: #b42318; }
+.tag-help { padding: 0 24px; text-align: left; font-size: 12px; line-height: 1.6; color: #51627e; }
+#tag-error { color: #b42318; }
+.command-row code { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .install-selectors { grid-template-columns: 1fr; padding: 16px 16px 0; gap: 12px; } .tag-help { padding: 0 16px; } }

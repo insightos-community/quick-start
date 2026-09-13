@@ -46,23 +46,38 @@ limitations under the License.
       <p class="hero-copy" data-i18n="intro"><span class="hero-copy-line">把机器人应用的运行环境，装进一条命令。</span><span class="hero-copy-line">从服务编排到仿真执行，让你的想法开始运行。</span></p>
       <div class="hero-tags"><span>Server + Web</span><i>·</i><span>Native MuJoCo</span><i>·</i><span>Robot Bundle</span></div>
       <div class="install-box" id="install">
-        <div class="terminal-head"><span data-i18n="terminal"><span class="terminal-dot"></span> 在你的 Linux 终端中运行</span><span class="platform">x86_64</span></div>
+        <div class="install-selectors">
+          <label><span data-i18n="platformLabel">安装平台</span><select id="install-platform"><option value="glibc">Linux x86_64 · glibc</option><option value="musl">Linux x86_64 · musl</option><option value="macos">macOS · Apple Silicon</option></select></label>
+          <label><span data-i18n="tagLabel">版本标签 / 默认渠道</span><input id="install-tag" value="stable" spellcheck="false" autocomplete="off" aria-describedby="tag-help"></label>
+        </div>
+        <p id="tag-help" class="tag-help" data-i18n="tagHelp">stable 保留默认 Linux 渠道；填写 Release 标签可锁定版本。musl / macOS 使用 GitHub Release。</p>
+        <p id="tag-error" class="tag-help" role="status" hidden></p>
+        <div class="terminal-head"><span data-i18n="terminal"><span class="terminal-dot"></span> 在目标机器的终端中运行</span> 在你的 Linux 终端中运行</span><span class="platform" id="install-architecture">x86_64</span></div>
         <div class="command-row" data-language-panel="zh"><span class="prompt" aria-hidden="true">$</span><code id="install-command">curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --install-system-deps</code><button id="copy-command" type="button" aria-label="复制安装命令">复制</button></div>
         <div class="command-row" data-language-panel="en" lang="en" hidden><span class="prompt" aria-hidden="true">$</span><code id="install-command-en">curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --install-system-deps</code><button id="copy-command-en" type="button" aria-label="Copy English installation command">Copy</button></div>
         <div class="install-foot"><span data-i18n="downloadRegion">中国大陆 · 阿里云 OSS 下载</span><a id="script-link" href="/install.sh" data-i18n="viewScript">查看安装脚本 ↗</a></div>
       </div>
-      <p class="support-note" data-i18n="supportNote">仅支持 Linux x86_64 · Ubuntu 24.04；--musl 已验证 Ubuntu 22.04 / Alpine 3.23</p>
+      <p class="support-note" data-i18n="supportNote">Linux x86_64（glibc / musl）· macOS 15.5+ Apple Silicon 原生预览版</p>
       <p class="support-roadmap" data-i18n="supportRoadmap">近期将验证更多 Linux 发行版，并持续更新兼容性结果。</p>
-      <p class="install-note" data-i18n="installNote">需要 Bash、curl、Python 3.10+；默认安装需要 glibc ≥ 2.28，也可使用下方命令选择独立的 musl 运行时。安装系统依赖前会显示 sudo 授权提示。<br>请先审阅脚本；安装器会确认安装目录，并校验下载包的 SHA-256。</p>
-      <div class="release-line"><span class="release-pill" data-i18n="preview">开发预览版</span><span>0.5.0-dev.20260910.11</span><span data-i18n="downloadSize">约 346 MiB 下载</span></div>
+      <p class="install-note" data-i18n="installNote">Linux 需要 Bash、curl、Python 3.10+；macOS 使用包内 Python，无需 Homebrew。选择平台和标签后复制命令。<br>下载后校验 SHA-256；安装系统依赖时沿用用户机器已有的源。</p>
+      <div class="release-line"><span class="release-pill" data-i18n="preview">开发预览版</span><span>0.5.0-dev.20260910.11</span><span data-i18n="downloadSize">大小随平台和版本变化</span></div>
       <details class="musl-install" id="musl-install">
         <summary data-i18n="muslTitle">musl 运行时：包内或宿主（可选）</summary>
-        <p data-i18n="muslIntro">Linux x86_64 可通过 <code>--musl</code> 选择额外安装包，默认使用包内 musl，也支持 glibc 宿主。默认安装方式不变；请使用独立目录。</p>
+        <p data-i18n="muslIntro">Linux x86_64 使用 <code>--tag musl-v0.1.0-2</code> 自动选择 musl 包，旧参数 <code>--musl</code> 仍可用。默认使用包内 musl，也支持 glibc 宿主；请使用独立目录。</p>
         <pre><code id="musl-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --musl --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"</code></pre>
+  --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"</code></pre>
         <p data-i18n="muslRuntime"><code>--musl-runtime bundled</code> 使用包内 musl 1.2.5；<code>--musl-runtime system</code> 使用宿主已安装的 musl 1.2+ 加载器。随包提供 CPython 3.13.15、NumPy 2.3.5、机器人依赖和 Mesa，无需编译源码。不会修改系统 /lib 或软件源；切换运行时请使用新目录。</p>
         <p data-i18n="muslRender">默认自动选择可用的 Mesa GPU，失败时回退到软件渲染。增加 <code>--render-backend software</code> 可强制软件渲染；<code>--render-backend mesa-gpu</code> 要求硬件渲染成功。AMD 已实测；Intel / Nouveau 尚未实机验证。NVIDIA 专有驱动请使用默认 glibc 安装。</p>
         <p class="musl-release" data-i18n="muslRelease">可选预发布版 <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-2">musl-v0.1.0-2 ↗</a> · 约 626 MiB · 已验证 Ubuntu 22.04 / Alpine 3.23 离线安装与软件渲染。</p>
+      </details>
+      <details class="musl-install" id="macos-install">
+        <summary data-i18n="macosTitle">macOS 原生安装（Apple Silicon）</summary>
+        <p data-i18n="macosIntro">macOS 15.5+，支持 Apple Silicon arm64。使用同一个安装入口，按 <code>--tag</code> 选择 macOS Release；当前没有 OSS 镜像，直接从 GitHub 下载并校验。</p>
+        <pre><code id="macos-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"</code></pre>
+        <p data-i18n="macosRuntime">随包提供 Python 3.13.15、NumPy 2.3.5、MuJoCo 和机器人依赖，无需 Homebrew 或预装 Python。Web 请求 auto，由 Runtime 使用配置的 CGL。预览版未公证；真机 GPU 渲染仍需复测。</p>
+        <p data-i18n="macosUpgrade">更换标签时先停止旧实例，使用新的 <code>--dir</code> 安装并刷新浏览器。安装器不会覆盖其他版本或自动迁移数据库；旧配置和数据保留在原目录。</p>
+        <p data-i18n="macosRelease"><a href="https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2">macos-v0.1.0-rc.2 ↗</a> · 约 412 MiB · 安装、API、物理仿真与启停检查已通过。</p>
       </details>
       <figure class="install-demo" aria-labelledby="demo-title">
         <div class="demo-heading"><h2 id="demo-title" data-i18n="demoTitle">看看安装过程</h2><span data-i18n="demoLength">35 秒 · 1080p · 无音轨</span></div>
@@ -88,19 +103,19 @@ limitations under the License.
       </div>
     </section>
     <section class="section guide wrap" id="guide">
-      <div class="section-heading"><div><span class="eyebrow">GET UP AND RUNNING</span><h2 data-i18n="guideTitle">接下来，开始运行。</h2></div><p data-i18n="guideIntro">默认安装至 <code>~/.local/share/semantic</code>。<br>在自己的机器上安装，请勿在本网站输入凭据。</p></div>
+      <div class="section-heading"><div><span class="eyebrow">GET UP AND RUNNING</span><h2 data-i18n="guideTitle">接下来，开始运行。</h2></div><p data-i18n="guideIntro">Linux 默认目录为 <code>~/.local/share/semantic</code>；macOS 为 <code>~/Library/Application Support/Semantic</code>。在自己的机器上运行安装命令。</p></div>
       <div class="guide-grid">
         <article class="step"><span class="step-num">1</span><div><h3 data-i18n="stepInstallTitle">选择目录，安装环境</h3><p data-i18n="stepInstall">上方命令使用交互式确认。自动安装可增加 <code>--yes</code>；自定义目录使用绝对路径。</p><pre><code data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --yes --install-system-deps --dir "$HOME/semantic"</code></pre><p class="muted" data-i18n="stepPackages">依赖安装支持 apt-get、dnf/yum、pacman、zypper；musl / Alpine 使用 APK。沿用机器已有的源，不会升级整个系统。</p></div></article>
-        <article class="step"><span class="step-num">2</span><div><h3 data-i18n="stepWebTitle">打开你的控制台</h3><p data-i18n="stepWeb">新安装默认同时支持本机 <code>http://127.0.0.1:3000</code> 与局域网 <code>http://主机IP:3000</code>，用户名 <code>admin</code>。安装完成页会在交互终端显示随机密码，并将密码保存在实例目录的 <code>configs/secrets.json</code>，不会写入安装日志。</p><p class="muted" data-i18n="stepNetwork">Web 默认监听 <code>0.0.0.0:3000</code>；可用 <code>--web-host 127.0.0.1</code> 限制为仅本机，或用 <code>--web-port</code> 自定义端口。仅向可信局域网放行 Web 端口，API/WS 保持仅本机。公网推荐 HTTPS 反向代理或 SSH 隧道。</p></div></article>
+  --yes --install-system-deps --dir "$HOME/semantic"</code></pre><p class="muted" data-i18n="stepPackages">Linux 依赖安装支持 apt-get、dnf/yum、pacman、zypper 和 APK，沿用已有源；macOS 随包提供依赖，无需包管理器。</p></div></article>
+        <article class="step"><span class="step-num">2</span><div><h3 data-i18n="stepWebTitle">打开你的控制台</h3><p data-i18n="stepWeb">安装后访问 <code>http://127.0.0.1:3000</code>，用户名 <code>admin</code>。随机密码显示在交互终端，并保存在实例目录的 <code>configs/secrets.json</code>，不会写入安装日志。</p><p class="muted" data-i18n="stepNetwork">Linux 默认 Web 监听 <code>0.0.0.0:3000</code>，macOS 默认仅监听 <code>127.0.0.1:3000</code>。使用 <code>--web-host</code> / <code>--web-port</code> 自定义。API/WS 保持仅本机；仅向可信网络开放 Web。</p></div></article>
         <article class="step"><span class="step-num">3</span><div><h3 data-i18n="stepManageTitle">检查服务，配置任务</h3><pre><code>~/.local/share/semantic/bin/semanticctl status
 ~/.local/share/semantic/bin/semanticctl doctor
 ~/.local/share/semantic/bin/semanticctl logs</code></pre><p class="muted" data-i18n="stepManage">自定义安装目录时请替换上述路径。默认模型配置为 mock，真实模型需另行配置；不会自动创建业务任务或启动真实机器人。</p></div></article>
       </div>
     </section>
     <section class="section wrap compatibility" id="requirements">
-      <div><span class="eyebrow">BEFORE YOU INSTALL</span><h2 data-i18n="requirementsTitle">先确认，后部署。</h2><p data-i18n="requirementsIntro">当前仅支持 Linux x86_64。应用主程序采用静态构建，但 Python、MuJoCo Wheel 与图形运行库仍有系统依赖。</p></div>
-      <div class="compat-list"><div><strong data-i18n="validatedTitle">已验证系统</strong><span data-i18n="validated">Ubuntu 24.04（默认）；Ubuntu 22.04 / Alpine 3.23（--musl，Linux x86_64）</span></div><div><strong data-i18n="compatibilityTitle">兼容性边界</strong><span data-i18n="compatibility">默认安装以 glibc ≥ 2.28 为基线；--musl 默认使用包内运行时，可用于 glibc 或 musl 宿主；system 模式需要宿主 musl 1.2+。其他发行版需验证；当前不支持 macOS、Windows 或 ARM64。</span></div><div><strong data-i18n="updatesTitle">下载与更新</strong><span data-i18n="updates">中文默认从阿里云 OSS 下载，英文默认从 GitHub Releases 下载；--musl 在两种语言下均默认使用 GitHub Releases。下载后校验 SHA-256。跨版本或 glibc / musl 切换请使用新目录并显式迁移数据。</span></div></div>
+      <div><span class="eyebrow">BEFORE YOU INSTALL</span><h2 data-i18n="requirementsTitle">先确认，后部署。</h2><p data-i18n="requirementsIntro">支持 Linux x86_64 的 glibc / musl 安装包，以及 macOS Apple Silicon arm64 原生预览包。各平台使用独立运行时和依赖，不能混用。</p></div>
+      <div class="compat-list"><div><strong data-i18n="validatedTitle">已验证系统</strong><span data-i18n="validated">Ubuntu 24.04（glibc）；Ubuntu 22.04 / Alpine 3.23（musl）；macOS 15.5+ Apple Silicon（安装、API、物理仿真检查）</span></div><div><strong data-i18n="compatibilityTitle">兼容性边界</strong><span data-i18n="compatibility">glibc 基线 ≥ 2.28；musl 默认随包提供，system 模式需要宿主 musl 1.2+；macOS 使用系统 CGL，真机 GPU 渲染仍需验证。暂不支持 Intel Mac、Windows 或 Linux ARM64。</span></div><div><strong data-i18n="updatesTitle">下载与更新</strong><span data-i18n="updates">中文默认 Linux 渠道使用阿里云 OSS；英文默认使用 GitHub Releases。显式 --tag 默认从 GitHub 选择对应版本。musl / macOS 当前没有 OSS 产物，使用 GitHub Release。跨版本或平台切换需要新目录，保留旧数据并显式迁移。</span></div></div>
     </section>
     <section class="section wrap faq">
       <span class="eyebrow">GOOD TO KNOW</span><h2 data-i18n="faqTitle">常见问题</h2>
@@ -109,7 +124,7 @@ limitations under the License.
       <details><summary data-i18n="faqUninstallTitle">如何卸载？数据会被删除吗？</summary><p data-i18n="faqUninstall">先停止场景与 Robot Runtime。默认卸载保留配置、数据和日志；先用 <code>--dry-run</code> 查看计划。请将目录替换为实际的绝对安装路径。</p><pre><code data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh -o semantic-install.sh
 bash semantic-install.sh --uninstall --dir "$HOME/.local/share/semantic" --dry-run
 bash semantic-install.sh --uninstall --dir "$HOME/.local/share/semantic"</code></pre><p data-i18n="faqUninstallSafety">新版管理工具也可运行 <code>semanticctl uninstall</code>。若提示终端占用，请在对应终端执行 <code>cd ~</code>；已删除的工作目录不会阻塞卸载，不需要 kill。只有显式增加 <code>--purge</code> 并确认后，才会永久删除该实例的全部内容。系统软件包不会被卸载。</p></details>
-      <details><summary data-i18n="faqTroubleTitle">安装遇到问题，应该检查什么？</summary><p data-i18n="faqTrouble">检查 Python 版本、系统架构、磁盘空间与网络连通性。安装后的运行日志位于实例的 <code>logs/</code>；使用 <code>semanticctl doctor</code> 诊断环境。安装脚本参数可通过 <code>bash semantic-install.sh --help</code> 查看。</p></details>
+      <details><summary data-i18n="faqTroubleTitle">安装遇到问题，应该检查什么？</summary><p data-i18n="faqTrouble">Linux 检查 Python 3.10+；macOS 检查 Apple Silicon 和系统版本。检查磁盘与网络，使用 <code>semanticctl doctor</code> 和实例 <code>logs/</code> 排查；脚本支持 <code>--help</code>。</p></details>
       <details><summary data-i18n="faqSiteTitle">这是线上机器人控制台吗？</summary><p data-i18n="faqSite">不是。这是 Semantic 的介绍与安装入口，静态站点不运行你的机器人服务。控制台、模型密钥与机器人数据都属于你自行部署的实例。请为生产使用另行配置访问控制、网络隔离和备份。</p></details>
     </section>
     <section class="closing wrap"><span class="eyebrow">BUILD SOMETHING THAT MOVES.</span><h2 data-i18n="closing">让想法，不止于屏幕。</h2><a class="cta" href="#install" data-i18n="cta">安装 Semantic <span aria-hidden="true">↗</span></a></section>

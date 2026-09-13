@@ -34,8 +34,8 @@ def main(a):
     ctl=root/'bin/semanticctl'
     report={'checks':[], 'graphics':'not-qualified: physical Mac CGL validation required'}
     try:
-        run('bash',HERE/'bootstrap.sh',*options)
-        report['checks'].append('Downloaded-format archive SHA256, bootstrap, offline install and native scene startup smoke')
+        run('bash',HERE.parents[1]/'install.sh',*options)
+        report['checks'].append('Unified Chinese bootstrap, archive SHA256, offline install and native scene startup smoke')
         state=json.loads((root/'install.json').read_text())
         assert state['web_host']=='127.0.0.1'
         password=json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']
@@ -71,9 +71,9 @@ def main(a):
         run(ctl,'status')
         run(ctl,'stop')
         run(ctl,'start')
-        run('bash',HERE/'bootstrap.sh',*options)
+        run('bash',HERE.parents[1]/'install-en.sh',*options)
         assert json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']==password
-        report['checks'].append('Process identity, stop/start and repeat installation preserve credentials')
+        report['checks'].append('Unified English bootstrap, process identity, stop/start and repeat installation preserve credentials')
         blocker = subprocess.Popen([sys.executable, '-u', '-c',
             'import sys,time; f=open(sys.argv[1]); print("ready",flush=True); time.sleep(60)',
             str(root/'install.json')], stdout=subprocess.PIPE, text=True)

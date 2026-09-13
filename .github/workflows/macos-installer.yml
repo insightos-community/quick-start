@@ -3,6 +3,12 @@ name: macOS Installer
   workflow_dispatch: {}
   pull_request:
     paths:
+    - install.sh
+    - install-en.sh
+    - artifacts/install.sh
+    - artifacts/platform_bootstrap.sh
+    - artifacts/build_installers.py
+    - artifacts/build_english_installer.py
     - artifacts/macos/**
     - artifacts/runtime/**
     - .github/workflows/macos-installer.yml

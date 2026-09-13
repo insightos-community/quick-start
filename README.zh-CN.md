@@ -185,3 +185,39 @@ bash install.command --yes
 ## 三个平台的构建复现
 
 参见 [glibc、musl 与 macOS 构建说明](README.build.md)：包含已锁定的源码版本、实际脚本入口、工具要求、本地与 CI 指令、产物位置和平台验证范围。
+
+## 按平台和 Release 标签选择安装包
+
+官网及中英文脚本使用同一套标签参数。请在目标平台执行；macOS 在 Python 检查之前进入原生安装流程，使用包内解释器。
+
+Linux x86_64 / glibc:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --source github --tag v0.1.0 --install-system-deps --dir "$HOME/semantic-glibc"
+```
+
+Linux x86_64 / musl:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
+```
+
+macOS 15.5+ / Apple Silicon arm64:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"
+```
+
+两种语言均可使用已有的 glibc OSS 默认渠道：
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --source oss --version stable --install-system-deps
+```
+
+`--tag` 自动选择平台，不可与 `--version` 同时使用。Linux 仍兼容 `--musl`、`--version`、`--package`、`--base-url` 和私有 OSS 票据。`--source auto` 保留未指定标签时中文 glibc 默认 OSS、英文默认 GitHub 的行为；显式标签和 musl 默认从 GitHub 下载，显式指定源或镜像时按该配置执行。当前 musl / macOS 缺少 OSS 产物，请使用 GitHub。macOS 支持 auto/github 或带校验和的离线包，显式 OSS 配置会被拒绝。Linux 安装依赖沿用机器已有源；macOS 无需 Homebrew 或预装 Python。
+
+更换版本时先停止旧实例，使用新的 `--dir`；不支持自动数据库迁移或跨版本覆盖。较早的 musl 标签可能需要在 musl 宿主使用 `--musl-runtime system`，包内 musl 从 `musl-v0.1.0-2` 开始支持。参见[官网部署说明](artifacts/site/README.md)和[全部 Release](https://github.com/insightos-community/quick-start/releases)。
