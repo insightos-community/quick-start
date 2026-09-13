@@ -172,6 +172,8 @@ jobs:
 
         uv pip install --python .build-venv/bin/python PyYAML==6.0.2
 
+        .build-venv/bin/python -m unittest discover -s tests -p test_macos_installer.py
+
         '
     - name: Assemble offline installer
       env:
@@ -243,7 +245,9 @@ jobs:
 
         EOF
 
-        gh release create "$RELEASE_TAG" dist-macos/* --verify-tag --prerelease --title "Semantic macOS arm64 ${RELEASE_TAG#macos-v}"
+        gh release create "$RELEASE_TAG" dist-macos/* --verify-tag --draft --prerelease --title "Semantic macOS arm64 ${RELEASE_TAG#macos-v}"
         --notes-file release-notes.md
+
+        gh release edit "$RELEASE_TAG" --draft=false
 
         '

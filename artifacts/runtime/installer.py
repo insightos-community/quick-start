@@ -545,6 +545,8 @@ def install(a):
     root = raw.resolve()
     if manifest.get('libc') == 'musl' and ':' in str(root):
         raise ValueError('The musl install path must not contain a colon (library search separator)')
+    if payload in root.parents:
+        raise ValueError('The installation directory must be outside the extracted package')
     if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):
         raise ValueError('拒绝使用根目录、用户主目录或含控制字符的目录作为安装目录')
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():

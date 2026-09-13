@@ -47,6 +47,7 @@ def main(a):
         robot=release/'robot-bundles'/metadata['bundle_name']/'python/venv/bin/python'
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}
         run(robot,HERE/'smoke.py',env=env)
+        run(robot, '-c', 'import ability_py, semantic_robot_sdk_core, semantic_robot_sdk_r1pro, semantic_robot_skill_sdk, r1pro_abilities', env=env)
         run(robot,'-c',"import runpy,tempfile,inspect; from pathlib import Path; checks=runpy.run_path("+repr(str(HERE.parent/'musl/robot_checks.py'))+");\nwith tempfile.TemporaryDirectory() as tmp:\n for name, fn in checks.items():\n  if name.startswith('test_'): fn(Path(tmp)) if inspect.signature(fn).parameters else fn()",env=env)
         run(release/'bin/uv','pip','check','--python',robot,env=env)
         report['checks'].append('Shared Python/NumPy: Pinocchio, Ruckig, MuJoCo and actual Robot math checks; dependency consistency')
@@ -62,6 +63,16 @@ def main(a):
         run('bash',HERE/'bootstrap.sh',*options)
         assert json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']==password
         report['checks'].append('Process identity, stop/start and repeat installation preserve credentials')
+        blocker = subprocess.Popen([sys.executable, '-u', '-c',
+            'import sys,time; f=open(sys.argv[1]); print("ready",flush=True); time.sleep(60)',
+            str(root/'install.json')], stdout=subprocess.PIPE, text=True)
+        try:
+            assert blocker.stdout.readline().strip() == 'ready'
+            refused = subprocess.run([str(ctl), 'uninstall', '--dry-run'], capture_output=True, text=True)
+            assert refused.returncode != 0 and (root/'current').exists(), refused.stdout
+        finally:
+            blocker.terminate(); blocker.wait(timeout=10)
+        report['checks'].append('Uninstall refuses a foreign process holding an installation file')
         run(ctl,'uninstall','--dry-run')
         run(ctl,'uninstall','--yes')
         assert (root/'configs/secrets.json').is_file() and not (root/'releases').exists()

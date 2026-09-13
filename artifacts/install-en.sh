@@ -1239,6 +1239,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    root = raw.resolve()\n'
             "    if manifest.get('libc') == 'musl' and ':' in str(root):\n"
             "        raise ValueError('The musl install path must not contain a colon (library search separator)')\n"
+            '    if payload in root.parents:\n'
+            "        raise ValueError('The installation directory must be outside the extracted package')\n"
             "    if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):\n"
             "        raise ValueError('Refusing root, home or paths containing control characters as the installation directory')\n"
             "    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():\n"

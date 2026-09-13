@@ -1,51 +1,83 @@
-# Native macOS development
+# Native macOS installer
 
-Initial target: Apple Silicon (arm64), validated on the GitHub `macos-15`
-runner. This directory starts the native port; it is not a released macOS
-installer, and the public installation scripts still require Linux.
+Target: Apple Silicon arm64, macOS 15.5 or newer. The first installer is an
+unsigned preview archive; physical Mac CGL graphics qualification is pending.
+Intel Mac and optional LIBERO/Robosuite profiles are outside this release.
 
-The shared dependency baseline uses CPython 3.13.15, NumPy 2.3.5,
-Pinocchio 3.9.0, Ruckig 0.19.4 and MuJoCo 3.4.0. The lock includes hashes
-for transitive dependencies and CI only accepts binary wheels. It does
-not require a Linux VM, musl, or Rosetta.
+## Install
 
-On an Apple Silicon Mac with uv available:
+Download `semantic-0.1.0-rc.1-macos-arm64.tar.gz` from the
+[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.1),
+verify its SHA-256 against `SHA256SUMS`, extract it, and run:
 
-```sh
-uv venv --python 3.13.15 .venv-macos
-uv pip sync --python .venv-macos/bin/python --require-hashes --only-binary :all: artifacts/macos/requirements.lock
-.venv-macos/bin/python artifacts/macos/smoke.py
+```bash
+bash install.command --yes
+# or choose an instance directory
+bash install.command --dir "$HOME/semantic" --yes
 ```
 
-`Native macOS foundation` validates Pinocchio dynamics, Ruckig trajectories
-and MuJoCo physics in that same environment, and builds/tests the pinned
-Framework and gateway as native arm64 executables. CI artifacts are development
-outputs, not signed application bundles or production releases.
+The release's `install-macos.sh` downloads and verifies the same archive using
+system curl, shasum and tar; it needs no preinstalled Python. For offline use:
 
-MuJoCo Runtime's native macOS workflow tests the service and CPU physics.
-CGL rendering and the real pallet scene have a separate physical-Mac qualification
-job: the standard hosted runner returned `CGLError: invalid pixel format`. CGL uses macOS OpenGL; the Linux Mesa/EGL bundle is not needed.
-Hosted-runner rendering evidence alone does not qualify physical Apple GPU
-performance. Validate the real pallet scene and camera streams on a physical
-Mac before advertising full simulation support.
+```bash
+bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.1-macos-arm64.tar.gz \
+  --sha256 SHA256_FROM_RELEASE --dir "$HOME/semantic" --yes
+```
 
-AbilityFramework network discovery and system load sampling are being ported and
-compiled in its own macOS CI. Remaining installer work includes validating and
-packaging its native dependencies, replacing Linux `/proc` process identity checks, packaging
-Mach-O/dylib dependencies, portable service management, and signing/notarization
-for distribution. Linux's current release manifest remains the supported default.
+Default directory: `~/Library/Application Support/Semantic`. Default Web URL:
+http://127.0.0.1:3000. The admin password is generated during installation;
+`bin/semanticctl welcome` shows it in the terminal. Other management commands:
+`start`, `stop`, `status`, `doctor`, `logs`, `uninstall`.
+Uninstall preserves configuration/data unless `--purge` is explicitly passed.
+Different releases require separate installation directories; automatic database
+migration and in-place upgrades are not supported by this preview.
 
-## Component changes
+No Homebrew, compiler or package-source change is required. Python 3.13.15 and
+all wheels are bundled. Robot and simulation use separate virtual environments
+sharing one Python base and the same locked dependency versions, including
+NumPy 2.3.5, Pinocchio 3.9.0, Ruckig 0.19.4 and MuJoCo 3.4.0.
 
-- [MuJoCo Runtime #5](https://github.com/insightos-community/mujoco-runtime/pull/5):
-  merged native CGL defaults, CPU/API CI, and a separate physical-Mac graphics job.
-- [Framework #4](https://github.com/insightos-community/Semantic-Framework/pull/4):
-  native process groups, libproc identity checks, and monotonic message ordering.
-  The macOS workflow pins its adaptation commit independently of the Linux manifest.
-- [AbilityFramework #3](https://github.com/insightos-community/AbilityFramework/pull/3):
-  native network discovery, load sampling, and compiler validation.
+## Reproduce
 
-A dedicated Mac mini is not a runtime requirement: each user runs Semantic on
-their own Mac. GitHub macOS runners can build/test the port. A physical MacBook,
-iMac or Mac mini is useful for desktop installation, graphics and long-running
-validation; it need not be a separate server.
+`.github/workflows/macos-installer.yml` builds Framework, deployment launcher and
+AbilityFramework from exact commits recorded in `sources.json`. It reuses
+verified component Releases pinned by the root `repo-versions.json` for Web,
+assets, Python SDK wheels, abilities and skills. Runtime wheels are built from
+the pinned native macOS source. Every downloaded component asset is checked
+against its Release inventory and source identity.
+
+`installer-requirements.lock` pins the complete third-party Python set with
+hashes. It can be regenerated from `installer-requirements.in` with:
+
+```bash
+uv pip compile artifacts/macos/installer-requirements.in --python-version 3.13 \
+  --python-platform aarch64-apple-darwin --only-binary :all: --generate-hashes \
+  -o artifacts/macos/installer-requirements.lock
+```
+
+The Pinocchio wheels require the selected `cmeel-urdfdom==4.0.1` and
+`cmeel-tinyxml2==10.0.0` ABI combination. Do not substitute the Linux compatibility
+wheel or upgrade these independently without real import and URDF tests.
+
+The installer workflow checks native Mach-O architecture/linkage, installs the
+actual archive in a directory with spaces, starts the Server/Web and a native
+MuJoCo scene through the CLI, verifies authentication, shared Python and math,
+then checks stop/start, repeat installation and data-preserving uninstall.
+Read the released `validation.json` for what the producing run executed.
+
+`macos-v*` tags publish the tested archive, download script, checksum inventory,
+component source manifest, linkage report and validation report as a GitHub
+prerelease. PR/workflow_dispatch runs produce downloadable Actions artifacts.
+
+## Graphics qualification
+
+MuJoCo uses system CGL/OpenGL on macOS. The standard hosted runner previously
+failed to create a CGL context (`invalid pixel format`), so CI physics or scene
+startup does not imply RGB/depth rendering or GPU performance was verified.
+Use an Apple Silicon Mac with a working graphics session to execute the
+`mujoco-runtime` repository's optional `semantic-graphics` workflow before
+promoting this preview to a fully qualified graphics release.
+
+The earlier `macos-native.yml`, `requirements.lock` and `smoke.py` retain the
+smaller dependency-foundation checks. Their binaries are development evidence,
+not substitutes for the complete installer archive.

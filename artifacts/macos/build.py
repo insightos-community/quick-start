@@ -20,7 +20,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
-from fetch_releases import digest, extract, fetch
+from fetch_releases import digest, download, extract, fetch
 
 
 def run(*args, **kwargs):
@@ -67,7 +67,16 @@ def native_report(root):
         for lib in libraries:
             if lib.startswith('/') and not lib.startswith(('/usr/lib/', '/System/Library/')):
                 raise ValueError(f'Nonportable library in {p}: {lib}')
-        reports[p.relative_to(root).as_posix()] = dict(architectures=architectures, libraries=libraries)
+        load_commands = subprocess.check_output(['otool', '-l', str(p)], text=True)
+        versions = re.findall(r'\bminos ([0-9.]+)', load_commands)
+        versions += re.findall(r'cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version ([0-9.]+)', load_commands)
+        if any(tuple(map(int, v.split('.'))) > (15, 5, 0) for v in versions):
+            raise ValueError('Binary requires newer macOS than declared: '+str(p))
+        rpaths = re.findall(r'cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset', load_commands)
+        if any(r.startswith('/') and not r.startswith(('/usr/lib/', '/System/Library/')) for r in rpaths):
+            raise ValueError('Absolute build-time rpath: '+str(p))
+        reports[p.relative_to(root).as_posix()] = dict(architectures=architectures, libraries=libraries,
+                                                     minimum_macos=versions, rpaths=rpaths)
     return reports
 
 
@@ -127,12 +136,19 @@ def build(a):
         for p in source.iterdir():
             if p.name.startswith(('LICENSE', 'NOTICE')):
                 copy(p, payload/'notices'/name/p.name)
+        for p in source.rglob('*'):
+            if p.is_file() and '.git' not in p.parts and p.name.upper().startswith(('LICENSE', 'COPYING', 'NOTICE')):
+                copy(p, payload/'notices'/name/p.relative_to(source))
     for p in a.binaries.resolve().glob('*'):
         copy(p, payload/'bin'/p.name)
     for name in ('semantic-robot-instance', 'semantic-pilot', 'AbilityFramework'):
         copy(payload/'bin'/name, bundle/'bin'/name)
     uv = Path(shutil.which('uv')).resolve()
+    if subprocess.check_output([str(uv), '--version'], text=True).split()[1] != '0.12.12':
+        raise ValueError('Assembly requires uv 0.12.12')
     copy(uv, payload/'bin/uv')
+    for license in ('LICENSE-APACHE', 'LICENSE-MIT'):
+        download(f'https://raw.githubusercontent.com/astral-sh/uv/0.12.12/{license}', payload/'notices/uv'/license, 1024**2)
     python = Path(subprocess.check_output(['uv', 'python', 'find', '3.13.15'], text=True).strip())
     prefix = Path(subprocess.check_output([str(python), '-c', 'import sys; print(sys.base_prefix)'], text=True).strip())
     copy(prefix, payload/'python')
@@ -151,7 +167,7 @@ def build(a):
                 raise ValueError('Non-macOS wheel '+wheel.name)
         copy(wheel, bundle/'wheels'/wheel.name)
     spec = yaml.safe_load((bundle/'bundle.yaml').read_text())
-    spec['spec']['platform'] = {'os': 'darwin'}
+    spec['spec']['platform'] = {'os': 'darwin', 'arch': 'arm64'}
     spec['spec']['artifacts']['pythonWheels'] = ['wheels/'+p.name for p in sorted(wheelhouse.glob('*.whl'))]
     (bundle/'bundle.yaml').write_text(yaml.safe_dump(spec, sort_keys=False))
     copy(HERE/'installer-requirements.lock', bundle/'python-requirements.lock')
@@ -205,7 +221,7 @@ def build(a):
             meta = yaml.safe_load(z.read('SKILL.md').decode().split('---',2)[1])
         skills.append({'name': meta['name'], 'version': str(meta['version']), 'path':'robot-skills/'+p.name})
     write(payload/'native-linkage.json', native_report(payload))
-    write(payload/'repo-versions.json', {'native_sources':pins, 'component_releases':records})
+    write(payload/'repo-versions.json', {'native_sources':pins, 'component_releases':{k:{f:v for f,v in r.items() if f != 'directory'} for k,r in records.items()}})
     write(payload/'release.json', dict(schema_version=1, component='semantic-installer', version=a.version,
         platform='macos-arm64', minimum_macos='15.5', robot_python='3.13.15', runtime_python='3.13.15',
         bundle_name=bundle_name, runtime_pack=pack_name, robot_skills=skills,
@@ -217,7 +233,7 @@ def build(a):
     archive(payload, target)
     for name in ('release.json', 'repo-versions.json', 'native-linkage.json'):
         copy(payload/name, output/name)
-    copy(HERE/'bootstrap.sh', output/'install-macos.sh')
+    (output/'install-macos.sh').write_text((HERE/'bootstrap.sh').read_text().replace("release_tag='macos-v0.1.0-rc.1'", f"release_tag='macos-v{a.version}'"))
     write(output/'manifest.json', {'version':a.version, 'platform':'macos-arm64', 'archive':target.name,
                                   'sha256':digest(target), 'size':target.stat().st_size})
     (output/'SHA256SUMS').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in sorted(output.iterdir()) if p.is_file() and p.name != 'SHA256SUMS'))
