@@ -43,6 +43,9 @@ if sys.version_info < (3, 10):
 
 """Offline uninstaller; mirrored into install.sh so old releases need no download."""
 import argparse
+import ctypes
+import platform
+import subprocess
 import fcntl
 import hashlib
 import json
@@ -76,8 +79,7 @@ def uninstall_root(value):
     if not isinstance(state, dict) or not isinstance(state.get('version'), str) or not state['version']:
         raise ValueError('Invalid installation state; uninstall refused')
     # Do not cross bind mounts or filesystem mounts, including same-device bind mounts.
-    for line in Path('/proc/self/mountinfo').read_text().splitlines():
-        mount = line.split()[4]
+    for mount in mounted_paths():
         for escaped, char in ((r'\040', ' '), (r'\011', '\t'), (r'\012', '\n'), (r'\134', '\\')):
             mount = mount.replace(escaped, char)
         if Path(mount) == root or root in Path(mount).parents:
@@ -100,6 +102,8 @@ def uninstall_root(value):
 
 
 def uninstall_identity(pid):
+    if platform.system() == 'Darwin':
+        return mac_process(pid)[0]
     try:
         fields = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()
         return None if fields[0] == 'Z' else fields[19]
@@ -121,7 +125,7 @@ def uninstall_managed(root):
             raise ValueError('Incomplete managed process identity record')
         if uninstall_identity(pid) != ticks:
             continue  # Stale PID records are never signalled.
-        executable = Path(f'/proc/{pid}/exe').resolve(strict=True)
+        executable = Path(mac_process(pid)[1]).resolve(strict=True) if platform.system() == 'Darwin' else Path(f'/proc/{pid}/exe').resolve(strict=True)
         expected = 'semantic-server' if name == 'server' else 'semantic-web-gateway'
         if executable.name != expected or root/'releases' not in executable.parents:
             raise ValueError('Managed PID does not match the instance executable; refusing to stop it')
@@ -130,6 +134,8 @@ def uninstall_managed(root):
 
 
 def uninstall_processes(root, allowed=()):
+    if platform.system() == 'Darwin':
+        return mac_processes(root, allowed)
     # Ignore this CLI and its invoking shell/terminal, not arbitrary processes.
     ignored = set()
     pid = os.getpid()
@@ -289,6 +295,62 @@ def uninstall_entry(argv):
         with open(logfile, 'a') as f:
             traceback.print_exc(file=f)
         raise
+
+
+def mounted_paths():
+    if platform.system() != 'Darwin':
+        return [line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+    output = subprocess.check_output(['/sbin/mount'], text=True, timeout=10)
+    return [line.split(' on ', 1)[1].rsplit(' (', 1)[0] for line in output.splitlines() if ' on ' in line]
+
+
+class MacProcessInfo(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint32) for name in ('flags', 'status', 'xstatus', 'pid', 'ppid',
+                'uid', 'gid', 'ruid', 'rgid', 'svuid', 'svgid', 'reserved')]
+    _fields_ += [('comm', ctypes.c_char * 16), ('name', ctypes.c_char * 32)]
+    _fields_ += [(name, ctypes.c_uint32) for name in ('nfiles', 'pgid', 'jobc', 'tdev', 'tpgid', 'nice')]
+    _fields_ += [('start_sec', ctypes.c_uint64), ('start_usec', ctypes.c_uint64)]
+
+
+def mac_process(pid):
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    info = MacProcessInfo()
+    size = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size == 0:
+        # ESRCH is normal for an exited child; inaccessible live processes are not.
+        if ctypes.get_errno() in (0, 3):
+            return None, ''
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process identity')
+    if size != ctypes.sizeof(info) or info.pid != pid:
+        raise RuntimeError('Unexpected macOS process information ABI')
+    if info.status == 5:
+        return None, ''
+    path = ctypes.create_string_buffer(4096)
+    if lib.proc_pidpath(pid, path, len(path)) <= 0:
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process executable')
+    return f'{info.start_sec}:{info.start_usec}', os.fsdecode(path.value)
+
+
+def mac_processes(root, allowed):
+    # lsof inspects executable mappings, working directories and open files.
+    # Recursive lookup covers Python workers whose executable lives elsewhere.
+    command = ['/usr/sbin/lsof', '-nP', '-Fpcn', '+D', str(root)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    if result.returncode not in (0, 1) or result.stderr.strip():
+        raise RuntimeError('Cannot inspect open installation files: ' + result.stderr.strip())
+    rows = {}
+    pid = None
+    for line in result.stdout.splitlines():
+        if line.startswith('p'):
+            pid = int(line[1:])
+            rows.setdefault(pid, {'pid': pid, 'command': '', 'reasons': []})
+        elif pid is not None and line.startswith('c'):
+            rows[pid]['command'] = line[1:]
+        elif pid is not None and line.startswith('n'):
+            rows[pid]['reasons'].append('Open file: '+line[1:])
+    return [row for pid, row in sorted(rows.items()) if pid not in {*allowed, os.getpid()} and row['reasons']]
 # END EMBEDDED UNINSTALLER
 arguments = sys.argv[1:]
 if arguments and arguments[0] == 'uninstall':

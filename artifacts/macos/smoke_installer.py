@@ -47,7 +47,7 @@ def main(a):
         robot=release/'robot-bundles'/metadata['bundle_name']/'python/venv/bin/python'
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}
         run(robot,HERE/'smoke.py',env=env)
-        run(robot,'-c',"import runpy; runpy.run_path("+repr(str(HERE.parent/'musl/robot_checks.py'))+")",env=env)
+        run(robot,'-c',"import runpy,tempfile,inspect; from pathlib import Path; checks=runpy.run_path("+repr(str(HERE.parent/'musl/robot_checks.py'))+");\nwith tempfile.TemporaryDirectory() as tmp:\n for name, fn in checks.items():\n  if name.startswith('test_'): fn(Path(tmp)) if inspect.signature(fn).parameters else fn()",env=env)
         run(release/'bin/uv','pip','check','--python',robot,env=env)
         report['checks'].append('Shared Python/NumPy: Pinocchio, Ruckig, MuJoCo and actual Robot math checks; dependency consistency')
         runtime_pythons=list((root/'runtime-envs').rglob('bin/python'))
