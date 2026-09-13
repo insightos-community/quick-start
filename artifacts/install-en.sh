@@ -775,7 +775,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            raise ValueError('Release payload must not contain symlinks')\n"
             '        if not target.is_file() or digest(target) != checksum:\n'
             "            raise ValueError('File verification failed: ' + name)\n"
-            "    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()}\n"
+            '    # Finder may add view metadata after the verified archive is extracted.\n'
+            "    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()\n"
+            "              and not (platform.system() == 'Darwin' and p.name == '.DS_Store' and not p.is_symlink())}\n"
             "    if actual != set(records) | {'files.json'}:\n"
             "        raise ValueError('Release payload contains files missing from the checksum manifest')\n"
             "    return load(payload/'release.json')\n"
@@ -1253,7 +1255,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)\n"
             "    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:\n"
             "        raise ValueError('Changing musl runtime requires a new --dir')\n"
-            "    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))\n"
+            "    default_host = '127.0.0.1' if manifest.get('platform') == 'macos-arm64' else '0.0.0.0'\n"
+            "    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else default_host))\n"
             '    if a.web_host and old:\n'
             "        if host != old.get('web_host', '127.0.0.1'):\n"
             "            raise ValueError('For existing instances, use --configure-existing --lan/--web-host to change the listen address')\n"

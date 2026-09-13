@@ -180,7 +180,9 @@ jobs:
 
         tar -xzf native-archives/AbilityFramework-macos-arm64-development.tar.gz -C native/bin
 
-        uv venv --python 3.13.15 .build-venv
+        uv python install 3.13.15
+
+        uv venv --managed-python --python 3.13.15 .build-venv
 
         uv pip install --python .build-venv/bin/python PyYAML==6.0.2
 

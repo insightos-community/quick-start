@@ -7,4 +7,4 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   exit 1
 fi
 exec "$package_dir/python/bin/python3.13" -B "$package_dir/installer.py" install \
-  --payload "$package_dir" --dir "$HOME/Library/Application Support/Semantic" --web-host 127.0.0.1 "$@"
+  --payload "$package_dir" --dir "$HOME/Library/Application Support/Semantic" "$@"

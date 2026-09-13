@@ -1,7 +1,8 @@
 # Copyright 2026 InsightOS
 # SPDX-License-Identifier: Apache-2.0
-import importlib.util
+import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -40,9 +41,31 @@ class MacInstallerTests(unittest.TestCase):
             self.assertNotIn('PYTHONHOME',env)
             self.assertNotIn('PYTHONPATH',env)
 
+    def test_finder_metadata_does_not_hide_unlisted_program_files(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(installer.platform,'system',return_value='Darwin'):
+            root=Path(directory)
+            (root/'release.json').write_text('{"version":"0.1.0-rc.1"}')
+            (root/'files.json').write_text(json.dumps({'release.json':installer.digest(root/'release.json')}))
+            (root/'.DS_Store').write_bytes(b'Finder metadata')
+            self.assertEqual(installer.verify_payload(root)['version'],'0.1.0-rc.1')
+            (root/'unlisted.py').write_text('print(1)')
+            with self.assertRaises(ValueError): installer.verify_payload(root)
+            (root/'unlisted.py').unlink()
+            (root/'.DS_Store').unlink()
+            (root/'.DS_Store').symlink_to('release.json')
+            with self.assertRaises(ValueError): installer.verify_payload(root)
+
     @unittest.skipUnless(sys.platform=='darwin','native macOS process API')
     def test_native_process_identity_matches_current_executable(self):
         identity, executable=uninstall.mac_process(os.getpid())
         self.assertTrue(identity)
-        self.assertEqual(Path(executable).resolve(),Path(sys.executable).resolve())
+        self.assertTrue(Path(executable).is_file())
         self.assertEqual(identity,uninstall.uninstall_identity(os.getpid()))
+        child=subprocess.Popen(['/bin/sleep','30'])
+        try:
+            child_id, child_exe=uninstall.mac_process(child.pid)
+            self.assertTrue(child_id)
+            self.assertEqual(Path(child_exe).resolve(),Path('/bin/sleep').resolve())
+        finally:
+            child.terminate(); child.wait(timeout=10)
+        self.assertIsNone(uninstall.uninstall_identity(child.pid))

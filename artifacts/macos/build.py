@@ -149,7 +149,7 @@ def build(a):
     copy(uv, payload/'bin/uv')
     for license in ('LICENSE-APACHE', 'LICENSE-MIT'):
         download(f'https://raw.githubusercontent.com/astral-sh/uv/0.12.12/{license}', payload/'notices/uv'/license, 1024**2)
-    python = Path(subprocess.check_output(['uv', 'python', 'find', '3.13.15'], text=True).strip())
+    python = Path(subprocess.check_output(['uv', 'python', 'find', '--managed-python', '3.13.15'], text=True).strip())
     prefix = Path(subprocess.check_output([str(python), '-c', 'import sys; print(sys.base_prefix)'], text=True).strip())
     copy(prefix, payload/'python')
     # Only installer dependencies are resolved here; the target installs offline.

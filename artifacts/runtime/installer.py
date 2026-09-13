@@ -81,7 +81,9 @@ def verify_payload(payload):
             raise ValueError('发布包不能包含符号链接')
         if not target.is_file() or digest(target) != checksum:
             raise ValueError('文件校验失败: ' + name)
-    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()}
+    # Finder may add view metadata after the verified archive is extracted.
+    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()
+              and not (platform.system() == 'Darwin' and p.name == '.DS_Store' and not p.is_symlink())}
     if actual != set(records) | {'files.json'}:
         raise ValueError('发布包存在未列入校验的文件')
     return load(payload/'release.json')
@@ -559,7 +561,8 @@ def install(a):
     check_platform(manifest, getattr(a, 'musl', False), runtime_mode)
     if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:
         raise ValueError('Changing musl runtime requires a new --dir')
-    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))
+    default_host = '127.0.0.1' if manifest.get('platform') == 'macos-arm64' else '0.0.0.0'
+    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else default_host))
     if a.web_host and old:
         if host != old.get('web_host', '127.0.0.1'):
             raise ValueError('已有实例请使用 --configure-existing --lan/--web-host 修改监听地址')

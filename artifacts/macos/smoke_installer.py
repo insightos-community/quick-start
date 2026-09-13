@@ -30,13 +30,14 @@ def main(a):
     package=a.package.resolve()
     checksum=hashlib.file_digest(package.open('rb'),'sha256').hexdigest()
     options=['--package',package,'--sha256',checksum,'--dir',root,'--yes','--no-desktop-shortcut',
-             '--web-host','127.0.0.1','--http-port','28080','--ws-port','28081','--web-port','28082','--runtime-port','28083']
+             '--http-port','28080','--ws-port','28081','--web-port','28082','--runtime-port','28083']
     ctl=root/'bin/semanticctl'
     report={'checks':[], 'graphics':'not-qualified: physical Mac CGL validation required'}
     try:
         run('bash',HERE/'bootstrap.sh',*options)
         report['checks'].append('Downloaded-format archive SHA256, bootstrap, offline install and native scene startup smoke')
         state=json.loads((root/'install.json').read_text())
+        assert state['web_host']=='127.0.0.1'
         password=json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']
         response=request('http://127.0.0.1:28082/api/v1/auth/login',{'username':'admin','password':password})
         assert response['token']
