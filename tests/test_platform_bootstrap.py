@@ -40,7 +40,7 @@ class PlatformBootstrapTests(unittest.TestCase):
                 self.assertFalse(ns['use_github'])
                 self.assertIn('aliyuncs.com', ns['a'].base_url)
                 with self.assertRaises(SystemExit):
-                    self.selection(script, ['--tag', 'macos-v0.1.0-rc.2'])
+                    self.selection(script, ['--tag', 'macos-v0.1.0-rc.3'])
                 with self.assertRaises(SystemExit):
                     self.selection(script, ['--tag', 'v0.1.0', '--musl'])
                 with self.assertRaises(SystemExit):
@@ -53,10 +53,10 @@ class PlatformBootstrapTests(unittest.TestCase):
         self.assertTrue(self.selection('install-en.sh', [])['use_github'])
 
     def test_macos_system_bash_handles_empty_optional_arguments(self):
-        command = 'source "$1"; semantic_native_macos() { printf "%s\\n" "$@"; }; semantic_macos_dispatch --tag macos-v0.1.0-rc.2'
+        command = 'source "$1"; semantic_native_macos() { printf "%s\\n" "$@"; }; semantic_macos_dispatch --tag macos-v0.1.0-rc.3'
         result = subprocess.run(['/bin/bash', '-euc', command, 'test', str(ROOT / 'artifacts/platform_bootstrap.sh')], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('macos-v0.1.0-rc.2', result.stdout)
+        self.assertIn('macos-v0.1.0-rc.3', result.stdout)
         self.assertIn('--dir', result.stdout)
 
     def test_macos_offline_route_needs_no_host_python_and_checks_archive_integrity(self):
@@ -75,7 +75,7 @@ class PlatformBootstrapTests(unittest.TestCase):
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             env = {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH']}
             for script in ['install.sh', 'install-en.sh']:
-                command = ['bash', str(ROOT / script), '--tag', 'macos-v0.1.0-rc.2', '--source', 'github', '--package', str(archive), '--sha256', digest, '--dir', str(root / 'instance with spaces'), '--no-start', '--yes']
+                command = ['bash', str(ROOT / script), '--tag', 'macos-v0.1.0-rc.3', '--source', 'github', '--package', str(archive), '--sha256', digest, '--dir', str(root / 'instance with spaces'), '--no-start', '--yes']
                 result = subprocess.run(command, env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(str(root / 'instance with spaces'), result.stdout)

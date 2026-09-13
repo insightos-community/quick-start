@@ -165,7 +165,7 @@ Copyright 2026 InsightOS。自有代码采用 [Apache-2.0](LICENSE)；第三方�
 
 支持 **Apple Silicon / macOS 15.5+**，随包提供 Python 3.13.15、NumPy 2.3.5、
 原生服务、离线 Python 依赖和 MuJoCo 场景资产，无需 Homebrew、系统 Python 或编译器。
-从 [macOS 预览版 Release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2)
+从 [macOS 预览版 Release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3)
 下载 `semantic-*-macos-arm64.tar.gz`，解压后执行：
 
 ```bash
@@ -208,7 +208,7 @@ macOS 15.5+ / Apple Silicon arm64:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"
+  --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"
 ```
 
 两种语言均可使用已有的 glibc OSS 默认渠道：

@@ -12,7 +12,7 @@ A linked worktree's `.git` pointer may point outside a container mount.
 |---|---|---|---|
 | Default Linux/glibc | `v0.1.0` component lock; assembler snapshot below | Ubuntu 24.04 x86_64; Go 1.25.8, uv 0.12.12 | Robot Python 3.13 and native Runtime Python 3.10.19; the complete stack has a glibc baseline even though application ELF binaries are static |
 | Optional Linux/musl | `musl-v0.1.0-2` | Pinned Python 3.13 / Alpine 3.23 amd64 Docker image | Bundled CPython 3.13.15, NumPy 2.3.5, musl loader and Mesa; Robot/Runtime venvs share the same Python base |
-| macOS preview | `macos-v0.1.0-rc.2` | Native Apple Silicon, macOS 15.5+; Go 1.25.8, uv 0.12.12, xmake 3.1.1 and Xcode Command Line Tools | Bundled Python 3.13.15/NumPy 2.3.5, locked macOS wheels and native applications; system CGL |
+| macOS preview | `macos-v0.1.0-rc.3` | Native Apple Silicon, macOS 15.5+; Go 1.25.8, uv 0.12.12, xmake 3.1.1 and Xcode Command Line Tools | Bundled Python 3.13.15/NumPy 2.3.5, locked macOS wheels and native applications; system CGL |
 
 The default glibc installer requires glibc >=2.28 and still downloads its Python
 runtime on installation. The musl/macOS archives carry their own Python and
@@ -155,7 +155,7 @@ GPU/rendering acceptance needs access to an actual Mac with a graphics session.
 ```bash
 git clone https://github.com/insightos-community/quick-start.git quick-start-macos
 cd quick-start-macos
-git checkout --detach macos-v0.1.0-rc.2
+git checkout --detach macos-v0.1.0-rc.3
 test "$(uname -s)" = Darwin
 test "$(uname -m)" = arm64
 uv python install 3.13.15
@@ -192,10 +192,10 @@ cp sources/AbilityFramework/build/macosx/arm64/release/AbilityFramework native/b
   CGO_ENABLED=0 go build -trimpath -o ../../native/bin/semantic-robot-instance ./cmd/semantic-robot-instance
 )
 REPRO_WORK="$(mktemp -d "${TMPDIR:-/tmp}/semantic-macos.XXXXXXXX")"
-.build-venv/bin/python artifacts/macos/build.py --version 0.1.0-rc.2 \
+.build-venv/bin/python artifacts/macos/build.py --version 0.1.0-rc.3 \
   --output dist-macos --work "$REPRO_WORK/build" --sources sources --binaries native/bin
 .build-venv/bin/python artifacts/macos/smoke_installer.py \
-  --package dist-macos/semantic-0.1.0-rc.2-macos-arm64.tar.gz \
+  --package dist-macos/semantic-0.1.0-rc.3-macos-arm64.tar.gz \
   --root "$REPRO_WORK/Semantic Installer Smoke" --report dist-macos/validation.json
 shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json dist-macos/loaded-libraries.json \
   | sed 's@dist-macos/@@' >> dist-macos/SHA256SUMS
@@ -228,7 +228,7 @@ non-tag reproduction branch because a `macos-v*` tag dispatch enters publishing:
 gh workflow run musl-release.yml --repo insightos-community/quick-start --ref musl-v0.1.0-2
 # In a quick-start clone; requires permission to create a new branch in that repo.
 gh auth setup-git
-git push origin 'macos-v0.1.0-rc.2^{commit}:refs/heads/reproduce/macos-installer'
+git push origin 'macos-v0.1.0-rc.3^{commit}:refs/heads/reproduce/macos-installer'
 gh workflow run macos-installer.yml --repo insightos-community/quick-start --ref reproduce/macos-installer
 gh run list --repo insightos-community/quick-start --limit 10
 # Set REPRO_RUN_ID to the desired run from the list.

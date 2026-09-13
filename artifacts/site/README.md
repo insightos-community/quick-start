@@ -34,13 +34,13 @@ remain available without JavaScript.
 |---|---|---|---|
 | Linux glibc x86_64 | `v0.1.0` | GitHub Release; untagged Chinese `stable` retains the separate OSS channel | Python 3.10+, glibc >=2.28 |
 | Linux musl x86_64 | `musl-v0.1.0-2` | GitHub Release; no OSS manifest currently exists | Bundled musl by default; host mode requires a musl loader |
-| macOS arm64 | `macos-v0.1.0-rc.2` | GitHub Release; no OSS manifest currently exists | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
+| macOS arm64 | `macos-v0.1.0-rc.3` | GitHub Release; no OSS manifest currently exists | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
 
 ```bash
 # English; replace install-en.sh with install.sh for the Chinese entry.
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag v0.1.0 --install-system-deps
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
-curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"
 # The existing Linux OSS channel is available from either language entry.
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source oss --version stable --install-system-deps
 ```

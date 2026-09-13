@@ -32,7 +32,7 @@ const englishCopy = {
   macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. No OSS mirror is available yet; downloads come from GitHub with checksum verification.",
   macosRuntime: "Bundles Python 3.13.15, NumPy 2.3.5, MuJoCo and robot dependencies. No Homebrew or host Python is required. Web requests auto and the Runtime uses configured CGL. This preview is not notarized; physical GPU rendering still needs testing.",
   macosUpgrade: "Stop the old instance before installing another tag into a new <code>--dir</code>, then reload the browser. The installer neither overwrites other versions nor migrates databases automatically; old configuration and data remain in the original directory.",
-  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2\">macos-v0.1.0-rc.2 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
+  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3\">macos-v0.1.0-rc.3 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
   terminal: "<span class=\"terminal-dot\"></span> Run on the target machine",
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
@@ -151,7 +151,7 @@ const videoError = document.getElementById("video-error");
 let toastTimer;
 const installPlatform = document.getElementById("install-platform");
 const installTag = document.getElementById("install-tag");
-const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.2" };
+const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.3" };
 function updateInstallCommand() {
   const target = installPlatform.value;
   const tag = installTag.value.trim();
