@@ -28,7 +28,9 @@ class RetryTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        # macOS temporary roots may use /var -> /private/var; cache tests
+        # need a canonical private directory, like the production cache under HOME.
+        self.root = Path(temporary.name).resolve()
 
     def test_verified_cache_survives_failure_and_repairs_corruption(self):
         content = b'verified release content'
