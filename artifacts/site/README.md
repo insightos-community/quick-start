@@ -12,25 +12,60 @@ The language selector supports `?lang=zh|en`, a saved preference, and browser la
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --install-system-deps
 ```
 
-The English script defaults to the verified GitHub `v0.1.0` installer Release. `--version 0.1.0` (or `v0.1.0`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
+On Linux, the English script defaults to the verified GitHub `v0.1.0` installer Release; on macOS it selects the native preview. `--version 0.1.0` (or `v0.1.0`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
 
 Complete Releases already contain the Git LFS model objects. If an asset is missing or is a pointer, the English bootstrap uses the asset repository commit in `release-lock.json`, reads its GitHub pointer and downloads the object through the [Git LFS Batch API](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md). Both object size and SHA-256 must match the original `files.json`; the archive and integrity inventory are never rewritten. No Git or Git LFS executable is needed on the installation target.
 
 System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper or Alpine APK configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
 
-The corresponding Chinese entry is `/install.sh`. Both pages describe **Linux x86_64 only, verified on Ubuntu 24.04 (default), Ubuntu 22.04 and Alpine 3.23 (`--musl`)**. Other package-manager support does not imply full validation of every distribution.
+The corresponding Chinese entry is `/install.sh`. Both pages describe Linux x86_64 (glibc/musl) and native macOS 15.5+ Apple Silicon arm64, with the qualification boundaries below. Other package-manager support does not imply full validation of every distribution.
 
 Both languages also state that more Linux distributions will be tested soon and compatibility results will be updated. This is a validation plan, not an expansion of the currently verified platform list.
 
-## Optional musl installation
+## Platform and tag selection
 
-The expandable musl runtime section has matching Chinese and English copy. Its command switches between `/install.sh` and `/install-en.sh` with the page language and adds `--musl --musl-runtime bundled`, using a separate instance directory. Both scripts download the optional `musl-v0.1.0-2` GitHub Release (approximately 626 MiB); the default OSS/glibc and English `v0.1.0` paths stay unchanged.
+The homepage has a platform selector and tag input. Language switches keep the
+selected platform/tag and regenerate the corresponding `/install.sh` or
+`/install-en.sh` command. Invalid or mismatched tags disable copying; user input
+is never inserted as HTML or executable shell syntax. Static musl/macOS examples
+remain available without JavaScript.
 
-The section documents Linux x86_64 with bundled musl (default), or host musl 1.2+ via `--musl-runtime system`, bundled CPython 3.13.15 and NumPy 2.3.5, unchanged system package sources, automatic Mesa GPU/software selection, and explicit rendering options. AMD hardware and software rendering have been tested; Intel/Nouveau still need hardware validation. Proprietary NVIDIA userspace drivers use the default glibc path.
+| Platform | Verified tag | Source | Target requirements |
+|---|---|---|---|
+| Linux glibc x86_64 | `v0.1.0` | GitHub Release; untagged Chinese `stable` retains the separate OSS channel | Python 3.10+, glibc >=2.28 |
+| Linux musl x86_64 | `musl-v0.1.0-2` | GitHub Release; no OSS manifest currently exists | Bundled musl by default; host mode requires a musl loader |
+| macOS arm64 | `macos-v0.1.0-rc.2` | GitHub Release; no OSS manifest currently exists | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
+
+```bash
+# English; replace install-en.sh with install.sh for the Chinese entry.
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag v0.1.0 --install-system-deps
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.2 --dir "$HOME/semantic-macos"
+# The existing Linux OSS channel is available from either language entry.
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source oss --version stable --install-system-deps
+```
+
+`--tag` infers the target platform and cannot be combined with `--version`.
+`--source auto|github|oss` selects the download route. Explicit tags default to
+GitHub; without a tag, the Chinese Linux default stays OSS and English stays
+GitHub. The OSS stable channel and GitHub v0.1.0 are separate distributions.
+Linux custom `--base-url` and private tickets remain supported. macOS rejects
+explicit OSS inputs until corresponding artifacts exist; it uses the embedded
+native bootstrap before testing for a host Python. Offline `--package` /
+`--sha256` remains supported. Native macOS uses the release's installer UI.
+
+The musl guide retains bundled/system loader selection, Mesa GPU/software
+selection and validated-driver boundaries. Older musl tags may require a musl
+host and system mode; do not assume they include the bundled loader introduced
+in `musl-v0.1.0-2`. macOS uses CGL with Web requests set to auto; physical GPU
+rendering remains unqualified. Versions/platforms require separate install
+directories; stop an old instance before reusing its ports. Existing databases
+are not migrated automatically. Linux Web defaults to all interfaces; macOS
+Web defaults to localhost.
 
 ## Installer generation
 
-`artifacts/install.sh` is the canonical OSS bootstrap. Run `python3 artifacts/build_installers.py` to generate both repository-root scripts and `artifacts/install-en.sh`. The English generator uses `artifacts/installer.en.json`; do not maintain a second installation implementation by hand. Publish the root `install.sh` and `install-en.sh` to the matching website paths.
+`artifacts/install.sh` is the canonical unified bootstrap. `artifacts/platform_bootstrap.sh` and `artifacts/macos/bootstrap.sh` generate its native macOS dispatch; `artifacts/github_bootstrap.py` supplies the Linux Release/LFS helpers. Run `python3 artifacts/build_installers.py` to generate both repository-root scripts and `artifacts/install-en.sh`. The English generator uses `artifacts/installer.en.json`; do not maintain a second installation implementation by hand. Publish the root `install.sh` and `install-en.sh` to the matching website paths.
 
 The English bootstrap validates the original payload checksum and extracts it safely before running translated management modules from a separate temporary directory. It does not modify the verified archive. Installed management commands retain English messages; upstream package-manager and application logs remain in their native language.
 

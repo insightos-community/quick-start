@@ -3,6 +3,12 @@ name: macOS Installer
   workflow_dispatch: {}
   pull_request:
     paths:
+    - install.sh
+    - install-en.sh
+    - artifacts/install.sh
+    - artifacts/platform_bootstrap.sh
+    - artifacts/build_installers.py
+    - artifacts/build_english_installer.py
     - artifacts/macos/**
     - artifacts/runtime/**
     - .github/workflows/macos-installer.yml
@@ -209,6 +215,8 @@ jobs:
       run: 'version="${RELEASE_TAG#macos-v}"
 
         echo "INSTALLER_VERSION=$version" >> "$GITHUB_ENV"
+
+        .build-venv/bin/python -m unittest discover -s tests -p test_platform_bootstrap.py
 
         .build-venv/bin/python artifacts/macos/build.py --version "$version" --output dist-macos --work "$RUNNER_TEMP/macos-build"
         --sources sources --binaries native/bin

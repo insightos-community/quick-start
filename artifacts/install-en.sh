@@ -19,7 +19,119 @@
 # Default downloads: verified GitHub Releases and pinned GitHub LFS assets.
 # Private objects require a short-lived ticket from oss_client.py; never embed AccessKeys here.
 set -euo pipefail
+# BEGIN GENERATED PLATFORM ROUTER
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+# Darwin routes before Python detection: the verified archive supplies Python.
+semantic_macos_dispatch() (
+  local selected_tag='' selected_source=auto instance_dir="$HOME/Library/Application Support/Semantic"
+  local action=install show_help=0
+  local forwarded=()
+  while (($#)); do
+    case "$1" in
+      --tag|--version)
+        [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "Missing value for $1" >&2; exit 2; }
+        [[ -z "$selected_tag" ]] || { echo 'Use only one --tag or --version.' >&2; exit 2; }
+        selected_tag="$2"; shift 2 ;;
+      --tag=*|--version=*)
+        [[ -z "$selected_tag" ]] || { echo 'Use only one --tag or --version.' >&2; exit 2; }
+        selected_tag="${1#*=}"; [[ -n "$selected_tag" ]] || exit 2; shift ;;
+      --source) selected_source="${2:?Missing --source}"; shift 2 ;;
+      --source=*) selected_source="${1#*=}"; shift ;;
+      --dir) instance_dir="${2:?Missing --dir}"; shift 2 ;;
+      --dir=*) instance_dir="${1#*=}"; shift ;;
+      --musl|--musl-runtime|--musl-runtime=*) echo 'musl requires Linux x86_64; macOS uses its native arm64 Release.' >&2; exit 2 ;;
+      --base-url|--base-url=*|--ticket|--ticket=*) echo 'macOS OSS artifacts are not published. Use --source github or an offline --package with --sha256.' >&2; exit 2 ;;
+      --uninstall|uninstall) [[ "$action" == install ]] || exit 2; action=uninstall; shift ;;
+      --configure-existing) [[ "$action" == install ]] || exit 2; action=configure; shift ;;
+      --help|-h) show_help=1; shift ;;
+      *) forwarded+=("$1"); shift ;;
+    esac
+  done
+  case "$selected_source" in
+    auto|github) ;;
+    oss) echo 'macOS OSS artifacts are not published; use --source github.' >&2; exit 2 ;;
+    *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
+  esac
+  if ((show_help)); then
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.2] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
+    echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
+    echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
+    exit 0
+  fi
+  if [[ -n "$selected_tag" && "$selected_tag" != stable && ! "$selected_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+    echo 'Use a macos-vMAJOR.MINOR.PATCH[-SUFFIX] tag on macOS.' >&2; exit 2
+  fi
+  if [[ "$action" == uninstall ]]; then
+    [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/bin/semanticctl" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
+    "$instance_dir/bin/semanticctl" uninstall ${forwarded[@]+"${forwarded[@]}"}
+  elif [[ "$action" == configure ]]; then
+    [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/current/python/bin/python3.13" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
+    "$instance_dir/current/python/bin/python3.13" -B "$instance_dir/bin/semantic-manager/installer.py" configure --payload "$instance_dir/current" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
+  else
+    [[ "$selected_tag" != stable ]] || selected_tag=''
+    local version_args=()
+    [[ -z "$selected_tag" ]] || version_args=(--tag "$selected_tag")
+    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
+  fi
+)
+
+semantic_native_macos() (
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+set -euo pipefail
+if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
+  echo 'This installer requires native Apple Silicon macOS.' >&2
+  exit 1
+fi
+release_tag='macos-v0.1.0-rc.2'
+archive_path=''
+expected_sha=''
+options=()
+while (($#)); do
+  case "$1" in
+    --tag) release_tag="${2:?Missing tag}"; shift 2 ;;
+    --package) archive_path="${2:?Missing package path}"; shift 2 ;;
+    --sha256) expected_sha="${2:?Missing SHA256}"; shift 2 ;;
+    --help|-h)
+      echo 'Usage: bash install-macos.sh [--tag macos-vVERSION] [--dir PATH] [--yes] [--no-start]'
+      echo 'Offline: --package ARCHIVE --sha256 SHA256. Further options are passed to the installer.'
+      exit 0 ;;
+    *) options+=("$1"); shift ;;
+  esac
+done
+[[ "$release_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag' >&2; exit 1; }
+task_tmp="$(mktemp -d "${TMPDIR:-/tmp}/semantic-download.XXXXXXXX")"
+trap 'rm -rf -- "$task_tmp"' EXIT
+if [[ -z "$archive_path" ]]; then
+  archive_name="semantic-${release_tag#macos-v}-macos-arm64.tar.gz"
+  release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
+  curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/SHA256SUMS" -o "$task_tmp/SHA256SUMS"
+  expected_sha="$(awk -v name="$archive_name" '$2 == name {print $1}' "$task_tmp/SHA256SUMS")"
+  archive_path="$task_tmp/$archive_name"
+  curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/$archive_name" -o "$archive_path"
+fi
+[[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'A valid SHA256 is required' >&2; exit 1; }
+actual_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+[[ "$actual_sha" == "$expected_sha" ]] || { echo 'SHA256 mismatch' >&2; exit 1; }
+# Published archives contain only regular files. Reject links and escaping names
+# before using the system tar, so bootstrapping never needs a preinstalled Python.
+tar -tzf "$archive_path" > "$task_tmp/entries"
+awk '/^\// || /(^|\/)\.\.($|\/)/ {exit 1}' "$task_tmp/entries"
+tar -tvzf "$archive_path" > "$task_tmp/types"
+awk 'substr($0,1,1) != "-" && substr($0,1,1) != "d" {exit 1}' "$task_tmp/types"
+mkdir "$task_tmp/payload"
+tar -xzf "$archive_path" -C "$task_tmp/payload"
+bash "$task_tmp/payload/install.command" "${options[@]}"
+
+)
+# END GENERATED PLATFORM ROUTER
 main() {
+  if [[ "$(uname -s)" == Darwin ]]; then
+    semantic_macos_dispatch "$@"
+    return
+  fi
   command -v python3 >/dev/null || { echo 'Install Python 3.10+ using your system package manager, then run the installer again.' >&2; return 1; }
   python3 - "$@" <<'PY'
 import argparse, hashlib, json, os, pathlib, re, shutil, subprocess, sys, tarfile, tempfile, urllib.parse, urllib.request
@@ -368,6 +480,8 @@ if '--purge' in arguments or '--dry-run' in arguments:
 p = argparse.ArgumentParser(description='Semantic verified bootstrap', add_help=False)
 p.add_argument('--base-url', default='')
 p.add_argument('--version', default='stable')
+p.add_argument('--tag', help='Exact GitHub Release tag; infers glibc/musl/macOS platform')
+p.add_argument('--source', choices=['auto', 'github', 'oss'], default='auto')
 p.add_argument('--musl', action='store_true', help='Opt in to musl; default installs remain glibc')
 p.add_argument('--musl-runtime', choices=['bundled', 'system'])
 p.add_argument('--package', type=pathlib.Path)
@@ -377,6 +491,24 @@ p.add_argument('--allow-http', action='store_true', help='Only for local/private
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
 a, rest = p.parse_known_args()
+if a.tag:
+    if any(arg == '--version' or arg.startswith('--version=') for arg in arguments):
+        p.error('Use either --tag or --version')
+    if not re.fullmatch(r'(?:v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._+-]*|musl-v[0-9]+\.[0-9]+\.[0-9]+-[1-9][0-9]*|macos-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)', a.tag):
+        p.error('Invalid Release tag')
+    a.version = a.tag
+if a.version.startswith('macos-v'):
+    p.error('macOS tags require native Apple Silicon macOS')
+if a.version.startswith('musl-v'):
+    a.musl = True
+if a.musl and a.tag and not a.tag.startswith('musl-v'):
+    p.error('--musl requires a musl-v tag')
+explicit_base = any(arg == '--base-url' or arg.startswith('--base-url=') for arg in arguments)
+if a.source == 'oss' and not a.base_url:
+    a.base_url = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
+if a.source == 'github' and (explicit_base or a.ticket):
+    p.error('--source github cannot be combined with --base-url or --ticket')
+use_github = a.source == 'github' or (a.source == 'auto' and not a.ticket and not explicit_base and (a.tag or (a.musl and not os.environ.get('SEMANTIC_DOWNLOAD_BASE')) or not a.base_url))
 if a.musl_runtime and not a.musl:
     raise SystemExit('--musl-runtime requires --musl')
 if a.musl_runtime and not a.configure_existing:
@@ -385,6 +517,8 @@ if a.musl and not a.configure_existing:
     rest = ['--musl', *rest]
 if a.help:
     print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')
+    print('Tags: --tag v0.1.0 | --tag musl-v0.1.0-2 | --tag macos-v0.1.0-rc.2')
+    print('Sources: --source auto|github|oss; explicit tags use GitHub by default. musl/macOS currently use GitHub Releases.')
     print('musl: --musl [--musl-runtime bundled|system] [--render-backend auto|mesa-gpu|software]; Linux x86_64; bundled works on glibc hosts')
     print('Install: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('Network: new installs use Web 0.0.0.0:3000 (localhost and LAN); API/WS stay local')
@@ -629,10 +763,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
         archive = a.package.expanduser().resolve(strict=True)
         sidecar = pathlib.Path(str(archive) + '.sha256')
         expected = a.sha256 or (sidecar.read_text().split()[0] if sidecar.exists() else '')
-    elif a.musl and not a.ticket and not any(arg == '--base-url' or arg.startswith('--base-url=') for arg in arguments) and not os.environ.get('SEMANTIC_DOWNLOAD_BASE'):
-        archive, expected = github_archive(work, a.version, download, a.sha256, musl=True)
-    elif not a.base_url and not a.ticket:
-        archive, expected = github_archive(work, a.version, download, a.sha256)
+    elif use_github:
+        archive, expected = github_archive(work, a.version, download, a.sha256, musl=a.musl)
     else:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', a.version): raise ValueError('Invalid version')
         if a.ticket:
@@ -645,7 +777,14 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
         else:
             selected_platform = 'linux-musl-x86_64' if a.musl else 'linux-x86_64'
             channel = 'musl-stable' if a.musl else 'stable'
-            suffix = f'channels/{channel}.json' if a.version == 'stable' else f'releases/{a.version}/{selected_platform}/manifest.json'
+            oss_version = a.version
+            if a.tag:
+                if a.musl:
+                    version, revision = a.tag.removeprefix('musl-v').rsplit('-', 1)
+                    oss_version = version + '-musl.' + revision
+                else:
+                    oss_version = a.tag.removeprefix('v')
+            suffix = f'channels/{channel}.json' if oss_version == 'stable' else f'releases/{oss_version}/{selected_platform}/manifest.json'
             download(a.base_url.rstrip('/') + '/' + suffix, work/'manifest.json', 1024*1024)
             m = json.loads((work/'manifest.json').read_text())
         if m.get('platform') != ('linux-musl-x86_64' if a.musl else 'linux-x86_64'): raise ValueError('Unsupported artifact platform')

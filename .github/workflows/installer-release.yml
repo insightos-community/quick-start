@@ -79,6 +79,8 @@ jobs:
 
         python3 -m unittest discover -s tests -p test_github_bootstrap.py
 
+        python3 -m unittest discover -s tests -p test_platform_bootstrap.py
+
         go test artifacts/gateway/main.go artifacts/gateway/main_test.go
 
         '
