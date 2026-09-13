@@ -64,15 +64,15 @@ semantic_macos_dispatch() (
   fi
   if [[ "$action" == uninstall ]]; then
     [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/bin/semanticctl" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
-    "$instance_dir/bin/semanticctl" uninstall "${forwarded[@]}"
+    "$instance_dir/bin/semanticctl" uninstall ${forwarded[@]+"${forwarded[@]}"}
   elif [[ "$action" == configure ]]; then
     [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/current/python/bin/python3.13" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
-    "$instance_dir/current/python/bin/python3.13" -B "$instance_dir/bin/semantic-manager/installer.py" configure --payload "$instance_dir/current" --dir "$instance_dir" "${forwarded[@]}"
+    "$instance_dir/current/python/bin/python3.13" -B "$instance_dir/bin/semantic-manager/installer.py" configure --payload "$instance_dir/current" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   else
     [[ "$selected_tag" != stable ]] || selected_tag=''
     local version_args=()
     [[ -z "$selected_tag" ]] || version_args=(--tag "$selected_tag")
-    semantic_native_macos "${version_args[@]}" --dir "$instance_dir" "${forwarded[@]}"
+    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   fi
 )
 
