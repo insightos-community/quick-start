@@ -171,7 +171,7 @@ The macOS package targets **Apple Silicon / macOS 15.5+** and bundles Python
 3.13.15, NumPy 2.3.5, native services, offline Python wheels and MuJoCo assets.
 It does not require Homebrew, system Python or a compiler. Download the
 `semantic-*-macos-arm64.tar.gz` archive from the
-[macOS preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3),
+[macOS preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4),
 extract it, then run:
 
 ```bash
@@ -212,7 +212,7 @@ macOS 15.5+ / Apple Silicon arm64:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"
+  --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
 ```
 
 The glibc OSS channel remains available in either language:
@@ -229,3 +229,37 @@ Stop the old instance and use a new `--dir` when changing versions; automatic da
 ## Reproducible platform builds
 
 See [glibc, musl and macOS build instructions](README.build.md) for pinned source revisions, exact scripts, tool requirements, local commands, CI reproduction and platform support boundaries.
+
+## Retry an installation or uninstall without downloading the archive again
+
+The bootstrap checks the selected ports before a network archive download, and
+keeps SHA-256-verified archives for retries. Linux defaults to
+`${XDG_CACHE_HOME:-$HOME/.cache}/semantic/installers`; macOS defaults to
+`${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers`.
+Use `--cache-dir /absolute/path` to choose another location. Small Release metadata
+is refreshed; cached archives are verified again. A failed or corrupt download is
+never accepted as a valid cache entry. Offline archives supplied with `--package`
+are checked by the installer before it changes the instance.
+
+Resolve port conflicts or choose `--http-port`, `--ws-port`, `--web-port` and
+`--runtime-port`, then retry the same command. Existing instances retain their
+configured ports. The scripts do not stop unrelated services.
+
+Stop scenes and Robot Runtime, then use the already-installed manager (replace
+the path with your actual instance directory):
+
+```bash
+"$HOME/semantic-macos/bin/semanticctl" uninstall --dry-run
+"$HOME/semantic-macos/bin/semanticctl" uninstall
+```
+
+For older/incomplete installs, fetch only the small entry script:
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  --uninstall --dir "$HOME/semantic-macos"
+```
+
+This does not download the installer archive. The website's uninstall examples
+follow the selected platform. Configuration, data and logs are kept unless you
+explicitly select `--purge` and confirm.

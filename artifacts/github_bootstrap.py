@@ -25,7 +25,7 @@ def github_digest(path):
     return digest.hexdigest()
 
 
-def github_archive(work, version, download, requested_sha=None, musl=False):
+def github_archive(work, version, download, requested_sha=None, musl=False, archive_download=None):
     tag = GITHUB_DEFAULT_TAG if version == 'stable' else 'v' + version.removeprefix('v')
     if not musl and not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
         raise ValueError('Invalid GitHub release version')
@@ -62,7 +62,10 @@ def github_archive(work, version, download, requested_sha=None, musl=False):
     if expected is None or (requested_sha and requested_sha != expected):
         raise ValueError('GitHub archive checksum is missing or differs from --sha256')
     archive = work/name
-    download(base+name, archive, 8*1024**3)
+    if archive_download:
+        archive = archive_download(base+name, expected)
+    else:
+        download(base+name, archive, 8*1024**3)
     # The canonical bootstrap verifies this digest again before extracting anything.
     if github_digest(archive) != expected:
         raise ValueError('GitHub archive SHA256 mismatch')

@@ -44,6 +44,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_musl_installer.py
           python3 -m unittest discover -s tests -p test_mesa_profiles.py
           python3 -m unittest discover -s tests -p test_github_bootstrap.py
+          python3 -m unittest discover -s tests -p test_install_preflight_cache.py
       - name: Assemble verified component releases
         run: |
           mkdir -p "$RUNNER_TEMP/musl"

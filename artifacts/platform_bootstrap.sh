@@ -32,7 +32,7 @@ semantic_macos_dispatch() (
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.3] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
     echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
@@ -42,8 +42,7 @@ semantic_macos_dispatch() (
     echo 'Use a macos-vMAJOR.MINOR.PATCH[-SUFFIX] tag on macOS.' >&2; exit 2
   fi
   if [[ "$action" == uninstall ]]; then
-    [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/bin/semanticctl" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
-    "$instance_dir/bin/semanticctl" uninstall ${forwarded[@]+"${forwarded[@]}"}
+    semantic_native_macos --uninstall --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   elif [[ "$action" == configure ]]; then
     [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/current/python/bin/python3.13" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
     "$instance_dir/current/python/bin/python3.13" -B "$instance_dir/bin/semantic-manager/installer.py" configure --payload "$instance_dir/current" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}

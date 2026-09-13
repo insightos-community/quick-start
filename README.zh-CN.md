@@ -165,7 +165,7 @@ Copyright 2026 InsightOS。自有代码采用 [Apache-2.0](LICENSE)；第三方�
 
 支持 **Apple Silicon / macOS 15.5+**，随包提供 Python 3.13.15、NumPy 2.3.5、
 原生服务、离线 Python 依赖和 MuJoCo 场景资产，无需 Homebrew、系统 Python 或编译器。
-从 [macOS 预览版 Release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3)
+从 [macOS 预览版 Release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4)
 下载 `semantic-*-macos-arm64.tar.gz`，解压后执行：
 
 ```bash
@@ -208,7 +208,7 @@ macOS 15.5+ / Apple Silicon arm64:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"
+  --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
 ```
 
 两种语言均可使用已有的 glibc OSS 默认渠道：
@@ -221,3 +221,33 @@ curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
 `--tag` 自动选择平台，不可与 `--version` 同时使用。Linux 仍兼容 `--musl`、`--version`、`--package`、`--base-url` 和私有 OSS 票据。`--source auto` 保留未指定标签时中文 glibc 默认 OSS、英文默认 GitHub 的行为；显式标签和 musl 默认从 GitHub 下载，显式指定源或镜像时按该配置执行。当前 musl / macOS 缺少 OSS 产物，请使用 GitHub。macOS 支持 auto/github 或带校验和的离线包，显式 OSS 配置会被拒绝。Linux 安装依赖沿用机器已有源；macOS 无需 Homebrew 或预装 Python。
 
 更换版本时先停止旧实例，使用新的 `--dir`；不支持自动数据库迁移或跨版本覆盖。较早的 musl 标签可能需要在 musl 宿主使用 `--musl-runtime system`，包内 musl 从 `musl-v0.1.0-2` 开始支持。参见[官网部署说明](artifacts/site/README.md)和[全部 Release](https://github.com/insightos-community/quick-start/releases)。
+
+## 安装重试与无需重新下载的卸载
+
+联网安装在下载完整安装包前检查端口。通过 SHA-256 校验的安装包会持久缓存，
+安装失败后可修复问题并使用原命令重试。Linux 缓存默认位于
+`${XDG_CACHE_HOME:-$HOME/.cache}/semantic/installers`，macOS 位于
+`${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers`；可用 `--cache-dir 绝对路径` 修改。
+重试仍可能获取小型版本清单，并重新校验缓存；损坏或下载未完成的文件不会直接用于安装。
+使用 `--package` 提供的离线包由安装器在修改实例前检查端口。
+
+端口冲突时请停止对应服务，或为新实例指定 `--http-port`、`--ws-port`、`--web-port`、
+`--runtime-port`；不会自动终止其他程序。已有实例重试时使用其原有端口。
+
+卸载前停止场景与 Robot Runtime，直接调用本地管理命令，不需要再次下载：
+
+```bash
+# 将路径替换为实际安装目录
+"$HOME/semantic-macos/bin/semanticctl" uninstall --dry-run
+"$HOME/semantic-macos/bin/semanticctl" uninstall
+```
+
+旧版或安装未完成时，也可仅下载小型入口脚本卸载：
+
+```bash
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --uninstall --dir "$HOME/semantic-macos"
+```
+
+该操作不会下载完整安装包。官网卸载示例会随平台选择更新目录。
+默认保留配置、数据和日志；只有显式 `--purge` 并确认后才删除整个实例。

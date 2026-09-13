@@ -26,13 +26,14 @@ const englishCopy = {
   intro:
     '<span class="hero-copy-line">A robotics application stack, installed with one command.</span><span class="hero-copy-line">From orchestration to simulation, bring your ideas to life.</span>',
   platformLabel: "Installation platform",
+  uninstallFallback: "For older or incomplete installations, fetch the small entry script to uninstall. It does not download the full archive:",
   tagLabel: "Release tag / default channel",
   tagHelp: "stable keeps the default Linux channel; enter a Release tag to pin a version. musl/macOS use GitHub Releases.",
   macosTitle: "Native macOS installation (Apple Silicon)",
   macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. No OSS mirror is available yet; downloads come from GitHub with checksum verification.",
   macosRuntime: "Bundles Python 3.13.15, NumPy 2.3.5, MuJoCo and robot dependencies. No Homebrew or host Python is required. Web requests auto and the Runtime uses configured CGL. This preview is not notarized; physical GPU rendering still needs testing.",
   macosUpgrade: "Stop the old instance before installing another tag into a new <code>--dir</code>, then reload the browser. The installer neither overwrites other versions nor migrates databases automatically; old configuration and data remain in the original directory.",
-  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3\">macos-v0.1.0-rc.3 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
+  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4\">macos-v0.1.0-rc.4 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
   terminal: "<span class=\"terminal-dot\"></span> Run on the target machine",
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
@@ -110,12 +111,12 @@ const englishCopy = {
     "Shortcuts use the InsightOS icon and open your local Web console. Without a desktop environment, omit <code>--desktop-shortcut</code>. If marked untrusted, select Allow Launching. Add the PATH shown after installation, then run <code>semanticctl welcome</code> to view addresses and the terminal-only password again.",
   faqUninstallTitle: "How do I uninstall? Will my data be deleted?",
   faqUninstall:
-    "Stop scenes and Robot Runtime first. By default, uninstall keeps configuration, data and logs. Review the plan with <code>--dry-run</code> and replace the directory with your absolute installation path.",
+    "Use the installed management command directly; no installer archive download is needed. Stop scenes and Robot Runtime first. The directory below follows the selected platform; replace it with your actual installation path. Configuration, data and logs are kept by default.",
   faqUninstallSafety:
     "New management tools also support <code>semanticctl uninstall</code>. If a terminal is using the instance directory, run <code>cd ~</code> there. Deleted working directories do not block uninstall; no manual kill is needed. Only explicit <code>--purge</code> with confirmation permanently deletes the entire instance. System packages are not removed.",
   faqTroubleTitle: "What should I check if installation fails?",
   faqTrouble:
-    "On Linux, check Python 3.10+; on macOS, check Apple Silicon and the OS version. Check disk space and networking, use <code>semanticctl doctor</code> and the instance <code>logs/</code>, or run the script with <code>--help</code>.",
+    "On Linux, check Python 3.10+; on macOS, check Apple Silicon and the OS version. Ports are checked before installation; choose available ports with <code>--http-port / --ws-port / --web-port / --runtime-port</code>. Verified archives are cached for retries; use <code>--cache-dir</code> to choose the cache location. Check disk space and networking, use <code>semanticctl doctor</code> and the instance <code>logs/</code>, or run the script with <code>--help</code>.",
   faqSiteTitle: "Is this a hosted robot console?",
   faqSite:
     "No. This is the Semantic introduction and installation site; it does not run your robot services. Your console, model keys and robot data belong to your own deployment. Configure access controls, network isolation and backups for production use.",
@@ -151,9 +152,16 @@ const videoError = document.getElementById("video-error");
 let toastTimer;
 const installPlatform = document.getElementById("install-platform");
 const installTag = document.getElementById("install-tag");
-const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.3" };
+const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.4" };
 function updateInstallCommand() {
   const target = installPlatform.value;
+  for (const button of document.querySelectorAll('[data-platform]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.platform === target));
+  }
+  const directory = target === 'macos' ? '$HOME/semantic-macos' : target === 'musl' ? '$HOME/semantic-musl' : '$HOME/.local/share/semantic';
+  document.getElementById('uninstall-local-command').textContent = `"${directory}/bin/semanticctl" uninstall --dry-run\n"${directory}/bin/semanticctl" uninstall`;
+  document.getElementById('uninstall-bootstrap-command').textContent = `curl -fsSL https://semantic.insightos.cn/install${currentLanguage === 'en' ? '-en' : ''}.sh | bash -s -- --uninstall --dir "${directory}"`;
+
   const tag = installTag.value.trim();
   const en = currentLanguage === "en";
   const patterns = {
@@ -182,6 +190,12 @@ function updateInstallCommand() {
   document.getElementById("install-architecture").textContent = target === "macos" ? "arm64" : "x86_64";
   document.querySelector('[data-i18n="downloadRegion"]').textContent = target === "glibc" && tag === "stable" && !en
     ? "默认 Linux 渠道 · 阿里云 OSS" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
+}
+for (const button of document.querySelectorAll('[data-platform]')) {
+  button.addEventListener('click', () => {
+    installPlatform.value = button.dataset.platform;
+    installPlatform.dispatchEvent(new Event('change'));
+  });
 }
 installPlatform.addEventListener("change", () => { installTag.value = platformDefaults[installPlatform.value]; updateInstallCommand(); });
 installTag.addEventListener("input", updateInstallCommand);

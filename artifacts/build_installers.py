@@ -14,11 +14,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Reject stale generated installers')
     args = parser.parse_args()
+    native_path = HERE/'macos/bootstrap.sh'
+    native_text = native_path.read_text()
+    prefix, remaining = native_text.split('# BEGIN GENERATED PREFLIGHT\n', 1)
+    _, suffix = remaining.split('# END GENERATED PREFLIGHT\n', 1)
+    native_expected = prefix+'# BEGIN GENERATED PREFLIGHT\n'+(HERE/'bootstrap_support.py').read_text()+'# END GENERATED PREFLIGHT\n'+suffix
+    if args.check and native_text != native_expected:
+        raise SystemExit('Native preflight is stale; run artifacts/build_installers.py')
+    if not args.check:
+        native_path.write_text(native_expected)
     canonical = HERE/'install.sh'
     text = canonical.read_text()
     before, remaining = text.split('# BEGIN GENERATED GITHUB HELPERS\n', 1)
     _, after = remaining.split('# END GENERATED GITHUB HELPERS\n', 1)
-    expected = before+'# BEGIN GENERATED GITHUB HELPERS\n'+(HERE/'github_bootstrap.py').read_text()+'# END GENERATED GITHUB HELPERS\n'+after
+    expected = before+'# BEGIN GENERATED GITHUB HELPERS\n'+(HERE/'bootstrap_support.py').read_text()+'\n'+(HERE/'github_bootstrap.py').read_text()+'# END GENERATED GITHUB HELPERS\n'+after
     before, remaining = expected.split('# BEGIN GENERATED PLATFORM ROUTER\n', 1)
     _, after = remaining.split('# END GENERATED PLATFORM ROUTER\n', 1)
     native = (HERE/'macos/bootstrap.sh').read_text().removeprefix('#!/bin/bash\n')

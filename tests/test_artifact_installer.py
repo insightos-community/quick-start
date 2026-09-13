@@ -209,7 +209,7 @@ class ArtifactInstallerTests(unittest.TestCase):
             http_port=18080, ws_port=18081, web_port=13000, runtime_port=18090,
             web_host=None, desktop='never', yes=True, install_system_deps=True)
         with patch.object(installer, 'verify_payload', return_value={'version': '0.5.0-dev.9'}), \
-             patch.object(installer, 'check_platform'), patch.object(installer, 'settings_form'), \
+             patch.object(installer, 'check_platform'), patch.object(installer, 'check_port'), patch.object(installer, 'settings_form'), \
              patch.object(installer, 'package_manager', return_value='apt-get'), \
              patch.object(installer, 'authorize_dependencies', side_effect=RuntimeError('auth stopped')) as auth, \
              patch.object(installer, 'Progress') as progress, \
@@ -228,7 +228,7 @@ class ArtifactInstallerTests(unittest.TestCase):
                 web_host=requested, desktop='never', yes=False)
             with self.subTest(requested=requested), \
                  patch.object(installer, 'verify_payload', return_value={'version': '0.5.0-dev.10'}), \
-                 patch.object(installer, 'check_platform'), patch.object(installer, 'settings_form') as form, \
+                 patch.object(installer, 'check_platform'), patch.object(installer, 'check_port'), patch.object(installer, 'settings_form') as form, \
                  patch.object(installer, 'confirm', side_effect=RuntimeError('cancel')):
                 with self.assertRaisesRegex(RuntimeError, 'cancel'):
                     installer.install(args)
@@ -243,11 +243,27 @@ class ArtifactInstallerTests(unittest.TestCase):
             http_port=18080, ws_port=18081, web_port=13000, runtime_port=18090,
             web_host=None, desktop='never', yes=False)
         with patch.object(installer, 'verify_payload', return_value={'version': '0.5.0-dev.9'}), \
-             patch.object(installer, 'check_platform'), patch.object(installer, 'settings_form') as form, \
+             patch.object(installer, 'check_platform'), patch.object(installer, 'check_port'), patch.object(installer, 'settings_form') as form, \
              patch.object(installer, 'confirm', side_effect=RuntimeError('cancel')):
             with self.assertRaisesRegex(RuntimeError, 'cancel'):
                 installer.install(args)
             self.assertIn(('Web', '127.0.0.1:13000', 'command'), form.call_args.args[1])
+
+    def test_busy_port_fails_before_installation_changes(self):
+        root = self.root/'new-instance'
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0)); listener.listen()
+            port = listener.getsockname()[1]
+            args = SimpleNamespace(payload=self.root/'payload', dir=str(root),
+                http_port=port, ws_port=18081, web_port=13000, runtime_port=18090,
+                web_host=None, desktop='never', yes=True, no_start=False)
+            with patch.object(installer, 'verify_payload', return_value={'version':'0.1.0-test'}), \
+                 patch.object(installer, 'check_platform'), \
+                 patch.object(installer, 'install_dependencies') as dependencies:
+                with self.assertRaisesRegex(RuntimeError, str(port)):
+                    installer.install(args)
+                dependencies.assert_not_called()
+                self.assertFalse(root.exists())
 
     def test_command_logs_start_before_execution_and_never_reads_stdin(self):
         log = self.root/'command.log'

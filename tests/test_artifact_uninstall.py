@@ -58,6 +58,12 @@ class UninstallTests(unittest.TestCase):
         embedded = script.split('# BEGIN EMBEDDED UNINSTALLER\n')[1].split('# END EMBEDDED UNINSTALLER')[0]
         self.assertEqual(embedded.strip(), (ROOT/'artifacts/runtime/uninstall.py').read_text().strip())
 
+    def test_release_selection_options_do_not_download_during_uninstall(self):
+        result = self.bootstrap('--source', 'github', '--tag', 'musl-v0.1.0-2', '--musl', '--yes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('Downloading', result.stderr)
+        self.assertFalse((self.root/'releases').exists())
+
     def test_default_removes_only_programs_and_preserves_data(self):
         result = self.bootstrap('--yes')
         self.assertEqual(result.returncode, 0, result.stderr)
