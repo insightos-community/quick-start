@@ -68,11 +68,20 @@ jobs:
         ref: b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1
         path: sources/AbilityFramework
         persist-credentials: false
+    - name: Identify AbilityFramework source
+      id: ability_source
+      run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      id: native_output
+      with:
+        path: sources/AbilityFramework/.output
+        key: macos15-xmake311-native-ability-${{ steps.ability_source.outputs.sha }}-release-tests-v1
     - uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a
       with:
         xmake-version: 3.1.1
         actions-cache-folder: .ci-tools/xmake
         project-path: sources/AbilityFramework
+      if: steps.native_output.outputs.cache-hit != 'true'
     - name: Restore native dependency cache
       id: dependencies
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -80,14 +89,16 @@ jobs:
         path: sources/AbilityFramework/build/.packages
         key: macos15-arm64-xmake311-deps-${{ hashFiles('sources/AbilityFramework/xmake.lua', 'sources/AbilityFramework/vendor/xmake/**')
           }}
+      if: steps.native_output.outputs.cache-hit != 'true'
     - name: Resolve native dependencies
       run: 'test "$(uname -m)" = arm64
 
         xmake f -y -p macosx -a arm64 -m release --fwk-static=n --enable-test=y --use-cpptrace=n
 
         '
+      if: steps.native_output.outputs.cache-hit != 'true'
     - name: Cache resolved dependencies before compiling application sources
-      if: steps.dependencies.outputs.cache-hit != 'true'
+      if: steps.native_output.outputs.cache-hit != 'true' && (steps.dependencies.outputs.cache-hit != 'true')
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: sources/AbilityFramework/build/.packages
@@ -104,6 +115,7 @@ jobs:
         otool -L build/macosx/arm64/release/AbilityFramework
 
         '
+      if: steps.native_output.outputs.cache-hit != 'true'
     - name: Archive executable and linkage report
       run: 'mkdir -p .output
 
@@ -112,6 +124,7 @@ jobs:
         tar -czf .output/AbilityFramework-macos-arm64-development.tar.gz -C build/macosx/arm64/release AbilityFramework
 
         '
+      if: steps.native_output.outputs.cache-hit != 'true'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: AbilityFramework-macos-arm64-development
@@ -205,7 +218,7 @@ jobs:
       run: ' .build-venv/bin/python artifacts/macos/smoke_installer.py --package "dist-macos/semantic-$INSTALLER_VERSION-macos-arm64.tar.gz"
         --root "$RUNNER_TEMP/Semantic Installer Smoke" --report dist-macos/validation.json
 
-        shasum -a 256 dist-macos/validation.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
+        shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
 
         '
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

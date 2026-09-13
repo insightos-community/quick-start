@@ -43,7 +43,7 @@ class MacInstallerTests(unittest.TestCase):
 
     def test_finder_metadata_does_not_hide_unlisted_program_files(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(installer.platform,'system',return_value='Darwin'):
-            root=Path(directory)
+            root=Path(directory).resolve()
             (root/'release.json').write_text('{"version":"0.1.0-rc.1"}')
             (root/'files.json').write_text(json.dumps({'release.json':installer.digest(root/'release.json')}))
             (root/'.DS_Store').write_bytes(b'Finder metadata')

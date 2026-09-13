@@ -46,6 +46,10 @@ def main(a):
         release=root/'releases'/state['version']
         metadata=json.loads((release/'release.json').read_text())
         robot=release/'robot-bundles'/metadata['bundle_name']/'python/venv/bin/python'
+        from build import native_report
+        linkage = native_report(root)
+        (a.report.parent/'installed-linkage.json').write_text(json.dumps(linkage, indent=2)+'\n')
+        report['checks'].append('Installed Mach-O libraries have arm64 support and no Homebrew/build-directory linkage')
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}
         run(robot,HERE/'smoke.py',env=env)
         run(robot, '-c', 'import ability_py, semantic_robot_sdk_core, semantic_robot_sdk_r1pro, semantic_robot_skill_sdk, r1pro_abilities', env=env)
