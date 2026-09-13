@@ -186,3 +186,21 @@ else:
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('No archive was downloaded', result.stderr)
         self.assertEqual(requests.count('/release.tar.gz'), 1)
+
+    def test_macos_incomplete_install_checks_ports_before_downloading(self):
+        _, tool, env = self.fake_macos()
+        tool('curl', '#!/bin/sh\necho UNEXPECTED_DOWNLOAD >&2\nexit 98\n')
+        root = self.root/'instance'; release = root/'releases/test'; python = release/'python/bin/python3.13'
+        python.parent.mkdir(parents=True)
+        python.write_text('#!/bin/sh\nexec '+shlex.quote(sys.executable)+' "$@"\n'); python.chmod(0o755)
+        shutil.copyfile(ROOT/'artifacts/runtime/uninstall.py', release/'uninstall.py')
+        (root/'.semantic-install-root').touch()
+        with socket.socket() as busy:
+            busy.bind(('127.0.0.1', 0)); busy.listen(); port = busy.getsockname()[1]
+            (root/'install.json').write_text(json.dumps(dict(version='test', ready=False,
+                http_port=8080, ws_port=8081, web_port=3000, runtime_port=port)))
+            result = subprocess.run(['bash', str(ROOT/'artifacts/macos/bootstrap.sh'), '--dir', str(root),
+                                     '--no-start', '--runtime-port', str(port)], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f'Port {port}', result.stderr)
+        self.assertNotIn('UNEXPECTED_DOWNLOAD', result.stderr)

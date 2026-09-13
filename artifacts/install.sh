@@ -160,9 +160,124 @@ for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
 done
 http_port=$((10#$http_port)); ws_port=$((10#$ws_port)); web_port=$((10#$web_port)); runtime_port=$((10#$runtime_port))
 [[ "$http_port" != "$ws_port" && "$http_port" != "$web_port" && "$http_port" != "$runtime_port" && "$ws_port" != "$web_port" && "$ws_port" != "$runtime_port" && "$web_port" != "$runtime_port" ]] || { echo 'Ports must be distinct' >&2; exit 2; }
+# Existing instances can use their bundled Python for identity-aware checks.
+preflight_done=0
+if [[ -z "$archive_path" && -f "$instance_dir/.semantic-install-root" ]]; then
+  for python in "$instance_dir"/releases/*/python/bin/python3.13; do
+    release="${python%/python/bin/python3.13}"
+    if [[ -x "$python" && -f "$release/uninstall.py" ]]; then
+      "$python" -I -B - "$release" "$instance_dir" ${options[@]+"${options[@]}"} <<'SEMANTIC_PREFLIGHT'
+# BEGIN GENERATED PREFLIGHT
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+"""Small pre-download checks and verified, persistent archive caching."""
+import argparse
+import fcntl
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import tempfile
+
+
+def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    parser.add_argument('--no-start', action='store_true')
+    parser.add_argument('--web-host')
+    parser.add_argument('--lan', action='store_true')
+    for name, port in [('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)]:
+        parser.add_argument('--'+name+'-port', type=int, default=port)
+    args, _ = parser.parse_known_args(arguments)
+    root = Path(args.dir).expanduser()
+    if not root.is_absolute() or root.is_symlink() or root.resolve() in (Path('/'), Path.home().resolve()):
+        raise ValueError('--dir must be an absolute instance path, not a symlink or home directory')
+    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
+        raise ValueError('Installation directory is not empty or managed; choose another --dir')
+    ports = {name: getattr(args, name+'_port') for name in ('http', 'ws', 'web', 'runtime')}
+    if len(set(ports.values())) != 4 or any(not 1024 <= port <= 65535 for port in ports.values()):
+        raise ValueError('Ports must be distinct numbers between 1024 and 65535')
+    state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
+    if state and any(state.get(name+'_port') != port for name, port in ports.items()):
+        raise ValueError('Existing instance ports differ; use its original options or a new --dir')
+    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
+    ipaddress.IPv4Address(host)
+    owned = managed(root) if managed and state else {}
+    records = json.loads((root/'run/services.json').read_text()) if (root/'run/services.json').is_file() else {}
+    for name, port in ports.items():
+        if name == 'runtime' and state.get('ready'):
+            continue  # A completed install does not repeat Runtime setup.
+        if name != 'runtime' and args.no_start:
+            continue
+        service = 'web' if name == 'web' else 'server'
+        if name != 'runtime' and records.get(service, {}).get('pid') in owned:
+            continue  # Already-running services belonging to this exact instance.
+        address = host if name == 'web' else '127.0.0.1'
+        with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind((address, port))
+            except OSError as error:
+                raise RuntimeError(f'Port {port} ({name}, {address}) is unavailable; stop its service or use --{name}-port PORT. No archive was downloaded.') from error
+
+
+def cached_archive(url, expected, directory, download, status=print):
+    if not re.fullmatch(r'[0-9a-f]{64}', expected or ''):
+        raise ValueError('A valid archive SHA256 is required before downloading')
+    directory = Path(directory).expanduser()
+    if not directory.is_absolute() or any(p.is_symlink() for p in [directory, *directory.parents]):
+        raise ValueError('Cache directory must be absolute and must not contain symlinks')
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if directory.stat().st_uid != os.geteuid() or directory.stat().st_mode & 0o022:
+        raise ValueError('Cache directory must be owned by you and not writable by other users')
+    target = directory/(expected+'.tar.gz')
+    descriptor = os.open(directory/(expected+'.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'a') as lock:
+        if os.fstat(lock.fileno()).st_nlink != 1 or os.fstat(lock.fileno()).st_uid != os.geteuid():
+            raise ValueError('Invalid cache lock ownership or hard link')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if target.is_symlink() or (target.exists() and (not target.is_file() or target.stat().st_nlink != 1)):
+            raise ValueError('Invalid cached archive path')
+        def checksum(path):
+            result = hashlib.sha256()
+            with path.open('rb') as stream:
+                while block := stream.read(1024*1024):
+                    result.update(block)
+            return result.hexdigest()
+        if target.is_file() and checksum(target) == expected:
+            status('[OK] Using verified cached archive: '+str(target))
+            return target
+        if target.exists():
+            status('[>] Cached archive checksum differs; downloading a verified replacement')
+        descriptor, path = tempfile.mkstemp(prefix='.download-', dir=directory)
+        os.close(descriptor)
+        staged = Path(path)
+        try:
+            download(url, staged, 8*1024**3)
+            if checksum(staged) != expected:
+                raise ValueError('Archive SHA256 mismatch; download was not cached')
+            staged.replace(target)
+        finally:
+            staged.unlink(missing_ok=True)
+        status('[OK] Archive cached for retries: '+str(target))
+        return target
+# END GENERATED PREFLIGHT
+import sys
+sys.path.insert(0, sys.argv[1])
+from uninstall import uninstall_managed
+bootstrap_preflight(['--dir', sys.argv[2], *sys.argv[3:]], uninstall_managed, default_host='127.0.0.1')
+SEMANTIC_PREFLIGHT
+      preflight_done=1
+      break
+    fi
+  done
+fi
 # System lsof supplies an early check without requiring a preinstalled Python.
-# Existing instances are checked by the manager, which can identify their own services.
-if [[ -z "$archive_path" && ! -f "$instance_dir/.semantic-install-root" ]]; then
+# Use lsof when no installed Python is available, including early failed installs.
+if [[ -z "$archive_path" && "$preflight_done" == 0 ]]; then
   command -v lsof >/dev/null || { echo 'System lsof is required for the port preflight.' >&2; exit 2; }
   for name in http ws web runtime; do
     [[ "$no_start" == 0 || "$name" == runtime ]] || continue
@@ -709,7 +824,7 @@ import socket
 import tempfile
 
 
-def bootstrap_preflight(arguments, managed=None):
+def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     parser.add_argument('--no-start', action='store_true')
@@ -729,7 +844,7 @@ def bootstrap_preflight(arguments, managed=None):
     state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
     if state and any(state.get(name+'_port') != port for name, port in ports.items()):
         raise ValueError('Existing instance ports differ; use its original options or a new --dir')
-    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', '0.0.0.0')
+    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
     ipaddress.IPv4Address(host)
     owned = managed(root) if managed and state else {}
     records = json.loads((root/'run/services.json').read_text()) if (root/'run/services.json').is_file() else {}

@@ -13,7 +13,7 @@ import socket
 import tempfile
 
 
-def bootstrap_preflight(arguments, managed=None):
+def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     parser.add_argument('--no-start', action='store_true')
@@ -33,7 +33,7 @@ def bootstrap_preflight(arguments, managed=None):
     state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
     if state and any(state.get(name+'_port') != port for name, port in ports.items()):
         raise ValueError('Existing instance ports differ; use its original options or a new --dir')
-    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', '0.0.0.0')
+    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
     ipaddress.IPv4Address(host)
     owned = managed(root) if managed and state else {}
     records = json.loads((root/'run/services.json').read_text()) if (root/'run/services.json').is_file() else {}
