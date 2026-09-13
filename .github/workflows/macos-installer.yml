@@ -32,25 +32,27 @@ jobs:
         ref: 6d524fe4dbdfceb2029f7468619723274465c976
         path: sources/Semantic-Framework
         persist-credentials: false
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Identify Framework source
+      id: framework_source
+      run: echo "sha=$(git -C sources/Semantic-Framework rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      id: native
       with:
-        repository: insightos-community/semantic-deployment
-        ref: 5885144c250cdf7cb3aa624a94f51565b591c99a
-        path: sources/semantic-deployment
-        persist-credentials: false
+        path: framework-native.tar.gz
+        key: macos15-go1258-framework-${{ steps.framework_source.outputs.sha }}-gateway-${{ hashFiles('artifacts/gateway/main.go')
+          }}-v1
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
       with:
         go-version: 1.25.8
         cache: true
-        cache-dependency-path: 'sources/Semantic-Framework/go.sum
-
-          sources/semantic-deployment/go.sum'
+        cache-dependency-path: sources/Semantic-Framework/go.sum
+      if: steps.native.outputs.cache-hit != 'true'
     - name: Build and test native applications
       run: "mkdir -p native/bin\ncd sources/Semantic-Framework\nfor name in semantic-server semantic-pilot semantic; do\n\
         \  CGO_ENABLED=1 go build -p 2 -trimpath -o \"../../native/bin/$name\" \"./cmd/$name\"\ndone\ngo test -p 2 ./... -count=1\
-        \ -timeout=10m\ncd ../semantic-deployment\nCGO_ENABLED=0 go build -trimpath -o ../../native/bin/semantic-robot-instance\
-        \ ./cmd/semantic-robot-instance\ngo test ./... -count=1 -timeout=5m\ncd ../..\nCGO_ENABLED=0 go build -trimpath -o\
-        \ native/bin/semantic-web-gateway artifacts/gateway/main.go\ntar -czf framework-native.tar.gz -C native/bin .\n"
+        \ -timeout=10m\ncd ../..\nCGO_ENABLED=0 go build -trimpath -o native/bin/semantic-web-gateway artifacts/gateway/main.go\n\
+        tar -czf framework-native.tar.gz -C native/bin .\n"
+      if: steps.native.outputs.cache-hit != 'true'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: framework-native
@@ -125,6 +127,7 @@ jobs:
     needs:
     - framework
     - ability
+    - deployment
     timeout-minutes: 60
     steps:
     - *id001
@@ -153,7 +156,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 5885144c250cdf7cb3aa624a94f51565b591c99a
+        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -164,8 +167,14 @@ jobs:
       with:
         name: AbilityFramework-macos-arm64-development
         path: native-archives
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: deployment-native
+        path: native-archives
     - name: Prepare native executables and build tools
       run: 'mkdir -p native/bin
+
+        tar -xzf native-archives/deployment-native.tar.gz -C native/bin
 
         tar -xzf native-archives/framework-native.tar.gz -C native/bin
 
@@ -254,3 +263,33 @@ jobs:
         gh release edit "$RELEASE_TAG" --draft=false
 
         '
+  deployment:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/semantic-deployment
+        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
+        path: sources/semantic-deployment
+        persist-credentials: false
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version: 1.25.8
+        cache-dependency-path: sources/semantic-deployment/go.sum
+    - name: Build and test native deployment launcher
+      working-directory: sources/semantic-deployment
+      run: 'go test ./... -count=1 -timeout=5m
+
+        mkdir -p dist
+
+        CGO_ENABLED=0 go build -trimpath -o dist/semantic-robot-instance ./cmd/semantic-robot-instance
+
+        tar -czf deployment-native.tar.gz -C dist semantic-robot-instance
+
+        '
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: deployment-native
+        path: sources/semantic-deployment/deployment-native.tar.gz
+        if-no-files-found: error
