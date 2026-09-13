@@ -43,6 +43,9 @@ if sys.version_info < (3, 10):
 
 """Offline uninstaller; mirrored into install.sh so old releases need no download."""
 import argparse
+import ctypes
+import platform
+import subprocess
 import fcntl
 import hashlib
 import json
@@ -76,8 +79,7 @@ def uninstall_root(value):
     if not isinstance(state, dict) or not isinstance(state.get('version'), str) or not state['version']:
         raise ValueError('Invalid installation state; uninstall refused')
     # Do not cross bind mounts or filesystem mounts, including same-device bind mounts.
-    for line in Path('/proc/self/mountinfo').read_text().splitlines():
-        mount = line.split()[4]
+    for mount in mounted_paths():
         for escaped, char in ((r'\040', ' '), (r'\011', '\t'), (r'\012', '\n'), (r'\134', '\\')):
             mount = mount.replace(escaped, char)
         if Path(mount) == root or root in Path(mount).parents:
@@ -100,6 +102,8 @@ def uninstall_root(value):
 
 
 def uninstall_identity(pid):
+    if platform.system() == 'Darwin':
+        return mac_process(pid)[0]
     try:
         fields = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()
         return None if fields[0] == 'Z' else fields[19]
@@ -121,7 +125,7 @@ def uninstall_managed(root):
             raise ValueError('Incomplete managed process identity record')
         if uninstall_identity(pid) != ticks:
             continue  # Stale PID records are never signalled.
-        executable = Path(f'/proc/{pid}/exe').resolve(strict=True)
+        executable = Path(mac_process(pid)[1]).resolve(strict=True) if platform.system() == 'Darwin' else Path(f'/proc/{pid}/exe').resolve(strict=True)
         expected = 'semantic-server' if name == 'server' else 'semantic-web-gateway'
         if executable.name != expected or root/'releases' not in executable.parents:
             raise ValueError('Managed PID does not match the instance executable; refusing to stop it')
@@ -130,6 +134,8 @@ def uninstall_managed(root):
 
 
 def uninstall_processes(root, allowed=()):
+    if platform.system() == 'Darwin':
+        return mac_processes(root, allowed)
     # Ignore this CLI and its invoking shell/terminal, not arbitrary processes.
     ignored = set()
     pid = os.getpid()
@@ -289,6 +295,62 @@ def uninstall_entry(argv):
         with open(logfile, 'a') as f:
             traceback.print_exc(file=f)
         raise
+
+
+def mounted_paths():
+    if platform.system() != 'Darwin':
+        return [line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+    output = subprocess.check_output(['/sbin/mount'], text=True, timeout=10)
+    return [line.split(' on ', 1)[1].rsplit(' (', 1)[0] for line in output.splitlines() if ' on ' in line]
+
+
+class MacProcessInfo(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint32) for name in ('flags', 'status', 'xstatus', 'pid', 'ppid',
+                'uid', 'gid', 'ruid', 'rgid', 'svuid', 'svgid', 'reserved')]
+    _fields_ += [('comm', ctypes.c_char * 16), ('name', ctypes.c_char * 32)]
+    _fields_ += [(name, ctypes.c_uint32) for name in ('nfiles', 'pgid', 'jobc', 'tdev', 'tpgid', 'nice')]
+    _fields_ += [('start_sec', ctypes.c_uint64), ('start_usec', ctypes.c_uint64)]
+
+
+def mac_process(pid):
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    info = MacProcessInfo()
+    size = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size == 0:
+        # ESRCH is normal for an exited child; inaccessible live processes are not.
+        if ctypes.get_errno() in (0, 3):
+            return None, ''
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process identity')
+    if size != ctypes.sizeof(info) or info.pid != pid:
+        raise RuntimeError('Unexpected macOS process information ABI')
+    if info.status == 5:
+        return None, ''
+    path = ctypes.create_string_buffer(4096)
+    if lib.proc_pidpath(pid, path, len(path)) <= 0:
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process executable')
+    return f'{info.start_sec}:{info.start_usec}', os.fsdecode(path.value)
+
+
+def mac_processes(root, allowed):
+    # lsof inspects executable mappings, working directories and open files.
+    # Recursive lookup covers Python workers whose executable lives elsewhere.
+    command = ['/usr/sbin/lsof', '-nP', '-Fpcn', '+D', str(root)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    if result.returncode not in (0, 1) or result.stderr.strip():
+        raise RuntimeError('Cannot inspect open installation files: ' + result.stderr.strip())
+    rows = {}
+    pid = None
+    for line in result.stdout.splitlines():
+        if line.startswith('p'):
+            pid = int(line[1:])
+            rows.setdefault(pid, {'pid': pid, 'command': '', 'reasons': []})
+        elif pid is not None and line.startswith('c'):
+            rows[pid]['command'] = line[1:]
+        elif pid is not None and line.startswith('n'):
+            rows[pid]['reasons'].append('Open file: '+line[1:])
+    return [row for pid, row in sorted(rows.items()) if pid not in {*allowed, os.getpid()} and row['reasons']]
 # END EMBEDDED UNINSTALLER
 arguments = sys.argv[1:]
 if arguments and arguments[0] == 'uninstall':
@@ -713,7 +775,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            raise ValueError('Release payload must not contain symlinks')\n"
             '        if not target.is_file() or digest(target) != checksum:\n'
             "            raise ValueError('File verification failed: ' + name)\n"
-            "    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()}\n"
+            '    # Finder may add view metadata after the verified archive is extracted.\n'
+            "    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()\n"
+            "              and not (platform.system() == 'Darwin' and p.name == '.DS_Store' and not p.is_symlink())}\n"
             "    if actual != set(records) | {'files.json'}:\n"
             "        raise ValueError('Release payload contains files missing from the checksum manifest')\n"
             "    return load(payload/'release.json')\n"
@@ -831,8 +895,13 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        env.pop(key, None)\n'
             "    env.update(PATH=str(release/'bin') + os.pathsep + env.get('PATH', ''),\n"
             "               UV_PYTHON_INSTALL_DIR=str(root/'python'),\n"
-            "               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1', SEMANTIC_MUJOCO_GL='egl',\n"
-            "               MUJOCO_GL='egl')\n"
+            "               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1',\n"
+            "               SEMANTIC_MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl',\n"
+            "               MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl')\n"
+            "    if platform.system() == 'Darwin':\n"
+            "        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],\n"
+            "                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',\n"
+            "                   UV_OFFLINE='1', PYTHONNOUSERSITE='1')\n"
             "    if (release/'musl').is_dir():\n"
             "        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],\n"
             "                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',\n"
@@ -886,6 +955,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '\n'
             'def process_identity(pid):\n'
+            "    if platform.system() == 'Darwin':\n"
+            '        from uninstall import uninstall_identity\n'
+            '        return uninstall_identity(pid)\n'
             '    try:\n'
             "        text = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()\n"
             "        return None if text[0] == 'Z' else text[19]\n"
@@ -1122,6 +1194,13 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '\n'
             'def check_platform(manifest, musl=False, musl_runtime=None):\n'
+            "    if manifest.get('platform') == 'macos-arm64':\n"
+            "        if musl or platform.system() != 'Darwin' or platform.machine() != 'arm64':\n"
+            "            raise RuntimeError('This package requires native Apple Silicon macOS (without --musl)')\n"
+            "        minimum = tuple(map(int, manifest['minimum_macos'].split('.')))\n"
+            "        if tuple(map(int, platform.mac_ver()[0].split('.'))) < minimum:\n"
+            "            raise RuntimeError('This package requires macOS ' + manifest['minimum_macos'] + ' or newer')\n"
+            '        return\n'
             "    if platform.system() != 'Linux' or platform.machine() != 'x86_64':\n"
             "        raise RuntimeError('This artifact supports Linux x86_64 only')\n"
             "    variant = manifest.get('libc') == 'musl'\n"
@@ -1162,6 +1241,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    root = raw.resolve()\n'
             "    if manifest.get('libc') == 'musl' and ':' in str(root):\n"
             "        raise ValueError('The musl install path must not contain a colon (library search separator)')\n"
+            '    if payload in root.parents:\n'
+            "        raise ValueError('The installation directory must be outside the extracted package')\n"
             "    if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):\n"
             "        raise ValueError('Refusing root, home or paths containing control characters as the installation directory')\n"
             "    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():\n"
@@ -1174,7 +1255,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)\n"
             "    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:\n"
             "        raise ValueError('Changing musl runtime requires a new --dir')\n"
-            "    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))\n"
+            "    default_host = '127.0.0.1' if manifest.get('platform') == 'macos-arm64' else '0.0.0.0'\n"
+            "    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else default_host))\n"
             '    if a.web_host and old:\n'
             "        if host != old.get('web_host', '127.0.0.1'):\n"
             "            raise ValueError('For existing instances, use --configure-existing --lan/--web-host to change the listen address')\n"
@@ -1194,22 +1276,22 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        log = root/\'logs\'/f\'install-{time.strftime("%Y%m%d-%H%M%S")}.log\'\n'
             '        log.touch(mode=0o600)\n'
             '        INSTALL_LOG = log\n'
-            '        if a.install_system_deps:\n'
+            "        if a.install_system_deps and platform.system() != 'Darwin':\n"
             '            package_manager()  # Reject unsupported systems before prompting for privilege.\n'
             '            authorize_dependencies(log)\n'
             '        progress = PROGRESS = Progress(tasks)\n'
             '        progress.log_path = str(log)\n'
             '        progress.next(tasks[0])\n'
-            '        if a.install_system_deps:\n'
+            "        if a.install_system_deps and platform.system() != 'Darwin':\n"
             "            install_dependencies(log, musl=manifest.get('libc') == 'musl')\n"
             '        missing = []\n'
-            "        if not shutil.which('zstd'):\n"
+            "        if platform.system() != 'Darwin' and not shutil.which('zstd'):\n"
             "            missing.append('zstd')\n"
             "        if manifest.get('libc') == 'musl':\n"
             "            tar = shutil.which('tar')\n"
             "            if not tar or '--zstd' not in subprocess.run([tar, '--help'], capture_output=True, text=True).stdout:\n"
             "                missing.append('GNU tar (--zstd)')\n"
-            "        for library in (() if manifest.get('libc') == 'musl' else SYSTEM_LIBRARIES):\n"
+            "        for library in (() if manifest.get('libc') == 'musl' or platform.system() == 'Darwin' else SYSTEM_LIBRARIES):\n"
             '            try:\n'
             '                ctypes.CDLL(library)\n'
             '            except OSError:\n'
@@ -1247,7 +1329,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            venv = bundle/'python/venv'\n"
             "            uv = release/'bin/uv'\n"
             "            run([uv, 'venv', '--allow-existing', '--python',\n"
-            "                 musl_python(root, release) if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)\n"
+            "                 musl_python(root, release) if manifest.get('libc') == 'musl' else\n"
+            "                 release/'python/bin/python3.13' if platform.system() == 'Darwin' else manifest['robot_python'], venv], log, env)\n"
             "            run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',\n"
             "                 *sorted((bundle/'wheels').glob('*.whl'))], log, env)\n"
             "            if manifest.get('libc') == 'musl':\n"
@@ -1321,7 +1404,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    launcher = root/'bin/semanticctl'\n"
             '    if launcher.is_symlink() or (launcher.exists() and launcher.stat().st_nlink != 1):\n'
             "        raise ValueError('Unsafe management launcher links')\n"
-            "    launcher.write_text('#!/bin/sh\\nexec python3 -B '+shlex.quote(str(manager/'installer.py'))+\n"
+            "    python_command = shlex.quote(str(root/'current/python/bin/python3.13')) if platform.system() == 'Darwin' else 'python3'\n"
+            "    launcher.write_text('#!/bin/sh\\nexec '+python_command+' -B '+shlex.quote(str(manager/'installer.py'))+\n"
             '                        \' control --root \'+shlex.quote(str(root))+\' "$@"\\n\')\n'
             '    launcher.chmod(0o755)\n'
             '\n'
@@ -1722,6 +1806,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '\n'
             "def desktop_shortcuts(root, state, mode='auto'):\n"
+            "    if sys.platform == 'darwin':\n"
+            "        return 'macOS: use bin/semanticctl to manage services and open the URL above (desktop shortcut skipped)'\n"
             "    if mode == 'never':\n"
             "        return 'Desktop shortcuts skipped'\n"
             '    home = Path.home().resolve()\n'
@@ -1849,6 +1935,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '"""Offline uninstaller; mirrored into install.sh so old releases need no download."""\n'
             'import argparse\n'
+            'import ctypes\n'
+            'import platform\n'
+            'import subprocess\n'
             'import fcntl\n'
             'import hashlib\n'
             'import json\n'
@@ -1882,8 +1971,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    if not isinstance(state, dict) or not isinstance(state.get('version'), str) or not state['version']:\n"
             "        raise ValueError('Invalid installation state; uninstall refused')\n"
             '    # Do not cross bind mounts or filesystem mounts, including same-device bind mounts.\n'
-            "    for line in Path('/proc/self/mountinfo').read_text().splitlines():\n"
-            '        mount = line.split()[4]\n'
+            '    for mount in mounted_paths():\n'
             "        for escaped, char in ((r'\\040', ' '), (r'\\011', '\\t'), (r'\\012', '\\n'), (r'\\134', '\\\\')):\n"
             '            mount = mount.replace(escaped, char)\n'
             '        if Path(mount) == root or root in Path(mount).parents:\n'
@@ -1906,6 +1994,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '\n'
             'def uninstall_identity(pid):\n'
+            "    if platform.system() == 'Darwin':\n"
+            '        return mac_process(pid)[0]\n'
             '    try:\n'
             "        fields = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()\n"
             "        return None if fields[0] == 'Z' else fields[19]\n"
@@ -1927,7 +2017,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            raise ValueError('Incomplete managed process identity record')\n"
             '        if uninstall_identity(pid) != ticks:\n'
             '            continue  # Stale PID records are never signalled.\n'
-            "        executable = Path(f'/proc/{pid}/exe').resolve(strict=True)\n"
+            "        executable = Path(mac_process(pid)[1]).resolve(strict=True) if platform.system() == 'Darwin' else Path(f'/proc/{pid}/exe').resolve(strict=True)\n"
             "        expected = 'semantic-server' if name == 'server' else 'semantic-web-gateway'\n"
             "        if executable.name != expected or root/'releases' not in executable.parents:\n"
             "            raise ValueError('Managed PID does not match the instance executable; refusing to stop it')\n"
@@ -1936,6 +2026,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             '\n'
             'def uninstall_processes(root, allowed=()):\n'
+            "    if platform.system() == 'Darwin':\n"
+            '        return mac_processes(root, allowed)\n'
             '    # Ignore this CLI and its invoking shell/terminal, not arbitrary processes.\n'
             '    ignored = set()\n'
             '    pid = os.getpid()\n'
@@ -2095,6 +2187,62 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        with open(logfile, 'a') as f:\n"
             '            traceback.print_exc(file=f)\n'
             '        raise\n'
+            '\n'
+            '\n'
+            'def mounted_paths():\n'
+            "    if platform.system() != 'Darwin':\n"
+            "        return [line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()]\n"
+            "    output = subprocess.check_output(['/sbin/mount'], text=True, timeout=10)\n"
+            "    return [line.split(' on ', 1)[1].rsplit(' (', 1)[0] for line in output.splitlines() if ' on ' in line]\n"
+            '\n'
+            '\n'
+            'class MacProcessInfo(ctypes.Structure):\n'
+            "    _fields_ = [(name, ctypes.c_uint32) for name in ('flags', 'status', 'xstatus', 'pid', 'ppid',\n"
+            "                'uid', 'gid', 'ruid', 'rgid', 'svuid', 'svgid', 'reserved')]\n"
+            "    _fields_ += [('comm', ctypes.c_char * 16), ('name', ctypes.c_char * 32)]\n"
+            "    _fields_ += [(name, ctypes.c_uint32) for name in ('nfiles', 'pgid', 'jobc', 'tdev', 'tpgid', 'nice')]\n"
+            "    _fields_ += [('start_sec', ctypes.c_uint64), ('start_usec', ctypes.c_uint64)]\n"
+            '\n'
+            '\n'
+            'def mac_process(pid):\n'
+            "    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)\n"
+            '    lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]\n'
+            '    lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]\n'
+            '    info = MacProcessInfo()\n'
+            '    size = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))\n'
+            '    if size == 0:\n'
+            '        # ESRCH is normal for an exited child; inaccessible live processes are not.\n'
+            '        if ctypes.get_errno() in (0, 3):\n'
+            "            return None, ''\n"
+            "        raise OSError(ctypes.get_errno(), 'Cannot inspect process identity')\n"
+            '    if size != ctypes.sizeof(info) or info.pid != pid:\n'
+            "        raise RuntimeError('Unexpected macOS process information ABI')\n"
+            '    if info.status == 5:\n'
+            "        return None, ''\n"
+            '    path = ctypes.create_string_buffer(4096)\n'
+            '    if lib.proc_pidpath(pid, path, len(path)) <= 0:\n'
+            "        raise OSError(ctypes.get_errno(), 'Cannot inspect process executable')\n"
+            "    return f'{info.start_sec}:{info.start_usec}', os.fsdecode(path.value)\n"
+            '\n'
+            '\n'
+            'def mac_processes(root, allowed):\n'
+            '    # lsof inspects executable mappings, working directories and open files.\n'
+            '    # Recursive lookup covers Python workers whose executable lives elsewhere.\n'
+            "    command = ['/usr/sbin/lsof', '-nP', '-Fpcn', '+D', str(root)]\n"
+            '    result = subprocess.run(command, capture_output=True, text=True, timeout=60)\n'
+            '    if result.returncode not in (0, 1) or result.stderr.strip():\n'
+            "        raise RuntimeError('Cannot inspect open installation files: ' + result.stderr.strip())\n"
+            '    rows = {}\n'
+            '    pid = None\n'
+            '    for line in result.stdout.splitlines():\n'
+            "        if line.startswith('p'):\n"
+            '            pid = int(line[1:])\n'
+            "            rows.setdefault(pid, {'pid': pid, 'command': '', 'reasons': []})\n"
+            "        elif pid is not None and line.startswith('c'):\n"
+            "            rows[pid]['command'] = line[1:]\n"
+            "        elif pid is not None and line.startswith('n'):\n"
+            "            rows[pid]['reasons'].append('Open file: '+line[1:])\n"
+            "    return [row for pid, row in sorted(rows.items()) if pid not in {*allowed, os.getpid()} and row['reasons']]\n"
         ),
     }
     manager = work/'english-manager'

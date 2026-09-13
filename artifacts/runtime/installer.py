@@ -81,7 +81,9 @@ def verify_payload(payload):
             raise ValueError('发布包不能包含符号链接')
         if not target.is_file() or digest(target) != checksum:
             raise ValueError('文件校验失败: ' + name)
-    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()}
+    # Finder may add view metadata after the verified archive is extracted.
+    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()
+              and not (platform.system() == 'Darwin' and p.name == '.DS_Store' and not p.is_symlink())}
     if actual != set(records) | {'files.json'}:
         raise ValueError('发布包存在未列入校验的文件')
     return load(payload/'release.json')
@@ -199,8 +201,13 @@ def environment(root, release):
         env.pop(key, None)
     env.update(PATH=str(release/'bin') + os.pathsep + env.get('PATH', ''),
                UV_PYTHON_INSTALL_DIR=str(root/'python'), UV_NO_CONFIG='1',
-               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1', SEMANTIC_MUJOCO_GL='egl',
-               MUJOCO_GL='egl')
+               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1',
+               SEMANTIC_MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl',
+               MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl')
+    if platform.system() == 'Darwin':
+        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],
+                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',
+                   UV_OFFLINE='1', PYTHONNOUSERSITE='1')
     if (release/'musl').is_dir():
         env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],
                    UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',
@@ -254,6 +261,9 @@ def check_port(port, host='127.0.0.1'):
 
 
 def process_identity(pid):
+    if platform.system() == 'Darwin':
+        from uninstall import uninstall_identity
+        return uninstall_identity(pid)
     try:
         text = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()
         return None if text[0] == 'Z' else text[19]
@@ -490,6 +500,13 @@ def install_dependencies(log, musl=False):
 
 
 def check_platform(manifest, musl=False, musl_runtime=None):
+    if manifest.get('platform') == 'macos-arm64':
+        if musl or platform.system() != 'Darwin' or platform.machine() != 'arm64':
+            raise RuntimeError('This package requires native Apple Silicon macOS (without --musl)')
+        minimum = tuple(map(int, manifest['minimum_macos'].split('.')))
+        if tuple(map(int, platform.mac_ver()[0].split('.'))) < minimum:
+            raise RuntimeError('This package requires macOS ' + manifest['minimum_macos'] + ' or newer')
+        return
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         raise RuntimeError('本制品仅支持 Linux x86_64')
     variant = manifest.get('libc') == 'musl'
@@ -530,6 +547,8 @@ def install(a):
     root = raw.resolve()
     if manifest.get('libc') == 'musl' and ':' in str(root):
         raise ValueError('The musl install path must not contain a colon (library search separator)')
+    if payload in root.parents:
+        raise ValueError('The installation directory must be outside the extracted package')
     if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):
         raise ValueError('拒绝使用根目录、用户主目录或含控制字符的目录作为安装目录')
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
@@ -542,7 +561,8 @@ def install(a):
     check_platform(manifest, getattr(a, 'musl', False), runtime_mode)
     if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:
         raise ValueError('Changing musl runtime requires a new --dir')
-    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else '0.0.0.0'))
+    default_host = '127.0.0.1' if manifest.get('platform') == 'macos-arm64' else '0.0.0.0'
+    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else default_host))
     if a.web_host and old:
         if host != old.get('web_host', '127.0.0.1'):
             raise ValueError('已有实例请使用 --configure-existing --lan/--web-host 修改监听地址')
@@ -562,22 +582,22 @@ def install(a):
         log = root/'logs'/f'install-{time.strftime("%Y%m%d-%H%M%S")}.log'
         log.touch(mode=0o600)
         INSTALL_LOG = log
-        if a.install_system_deps:
+        if a.install_system_deps and platform.system() != 'Darwin':
             package_manager()  # Reject unsupported systems before prompting for privilege.
             authorize_dependencies(log)
         progress = PROGRESS = Progress(tasks)
         progress.log_path = str(log)
         progress.next(tasks[0])
-        if a.install_system_deps:
+        if a.install_system_deps and platform.system() != 'Darwin':
             install_dependencies(log, musl=manifest.get('libc') == 'musl')
         missing = []
-        if not shutil.which('zstd'):
+        if platform.system() != 'Darwin' and not shutil.which('zstd'):
             missing.append('zstd')
         if manifest.get('libc') == 'musl':
             tar = shutil.which('tar')
             if not tar or '--zstd' not in subprocess.run([tar, '--help'], capture_output=True, text=True).stdout:
                 missing.append('GNU tar (--zstd)')
-        for library in (() if manifest.get('libc') == 'musl' else SYSTEM_LIBRARIES):
+        for library in (() if manifest.get('libc') == 'musl' or platform.system() == 'Darwin' else SYSTEM_LIBRARIES):
             try:
                 ctypes.CDLL(library)
             except OSError:
@@ -615,7 +635,8 @@ def install(a):
             venv = bundle/'python/venv'
             uv = release/'bin/uv'
             run([uv, 'venv', '--allow-existing', '--python',
-                 musl_python(root, release) if manifest.get('libc') == 'musl' else manifest['robot_python'], venv], log, env)
+                 musl_python(root, release) if manifest.get('libc') == 'musl' else
+                 release/'python/bin/python3.13' if platform.system() == 'Darwin' else manifest['robot_python'], venv], log, env)
             run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',
                  *sorted((bundle/'wheels').glob('*.whl'))], log, env)
             if manifest.get('libc') == 'musl':
@@ -689,7 +710,8 @@ def install_manager(root, payload):
     launcher = root/'bin/semanticctl'
     if launcher.is_symlink() or (launcher.exists() and launcher.stat().st_nlink != 1):
         raise ValueError('管理入口链接异常')
-    launcher.write_text('#!/bin/sh\nexec python3 -B '+shlex.quote(str(manager/'installer.py'))+
+    python_command = shlex.quote(str(root/'current/python/bin/python3.13')) if platform.system() == 'Darwin' else 'python3'
+    launcher.write_text('#!/bin/sh\nexec '+python_command+' -B '+shlex.quote(str(manager/'installer.py'))+
                         ' control --root '+shlex.quote(str(root))+' "$@"\n')
     launcher.chmod(0o755)
 

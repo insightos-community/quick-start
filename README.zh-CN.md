@@ -3,7 +3,7 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 
-**macOS Apple Silicon 原生适配已启动**，见[开发验证与待完成工作](artifacts/macos/README.md)。当前公开安装器仍仅支持 Linux。
+另提供 **macOS Apple Silicon / macOS 15.5+ 原生安装包预览版**，见[安装方法与验证范围](#macos-原生安装包apple-silicon-预览版)。真机图形渲染仍待验收。
 > R1 Pro 旧业务模型现已通过清单锁定的资产仓库提供 Git LFS 下载。第三方来源声明见[发布范围](PUBLICATION.md)。组件与整包通过 GitHub Releases 发布，下载时保留第三方来源和许可声明。
 
 🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 13 个组件仓库，本身不是 Server。
@@ -159,3 +159,25 @@ TUI 中 `e` 配置、Enter 执行步骤、`L` 查看服务日志、`x` 停止托
 ## 许可证
 
 Copyright 2026 InsightOS。自有代码采用 [Apache-2.0](LICENSE)；第三方代码、模型与二进制资产请查看 [NOTICE](NOTICE) 和[许可范围](LICENSE_SCOPE.md)。
+
+
+### macOS 原生安装包（Apple Silicon 预览版）
+
+支持 **Apple Silicon / macOS 15.5+**，随包提供 Python 3.13.15、NumPy 2.3.5、
+原生服务、离线 Python 依赖和 MuJoCo 场景资产，无需 Homebrew、系统 Python 或编译器。
+从 [macOS 预览版 Release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.1)
+下载 `semantic-*-macos-arm64.tar.gz`，解压后执行：
+
+```bash
+bash install.command --yes
+```
+
+默认安装到 `~/Library/Application Support/Semantic`，访问 `http://127.0.0.1:3000`。
+使用安装目录下的 `bin/semanticctl` 启动、停止、查看状态或卸载；
+`semanticctl welcome` 在终端显示安装时生成的 admin 密码。
+可传入 `--dir "$HOME/semantic"` 指定目录。Release 中的 `install-macos.sh`
+支持下载并校验安装包。
+
+这是未签名预览版，已执行的验证见 Release 的 `validation.json`。
+真机 CGL 图形和完整 AI 拆码垛任务仍待验收；暂不承诺 Intel Mac、LIBERO/Robosuite
+或厂商硬件驱动。详见 [macOS 构建说明](artifacts/macos/README.md)。

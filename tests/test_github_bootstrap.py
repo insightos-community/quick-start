@@ -103,7 +103,7 @@ class GithubBootstrapTests(unittest.TestCase):
         generator=importlib.util.module_from_spec(spec);spec.loader.exec_module(generator)
         tree=ast.parse(generator.manager_sources()['installer.py'])
         environment=next(node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name=='environment')
-        namespace={'os':os,'load':lambda path:{}}
+        namespace={'os':os,'platform':__import__('platform'),'load':lambda path:{}}
         exec(compile(ast.Module(body=[environment],type_ignores=[]),'<environment>','exec'),namespace)
         with patch.dict(os.environ,{'UV_INDEX_URL':'https://user.example/simple','PIP_CONFIG_FILE':'/user/pip.conf','UV_CONFIG_FILE':'/user/uv.toml'},clear=True):
             env=namespace['environment'](self.work,self.work/'release')

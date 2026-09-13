@@ -19,6 +19,9 @@ def main():
     before, remaining = text.split('# BEGIN GENERATED GITHUB HELPERS\n', 1)
     _, after = remaining.split('# END GENERATED GITHUB HELPERS\n', 1)
     expected = before+'# BEGIN GENERATED GITHUB HELPERS\n'+(HERE/'github_bootstrap.py').read_text()+'# END GENERATED GITHUB HELPERS\n'+after
+    before, remaining = expected.split('# BEGIN EMBEDDED UNINSTALLER\n', 1)
+    _, after = remaining.split('# END EMBEDDED UNINSTALLER', 1)
+    expected = before+'# BEGIN EMBEDDED UNINSTALLER\n'+(HERE/'runtime/uninstall.py').read_text()+'# END EMBEDDED UNINSTALLER'+after
     if args.check and text != expected:
         raise SystemExit('Embedded GitHub helpers are stale; run artifacts/build_installers.py')
     if not args.check:

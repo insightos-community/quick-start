@@ -6,7 +6,7 @@
 
 🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
 
-Native **macOS Apple Silicon** adaptation has started. See [development validation and remaining work](artifacts/macos/README.md); the public installer currently supports Linux only.
+A native **macOS Apple Silicon / macOS 15.5+** installer preview is also available. See [installation and validation scope](#native-macos-installer-apple-silicon-preview); physical Mac graphics qualification is pending.
 
 ## Start here
 
@@ -163,3 +163,28 @@ In the TUI, `e` edits settings, Enter runs a step, `L` opens service logs, and `
 ## License
 
 Copyright 2026 InsightOS. First-party code is covered by [Apache-2.0](LICENSE); see [NOTICE](NOTICE) and [license scope](LICENSE_SCOPE.md) for third-party code, models, and binary assets.
+
+
+### Native macOS installer (Apple Silicon preview)
+
+The macOS package targets **Apple Silicon / macOS 15.5+** and bundles Python
+3.13.15, NumPy 2.3.5, native services, offline Python wheels and MuJoCo assets.
+It does not require Homebrew, system Python or a compiler. Download the
+`semantic-*-macos-arm64.tar.gz` archive from the
+[macOS preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.1),
+extract it, then run:
+
+```bash
+bash install.command --yes
+```
+
+The default directory is `~/Library/Application Support/Semantic`; Web listens
+on `http://127.0.0.1:3000`. Use the installed `bin/semanticctl` to start, stop,
+check status or uninstall. `semanticctl welcome` shows the generated admin
+password in the terminal. For an explicit destination, pass `--dir "$HOME/semantic"`.
+The release also includes `install-macos.sh` for verified archive downloads.
+
+This is an unsigned preview. See its `validation.json` for executed checks;
+physical Mac CGL rendering and complete AI-driven pallet tasks remain pending.
+Intel Mac, LIBERO/Robosuite and hardware vendor drivers are outside this release.
+See [macOS build details](artifacts/macos/README.md).

@@ -268,6 +268,8 @@ def desktop_escape(value):
 
 
 def desktop_shortcuts(root, state, mode='auto'):
+    if sys.platform == 'darwin':
+        return 'macOS：使用 bin/semanticctl 管理；浏览器访问上方地址（跳过桌面快捷方式）'
     if mode == 'never':
         return '已跳过桌面入口'
     home = Path.home().resolve()
