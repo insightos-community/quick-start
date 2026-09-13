@@ -224,6 +224,22 @@ def build(a):
     stage = work/'runtime-pack'
     stage.mkdir()
     catalog, resources, smoke, verification = builder.copy_metadata(profile, '0.4.0-dev.0', stage)
+    # Match the existing Linux component release recipe: raw Runtime fixtures
+    # predate the current Framework scene-document schema.
+    shutil.rmtree(stage/'catalog')
+    copy(sources/'Semantic-Framework/configs/scenes.d/authoring/depalletizing-r1pro',
+         stage/'catalog/authoring/depalletizing-r1pro')
+    catalog = stage/'catalog/catalog.yaml'
+    resources = sorted(p for p in (stage/'catalog').rglob('*') if p.is_file())
+    document = yaml.safe_load((sources/'Semantic-Framework/configs/scenes.d/mujoco-platforms.yaml').read_text())
+    document['entries'] = [entry for entry in document['entries'] if entry['compatible_runtime_profile']=='native-mujoco']
+    asset_version = json.loads((payload/'assets/mujoco/asset-catalog.v1.json').read_text())['catalog_version']
+    document['catalog_version'] = asset_version
+    for entry in document['entries']:
+        for version in entry['versions']:
+            if 'authoring' in version:
+                version['authoring']['asset_catalog_version'] = asset_version
+    catalog.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True))
     request = json.loads(smoke.read_text()); request['render_backend'] = 'cgl'; write(smoke, request)
     write(verification, {'source_commit': pins['mujoco-runtime']['commit'], 'python_version': '3.13.15', 'platform': 'macos-arm64'})
     local_runtime = []
@@ -243,7 +259,7 @@ def build(a):
         requirements_lock=record(lock), wheels=list(map(record, local_runtime)), wheelhouse=list(map(record, deps)),
         scene_catalog=record(catalog), scene_resources=list(map(record, resources)),
         licenses=list(map(record, sorted((stage/'licenses').iterdir()))), verification_files=[record(verification)],
-        smoke_scene_key=profile.smoke_scene, smoke_request=record(smoke), content_requirements=profile.content_requirements)
+        smoke_scene_key='palletizing_depalletizing_tote_v1', smoke_request=record(smoke), content_requirements=profile.content_requirements)
     (stage/'runtime-pack.yaml').write_text(yaml.safe_dump(pack_meta, sort_keys=False))
     pack_name = 'runtime-packs/native-mujoco-macos-arm64.runtime.tar.gz'
     archive(stage, payload/pack_name)
@@ -261,6 +277,9 @@ def build(a):
         with zipfile.ZipFile(p) as z:
             meta = yaml.safe_load(z.read('SKILL.md').decode().split('---',2)[1])
         skills.append({'name': meta['name'], 'version': str(meta['version']), 'path':'robot-skills/'+p.name})
+    defaults = yaml.safe_load((bundle/'templates/robot-deployment.yaml.tmpl').read_text().split('\nrobot_skills:\n',1)[1])
+    if {item['name']:item['version'] for item in skills} != {item['name']:str(item['version']) for item in defaults}:
+        raise ValueError('Skill versions differ from the deployment template')
     write(payload/'native-linkage.json', native_report(payload))
     write(payload/'repo-versions.json', {'native_sources':pins, 'component_releases':{k:{f:v for f,v in r.items() if f != 'directory'} for k,r in records.items()}})
     write(payload/'release.json', dict(schema_version=1, component='semantic-installer', version=a.version,
