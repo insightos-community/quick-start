@@ -26,9 +26,16 @@ def check_project(root, base, token, report):
     project_path = '/projects/'+project['id']+'/simulation'
     diagnostics = {}
     try:
-        instance = request(project_path+'/scenes/palletizing_depalletizing_tote_v1/instances', {
-            'request_id':'macos-ability-startup', 'runtime_profile_id':'native-mujoco',
-            'layout':'layout001', 'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
+        catalog = request('/simulation/scene-catalog?project_id='+project['id'])['scenes']
+        scene = next(item for item in catalog if item['scene_id'] == 'depalletizing-r1pro')
+        version = next(item for item in scene['versions'] if item['published'] and
+                       item['runtime_scene_key'] == 'palletizing_depalletizing_tote_v1')
+        reference = request(project_path+'/project-scenes', {
+            'catalog_scene_id':scene['scene_id'], 'scene_version':version['version'],
+            'default_variant_id':'layout001'})['project_scene']
+        instance = request(project_path+'/project-scenes/'+reference['project_scene_id']+'/instances', {
+            'request_id':'macos-ability-startup', 'variant_id':'layout001',
+            'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
         deadline = time.monotonic()+180
         while instance['state'] == 'starting':
             if time.monotonic() >= deadline:
