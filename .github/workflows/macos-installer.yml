@@ -169,13 +169,13 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/mujoco-runtime
-        ref: d720d276ea23262a50bc0ddbc44ae50a5ffab434
+        ref: 3130cd12d4b88c4cbb760b6be78bdaf11d9180de
         path: sources/mujoco-runtime
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
+        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -211,7 +211,7 @@ jobs:
     - name: Assemble offline installer
       env:
         GH_TOKEN: ${{ github.token }}
-        RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'macos-v0.1.0-rc.2' }}
+        RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'macos-v0.1.0-rc.3' }}
       run: 'version="${RELEASE_TAG#macos-v}"
 
         echo "INSTALLER_VERSION=$version" >> "$GITHUB_ENV"
@@ -226,7 +226,7 @@ jobs:
       run: ' .build-venv/bin/python artifacts/macos/smoke_installer.py --package "dist-macos/semantic-$INSTALLER_VERSION-macos-arm64.tar.gz"
         --root "$RUNNER_TEMP/Semantic Installer Smoke" --report dist-macos/validation.json
 
-        shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json dist-macos/loaded-libraries.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
+        shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json dist-macos/loaded-libraries.json dist-macos/project-startup.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
 
         '
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -241,6 +241,16 @@ jobs:
       with:
         name: macos-install-diagnostics
         path: '${{ runner.temp }}/Semantic Installer Smoke/logs/*
+
+          ${{ runner.temp }}/Semantic Installer Smoke/robots/**/run/state.json
+
+          ${{ runner.temp }}/Semantic Installer Smoke/robots/**/run/supervisor.log
+
+          ${{ runner.temp }}/Semantic Installer Smoke/robots/**/ability-framework/log/**
+
+          ${{ runner.temp }}/Semantic Installer Smoke/robots/**/pilot/logs/**
+
+          dist-macos/project-startup.json
 
           dist-macos/validation.json'
         if-no-files-found: ignore
@@ -264,7 +274,7 @@ jobs:
 
         Native Apple Silicon macOS installer preview (macOS 15.5+).
 
-        Fixes scene startup rejecting the Web request with configured:cgl, requested:egl. The Web now uses the Runtime-configured backend.
+        Fixes macOS project devices failing with Robot instance supervisor exit status 1: all seven script-only Ability packages now declare arm64, matching native AbilityFramework. Also includes Pydantic 2.13.4 required by the bundled Robot Skills, so offline Skill installation and Robot Runtime readiness can complete. Cleans up owned Ability Python children after confirmed safe project stop on macOS. Includes full project device startup, release and uninstall regression checks.
 
 
         Includes Python 3.13.15, NumPy 2.3.5, native Framework/AbilityFramework, Web, Robot abilities/skills, MuJoCo and scene
@@ -295,7 +305,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
+        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e

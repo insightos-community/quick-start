@@ -54,7 +54,7 @@ semantic_macos_dispatch() (
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.2] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.3] [--source auto|github] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
     echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
@@ -85,7 +85,7 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   echo 'This installer requires native Apple Silicon macOS.' >&2
   exit 1
 fi
-release_tag='macos-v0.1.0-rc.2'
+release_tag='macos-v0.1.0-rc.3'
 archive_path=''
 expected_sha=''
 options=()

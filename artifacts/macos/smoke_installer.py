@@ -68,6 +68,9 @@ def main(a):
             prefix=subprocess.check_output([str(python),'-c','import sys,numpy; assert numpy.__version__=="2.3.5"; print(sys.base_prefix)'],text=True).strip()
             assert Path(prefix).resolve()==(release/'python').resolve(),prefix
         report['checks'].append('Robot and simulation use the same bundled Python base and NumPy version')
+        from project_smoke import check_project
+        check_project(root, 'http://127.0.0.1:28080', response['token'], a.report.parent/'project-startup.json')
+        report['checks'].append('Project scene startup: all scene robots, native AbilityFramework, seven healthy abilities per robot, installed Skills, online Pilots and ready Robot Runtime; safe project release')
         run(ctl,'status')
         run(ctl,'stop')
         run(ctl,'start')

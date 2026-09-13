@@ -69,3 +69,51 @@ class MacInstallerTests(unittest.TestCase):
         finally:
             child.terminate(); child.wait(timeout=10)
         self.assertIsNone(uninstall.uninstall_identity(child.pid))
+
+
+class MacAbilityPackageTests(unittest.TestCase):
+    def test_script_packages_keep_contents_and_permissions_with_native_metadata(self):
+        import zipfile
+        import yaml
+        sys.path.insert(0, str(ROOT/'artifacts/macos'))
+        from build import adapt_python_abilities
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root/'ability.zip'
+            launcher = zipfile.ZipInfo('bin/ability')
+            launcher.external_attr = 0o100755 << 16
+            with zipfile.ZipFile(path, 'w') as z:
+                z.writestr('package.yaml', 'name: test\nversion: 1.0\narch: x86_64\n')
+                z.writestr(launcher, '#!/bin/bash\nexec "$SEMANTIC_ABILITY_PYTHON" main.py\n')
+                z.writestr('main.py', 'import ability_py\n')
+            original = path.read_bytes()
+            adapt_python_abilities(root, [{'file':'ability.zip'}])
+            with zipfile.ZipFile(path) as z:
+                self.assertEqual(yaml.safe_load(z.read('package.yaml'))['arch'], 'arm64')
+                self.assertEqual(z.read('main.py'), b'import ability_py\n')
+                self.assertEqual(z.getinfo('bin/ability').external_attr, launcher.external_attr)
+            path.write_bytes(original)
+            with zipfile.ZipFile(path, 'a') as z:
+                z.writestr('lib/native.so', b'\x7fELFwrong platform')
+            original = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, 'native Ability binary'):
+                adapt_python_abilities(root, [{'file':'ability.zip'}])
+            self.assertEqual(path.read_bytes(), original)
+
+
+class MacSkillDependencyTests(unittest.TestCase):
+    def test_rejects_skill_dependency_not_in_offline_wheelhouse(self):
+        import zipfile
+        sys.path.insert(0, str(ROOT/'artifacts/macos'))
+        from build import validate_skill_wheels
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root/'skills'; skills.mkdir()
+            wheels = root/'wheels'; wheels.mkdir()
+            with zipfile.ZipFile(skills/'grasp.zip', 'w') as z:
+                z.writestr('requirements.lock', 'pydantic==2.13.4\n')
+            (wheels/'pydantic-2.11.5-py3-none-any.whl').touch()
+            with self.assertRaisesRegex(ValueError, 'offline wheel missing for pydantic==2.13.4'):
+                validate_skill_wheels(skills, wheels)
+            (wheels/'pydantic-2.13.4-py3-none-any.whl').touch()
+            validate_skill_wheels(skills, wheels)

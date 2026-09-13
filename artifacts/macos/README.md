@@ -6,8 +6,8 @@ Intel Mac and optional LIBERO/Robosuite profiles are outside this release.
 
 ## Install
 
-Download `semantic-0.1.0-rc.2-macos-arm64.tar.gz` from the
-[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2),
+Download `semantic-0.1.0-rc.3-macos-arm64.tar.gz` from the
+[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3),
 verify its SHA-256 against `SHA256SUMS`, extract it, and run:
 
 ```bash
@@ -20,7 +20,7 @@ The release's `install-macos.sh` downloads and verifies the same archive using
 system curl, shasum and tar; it needs no preinstalled Python. For offline use:
 
 ```bash
-bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.2-macos-arm64.tar.gz \
+bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.3-macos-arm64.tar.gz \
   --sha256 SHA256_FROM_RELEASE --dir "$HOME/semantic" --yes
 ```
 
@@ -100,3 +100,5 @@ Install rc.2 into a **new `--dir`**; the preview installer rejects overwriting a
 different version and does not migrate databases automatically. Stop the old
 installation before using the same ports, keep its configuration/user data, and
 reload the browser page to load the updated Web assets.
+
+The rc.3 installer fixes Robot instance supervisor exits caused by x86_64 metadata in the seven Python Ability packages. Native CI now starts all project robots and checks AbilityFramework, all seven abilities, Pilot, Robot Skill installation and Robot Runtime readiness. The offline wheelhouse includes Pydantic 2.13.4 required by the three bundled Skills. Stop your old instance and install this release into a new directory; existing databases are not migrated automatically.
