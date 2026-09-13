@@ -8,8 +8,8 @@
     },
     "semantic-web": {
       "url": "https://github.com/insightos-community/semantic-web.git",
-      "ref": "v0.5.0-insightos.2026.2",
-      "commit": "26d0536fab98a256b0540ffb760ff35ab2a8dbf1"
+      "ref": "v0.5.0-insightos.2026.3",
+      "commit": "4e0d741de941d81ffba0f0c6701ff135d346a758"
     },
     "semantic-docs": {
       "url": "https://github.com/insightos-community/semantic-docs.git",
