@@ -175,7 +175,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
+        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -274,7 +274,7 @@ jobs:
 
         Native Apple Silicon macOS installer preview (macOS 15.5+).
 
-        Fixes macOS project devices failing with Robot instance supervisor exit status 1: all seven script-only Ability packages now declare arm64, matching native AbilityFramework. Also includes Pydantic 2.13.4 required by the bundled Robot Skills, so offline Skill installation and Robot Runtime readiness can complete. Includes full project device startup regression checks.
+        Fixes macOS project devices failing with Robot instance supervisor exit status 1: all seven script-only Ability packages now declare arm64, matching native AbilityFramework. Also includes Pydantic 2.13.4 required by the bundled Robot Skills, so offline Skill installation and Robot Runtime readiness can complete. Cleans up owned Ability Python children after confirmed safe project stop on macOS. Includes full project device startup, release and uninstall regression checks.
 
 
         Includes Python 3.13.15, NumPy 2.3.5, native Framework/AbilityFramework, Web, Robot abilities/skills, MuJoCo and scene
@@ -305,7 +305,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: f6256f7a4e77eda63b683cfb031af5fcf52c413e
+        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
