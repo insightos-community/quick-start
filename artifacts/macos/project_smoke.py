@@ -29,7 +29,14 @@ def check_project(root, base, token, report):
         instance = request(project_path+'/scenes/palletizing_depalletizing_tote_v1/instances', {
             'request_id':'macos-ability-startup', 'runtime_profile_id':'native-mujoco',
             'layout':'layout001', 'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
+        deadline = time.monotonic()+180
+        while instance['state'] == 'starting':
+            if time.monotonic() >= deadline:
+                raise AssertionError('Scene stayed in starting: '+json.dumps(instance))
+            time.sleep(1)
+            instance = request(project_path+'/instances/'+instance['instance_id'])['instance']
         diagnostics['instance'] = instance
+        assert instance['state'] == 'running', instance
         scene_robots = request(project_path+'/instances/'+instance['instance_id']+'/robots')['robots']
         expected_ids = {robot['robot_id'] for robot in scene_robots}
         assert expected_ids, 'Scene has no robots'
@@ -54,6 +61,16 @@ def check_project(root, base, token, report):
         assert len(states) == len(expected_ids)
         diagnostics['success'] = True
     finally:
-        report.write_text(json.dumps(diagnostics, indent=2)+'\n')
-        # The server performs the normal safe shutdown, including Pilot hold.
-        request(project_path+'/runtime/release', {})
+        diagnostics['supervisors'] = [json.loads(path.read_text())
+            for path in (root/'robots').glob('*/*/run/state.json')]
+        try:
+            # The server performs the normal safe shutdown, including Pilot hold.
+            request(project_path+'/runtime/release', {})
+            diagnostics['released'] = True
+        except Exception as error:
+            diagnostics['release_error'] = str(error)
+            if diagnostics.get('success'):
+                diagnostics['success'] = False
+                raise
+        finally:
+            report.write_text(json.dumps(diagnostics, indent=2)+'\n')
