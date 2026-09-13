@@ -45,7 +45,7 @@ def relocate(wheelhouse, lock_text):
                 rpaths = re.findall(r'cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset', load)
                 identities = subprocess.check_output(['otool', '-D', str(path)], text=True).splitlines()[1:]
                 commands = []
-                for identity in set(x.strip() for x in identities):
+                for identity in set(x.strip() for x in identities if x.strip() and not x.rstrip().endswith(':')):
                     if identity.startswith('/'):
                         commands += ['-id', '@rpath/'+path.name]
                 removed = [r for r in dict.fromkeys(rpaths)

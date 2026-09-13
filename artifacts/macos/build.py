@@ -59,9 +59,9 @@ def relocate_python(root, original):
             if f.read(4) not in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'):
                 continue
         commands = []
-        identity = subprocess.run(['otool', '-D', str(path)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+        identity = subprocess.run(['otool', '-arch', 'arm64', '-D', str(path)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
         identity = [line.strip() for line in identity if line.strip()]
-        libraries = subprocess.check_output(['otool', '-L', str(path)], text=True).splitlines()[1:]
+        libraries = subprocess.check_output(['otool', '-arch', 'arm64', '-L', str(path)], text=True).splitlines()[1:]
         for line in libraries:
             library = line.strip().split(' (', 1)[0]
             if not library.startswith(str(original)+'/'):
@@ -73,7 +73,7 @@ def relocate_python(root, original):
                 commands += ['-id', '@rpath/'+target.name]
             else:
                 commands += ['-change', library, '@loader_path/'+os.path.relpath(target, path.parent)]
-        load = subprocess.check_output(['otool', '-l', str(path)], text=True)
+        load = subprocess.check_output(['otool', '-arch', 'arm64', '-l', str(path)], text=True)
         for rpath in re.findall(r'cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset', load):
             if rpath.startswith(str(original)+'/'):
                 target = root/Path(rpath).relative_to(original)
@@ -103,7 +103,7 @@ def native_report(root, *, installed=False):
         architectures = subprocess.check_output(['lipo', '-archs', str(p)], text=True).strip()
         if 'arm64' not in architectures.split():
             raise ValueError('Missing arm64: '+str(p))
-        output = subprocess.check_output(['otool', '-L', str(p)], text=True)
+        output = subprocess.check_output(['otool', '-arch', 'arm64', '-L', str(p)], text=True)
         libraries = [line.strip().split(' (', 1)[0] for line in output.splitlines()[1:]]
         for lib in libraries:
             if lib.startswith('/') and not lib.startswith(('/usr/lib/', '/System/Library/')):
@@ -113,7 +113,7 @@ def native_report(root, *, installed=False):
                 if installed and Path(lib).is_file() and Path(lib).resolve().is_relative_to(root.resolve()):
                     continue
                 raise ValueError(f'Nonportable library in {p}: {lib}')
-        load_commands = subprocess.check_output(['otool', '-l', str(p)], text=True)
+        load_commands = subprocess.check_output(['otool', '-arch', 'arm64', '-l', str(p)], text=True)
         versions = re.findall(r'\bminos ([0-9.]+)', load_commands)
         versions += re.findall(r'cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version ([0-9.]+)', load_commands)
         if any(tuple(map(int, v.split('.'))) > (15, 5, 0) for v in versions):
