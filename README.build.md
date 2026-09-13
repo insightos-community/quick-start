@@ -10,7 +10,7 @@ A linked worktree's `.git` pointer may point outside a container mount.
 
 | Distribution | Verified reference | Build environment | Python/dependencies |
 |---|---|---|---|
-| Default Linux/glibc | `v0.1.0` | Ubuntu 24.04 x86_64; Go 1.25.8, uv 0.12.12 | Robot Python 3.13 and native Runtime Python 3.10.19; the complete stack has a glibc baseline even though application ELF binaries are static |
+| Default Linux/glibc | `v0.1.0` component lock; assembler snapshot below | Ubuntu 24.04 x86_64; Go 1.25.8, uv 0.12.12 | Robot Python 3.13 and native Runtime Python 3.10.19; the complete stack has a glibc baseline even though application ELF binaries are static |
 | Optional Linux/musl | `musl-v0.1.0-2` | Pinned Python 3.13 / Alpine 3.23 amd64 Docker image | Bundled CPython 3.13.15, NumPy 2.3.5, musl loader and Mesa; Robot/Runtime venvs share the same Python base |
 | macOS preview | `macos-v0.1.0-rc.1` | Native Apple Silicon, macOS 15.5+; Go 1.25.8, uv 0.12.12, xmake 3.1.1 and Xcode Command Line Tools | Bundled Python 3.13.15/NumPy 2.3.5, locked macOS wheels and native applications; system CGL |
 
@@ -52,11 +52,18 @@ configured package repositories; no alternate mirror is required by this guide.
 
 The normal assembly downloads already-verified component Releases and compiles
 only the Web gateway. Component source-build recipes are indexed below.
+The original `v0.1.0` tag predates `build_from_releases.py`. Therefore this recipe
+pins the assembler and installer source to `04cbf4a918c0da7502269386e7742ed038cf0d36`,
+which passed the Linux installer CI. Its component tags/commits match the
+`v0.1.0` lock (the Framework repository URL spelling was corrected). This rebuilds
+the current installer from those component Releases; it does not reconstruct the
+historical quick-start source tree or archive bytes.
 
 ```bash
 git clone https://github.com/insightos-community/quick-start.git quick-start-glibc
 cd quick-start-glibc
-git checkout --detach v0.1.0
+git checkout --detach 04cbf4a918c0da7502269386e7742ed038cf0d36
+export GITHUB_SHA="$(git rev-parse HEAD)"
 uv venv --python 3.13.15 .venv-build
 uv pip install --python .venv-build/bin/python PyYAML==6.0.2
 REPRO_VERSION=0.1.0-repro.1
