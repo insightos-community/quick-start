@@ -48,6 +48,46 @@ def archive(source, target):
                 tar.add(p, arcname=p.relative_to(source).as_posix(), recursive=False)
 
 
+def relocate_python(root, original):
+    """uv fixes libpython's install name for its own prefix; undo that for shipping."""
+    changed = []
+    for path in root.rglob('*'):
+        if not path.is_file():
+            continue
+        with path.open('rb') as f:
+            if f.read(4) not in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'):
+                continue
+        commands = []
+        identity = subprocess.run(['otool', '-D', str(path)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+        identity = [line.strip() for line in identity if line.strip()]
+        libraries = subprocess.check_output(['otool', '-L', str(path)], text=True).splitlines()[1:]
+        for line in libraries:
+            library = line.strip().split(' (', 1)[0]
+            if not library.startswith(str(original)+'/'):
+                continue
+            target = root/Path(library).relative_to(original)
+            if not target.is_file():
+                raise ValueError('Missing relocated Python library: '+library)
+            if library in identity:
+                commands += ['-id', '@rpath/'+target.name]
+            else:
+                commands += ['-change', library, '@loader_path/'+os.path.relpath(target, path.parent)]
+        load = subprocess.check_output(['otool', '-l', str(path)], text=True)
+        for rpath in re.findall(r'cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset', load):
+            if rpath.startswith(str(original)+'/'):
+                target = root/Path(rpath).relative_to(original)
+                commands += ['-rpath', rpath, '@loader_path/'+os.path.relpath(target, path.parent)]
+        if commands:
+            run('install_name_tool', *commands, path)
+            # Apple Silicon requires a valid code signature after load commands change.
+            # An ad-hoc integrity signature is not Developer ID signing/notarization.
+            run('codesign', '--force', '--sign', '-', path)
+            changed.append(path.relative_to(root).as_posix())
+    run(root/'bin/python3.13', '-I', '-B', '-c',
+        'import sys,ssl,sqlite3; from pathlib import Path; assert Path(sys.base_prefix).resolve()==Path(sys.argv[1]).resolve()', root)
+    return changed
+
+
 def native_report(root):
     reports = {}
     for p in root.rglob('*'):
@@ -152,6 +192,7 @@ def build(a):
     python = Path(subprocess.check_output(['uv', 'python', 'find', '--managed-python', '3.13.15'], text=True).strip())
     prefix = Path(subprocess.check_output([str(python), '-c', 'import sys; print(sys.base_prefix)'], text=True).strip())
     copy(prefix, payload/'python')
+    write(payload/'python-relocation.json', relocate_python(payload/'python', prefix))
     # Only installer dependencies are resolved here; the target installs offline.
     run('uv', 'run', '--no-project', '--isolated', '--python', '3.13.15', '--with', 'pip==25.2',
         'python', '-m', 'pip', 'download', '--only-binary=:all:', '--require-hashes',
