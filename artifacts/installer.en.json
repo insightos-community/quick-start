@@ -237,5 +237,6 @@
   "跳过": "skipped",
   "安装": "installation",
   "无": "None",
-  "；musl/Alpine 请显式使用 --musl": "; use --musl explicitly on musl/Alpine"
+  "；musl/Alpine 请显式使用 --musl": "; use --musl explicitly on musl/Alpine",
+  "macOS：使用 bin/semanticctl 管理；浏览器访问上方地址（跳过桌面快捷方式）": "macOS: use bin/semanticctl to manage services and open the URL above (desktop shortcut skipped)"
 }

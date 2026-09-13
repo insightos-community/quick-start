@@ -1,0 +1,18 @@
+{
+  "Semantic-Framework": {
+    "repository": "insightos-community/Semantic-Framework",
+    "commit": "6d524fe4dbdfceb2029f7468619723274465c976"
+  },
+  "AbilityFramework": {
+    "repository": "insightos-community/AbilityFramework",
+    "commit": "b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1"
+  },
+  "mujoco-runtime": {
+    "repository": "insightos-community/mujoco-runtime",
+    "commit": "d720d276ea23262a50bc0ddbc44ae50a5ffab434"
+  },
+  "semantic-deployment": {
+    "repository": "insightos-community/semantic-deployment",
+    "commit": "70c4a025c5995f8ad7b8770718b73932ef57febf"
+  }
+}

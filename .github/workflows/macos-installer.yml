@@ -1,0 +1,249 @@
+name: macOS Installer
+'on':
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+    - artifacts/macos/**
+    - artifacts/runtime/**
+    - .github/workflows/macos-installer.yml
+  push:
+    tags:
+    - macos-v*
+permissions:
+  contents: read
+concurrency:
+  group: macos-installer-${{ github.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  framework:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+    - &id001
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Semantic-Framework
+        ref: 6d524fe4dbdfceb2029f7468619723274465c976
+        path: sources/Semantic-Framework
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/semantic-deployment
+        ref: 70c4a025c5995f8ad7b8770718b73932ef57febf
+        path: sources/semantic-deployment
+        persist-credentials: false
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version: 1.25.8
+        cache: false
+    - name: Build and test native applications
+      run: "mkdir -p native/bin\ncd sources/Semantic-Framework\nfor name in semantic-server semantic-pilot semantic; do\n\
+        \  CGO_ENABLED=1 go build -p 2 -trimpath -o \"../../native/bin/$name\" \"./cmd/$name\"\ndone\ngo test -p 2 ./... -count=1\
+        \ -timeout=10m\ncd ../semantic-deployment\nCGO_ENABLED=0 go build -trimpath -o ../../native/bin/semantic-robot-instance\
+        \ ./cmd/semantic-robot-instance\ngo test ./... -count=1 -timeout=5m\ncd ../..\nCGO_ENABLED=0 go build -trimpath -o\
+        \ native/bin/semantic-web-gateway artifacts/gateway/main.go\ntar -czf framework-native.tar.gz -C native/bin .\n"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: framework-native
+        path: framework-native.tar.gz
+        if-no-files-found: error
+  ability:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/AbilityFramework
+        ref: b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1
+        path: sources/AbilityFramework
+        persist-credentials: false
+    - uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a
+      with:
+        xmake-version: 3.1.1
+        actions-cache-folder: .ci-tools/xmake
+        project-path: sources/AbilityFramework
+    - name: Restore native dependency cache
+      id: dependencies
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: sources/AbilityFramework/build/.packages
+        key: macos15-arm64-xmake311-deps-${{ hashFiles('sources/AbilityFramework/xmake.lua', 'sources/AbilityFramework/vendor/xmake/**')
+          }}
+    - name: Resolve native dependencies
+      run: 'test "$(uname -m)" = arm64
+
+        xmake f -y -p macosx -a arm64 -m release --fwk-static=n --enable-test=y --use-cpptrace=n
+
+        '
+    - name: Cache resolved dependencies before compiling application sources
+      if: steps.dependencies.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: sources/AbilityFramework/build/.packages
+        key: ${{ steps.dependencies.outputs.cache-primary-key }}
+    - name: Build and test native AbilityFramework
+      run: 'xmake build -vD -y -j 3 AbilityFramework
+
+        xmake build -y -j 3 test
+
+        xmake run test
+
+        build/macosx/arm64/release/AbilityFramework --version
+
+        otool -L build/macosx/arm64/release/AbilityFramework
+
+        '
+    - name: Archive executable and linkage report
+      run: 'mkdir -p .output
+
+        otool -L build/macosx/arm64/release/AbilityFramework > .output/linkage.txt
+
+        tar -czf .output/AbilityFramework-macos-arm64-development.tar.gz -C build/macosx/arm64/release AbilityFramework
+
+        '
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: AbilityFramework-macos-arm64-development
+        path: sources/AbilityFramework/.output/*
+        include-hidden-files: true
+        if-no-files-found: error
+    defaults:
+      run:
+        working-directory: sources/AbilityFramework
+        shell: bash
+  assemble:
+    runs-on: macos-15
+    needs:
+    - framework
+    - ability
+    timeout-minutes: 60
+    steps:
+    - *id001
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+        enable-cache: true
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Semantic-Framework
+        ref: 6d524fe4dbdfceb2029f7468619723274465c976
+        path: sources/Semantic-Framework
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/AbilityFramework
+        ref: b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1
+        path: sources/AbilityFramework
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/mujoco-runtime
+        ref: d720d276ea23262a50bc0ddbc44ae50a5ffab434
+        path: sources/mujoco-runtime
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/semantic-deployment
+        ref: 70c4a025c5995f8ad7b8770718b73932ef57febf
+        path: sources/semantic-deployment
+        persist-credentials: false
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: framework-native
+        path: native-archives
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: AbilityFramework-macos-arm64-development
+        path: native-archives
+    - name: Prepare native executables and build tools
+      run: 'mkdir -p native/bin
+
+        tar -xzf native-archives/framework-native.tar.gz -C native/bin
+
+        tar -xzf native-archives/AbilityFramework-macos-arm64-development.tar.gz -C native/bin
+
+        uv venv --python 3.13.15 .build-venv
+
+        uv pip install --python .build-venv/bin/python PyYAML==6.0.2
+
+        '
+    - name: Assemble offline installer
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'macos-v0.1.0-rc.1' }}
+      run: 'version="${RELEASE_TAG#macos-v}"
+
+        echo "INSTALLER_VERSION=$version" >> "$GITHUB_ENV"
+
+        .build-venv/bin/python artifacts/macos/build.py --version "$version" --output dist-macos --work "$RUNNER_TEMP/macos-build"
+        --sources sources --binaries native/bin
+
+        '
+    - name: Install and validate the distributable archive
+      run: ' .build-venv/bin/python artifacts/macos/smoke_installer.py --package "dist-macos/semantic-$INSTALLER_VERSION-macos-arm64.tar.gz"
+        --root "$RUNNER_TEMP/Semantic Installer Smoke" --report dist-macos/validation.json
+
+        shasum -a 256 dist-macos/validation.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
+
+        '
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: macos-installer
+        path: dist-macos/*
+        if-no-files-found: error
+        retention-days: 30
+    - name: Upload diagnostic logs
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: macos-install-diagnostics
+        path: '${{ runner.temp }}/Semantic Installer Smoke/logs/*
+
+          dist-macos/validation.json'
+        if-no-files-found: ignore
+  publish:
+    needs: assemble
+    if: startsWith(github.ref, 'refs/tags/macos-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: macos-installer
+        path: dist-macos
+    - name: Publish tested macOS preview
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        RELEASE_TAG: ${{ github.ref_name }}
+      run: 'cat > release-notes.md <<''EOF''
+
+        Native Apple Silicon macOS installer preview (macOS 15.5+).
+
+
+        Includes Python 3.13.15, NumPy 2.3.5, native Framework/AbilityFramework, Web, Robot abilities/skills, MuJoCo and scene
+        assets. Installation and dependency setup work offline after downloading the archive; no Homebrew or compiler is needed.
+
+
+        Download the archive, extract it, and run `bash install.command`. Alternatively download `install-macos.sh` and run
+        `bash install-macos.sh --yes`. Default install directory: `~/Library/Application Support/Semantic`. Web: http://127.0.0.1:3000.
+        Account: admin, with an installation-generated password.
+
+
+        See validation.json for executed checks. Physical Mac CGL rendering and full LLM-driven tasks remain unqualified;
+        this is an unsigned preview, not a notarized DMG. Intel Mac, LIBERO/Robosuite and vendor drivers are outside this
+        release''s scope.
+
+        EOF
+
+        gh release create "$RELEASE_TAG" dist-macos/* --verify-tag --prerelease --title "Semantic macOS arm64 ${RELEASE_TAG#macos-v}"
+        --notes-file release-notes.md
+
+        '
