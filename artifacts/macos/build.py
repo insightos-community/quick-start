@@ -49,6 +49,35 @@ def archive(source, target):
                 tar.add(p, arcname=p.relative_to(source).as_posix(), recursive=False)
 
 
+def adapt_python_abilities(bundle, entries):
+    """Stamp the target architecture on script-only AbilityFramework packages.
+
+    The shared component release targets x86_64. Its Python launchers are portable,
+    but AbilityFramework validates package.yaml against the native host before
+    upload. Never relabel a package containing native binaries.
+    """
+    for entry in entries:
+        path = bundle / entry['file']
+        with zipfile.ZipFile(path) as source:
+            members = [(info, source.read(info)) for info in source.infolist()]
+        manifests = [info for info, _ in members if info.filename == 'package.yaml']
+        if len(manifests) != 1:
+            raise ValueError('Expected one root package.yaml: '+str(path))
+        for info, data in members:
+            if data[:4] in (b'\x7fELF', b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe',
+                            b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf') or data[:2] == b'MZ':
+                raise ValueError('Cannot relabel native Ability binary: '+info.filename)
+        temporary = path.with_suffix('.zip.tmp')
+        with zipfile.ZipFile(temporary, 'w') as target:
+            for info, data in members:
+                if info.filename == 'package.yaml':
+                    metadata = yaml.safe_load(data)
+                    metadata['arch'] = 'arm64'
+                    data = yaml.safe_dump(metadata, sort_keys=False).encode()
+                target.writestr(info, data)
+        temporary.replace(path)
+
+
 def relocate_python(root, original):
     """uv fixes libpython's install name for its own prefix; undo that for shipping."""
     changed = []
@@ -235,6 +264,7 @@ def build(a):
     for entry in spec['spec']['artifacts']['abilities']:
         if not (bundle/entry['file']).is_file():
             raise ValueError('Missing ability: '+str(entry))
+    adapt_python_abilities(bundle, spec['spec']['artifacts']['abilities'])
     # Build a native gzip runtime pack using the upstream schema and catalog.
     module_spec = importlib.util.spec_from_file_location('runtime_builder', runtime/'tools/build_runtime_pack.py')
     builder = importlib.util.module_from_spec(module_spec)
