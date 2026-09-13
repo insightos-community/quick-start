@@ -19,7 +19,7 @@
 supervisor 与 debug stack 的实例锁接入 `internal/ports/filelock`，
 提供 Linux/macOS `flock` 和 Windows `LockFileEx` 实现。
 新增三平台原生 CI，验证非阻塞互斥、独立进程竞争、解锁/关闭及进程崩溃后的恢复。
-验证结果见 [CI](https://github.com/insightos-community/semantic-deployment/actions/runs/34756652306)。
+验证结果见 [CI](https://github.com/insightos-community/semantic-deployment/pull/5/checks)。
 
 仅此平台接口能够在 Windows 构建和测试，不代表完整 supervisor 或 installer 已支持 Windows。
 进程树、正常停止 IPC、进程身份和 Pinocchio 可重定位产物仍待推进。
