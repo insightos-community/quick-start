@@ -6,6 +6,10 @@ run real repository scripts; installing a Release and rebuilding one are separat
 operations. Use a fresh normal Git clone and a new output directory per recipe.
 A linked worktree's `.git` pointer may point outside a container mount.
 
+Native Windows porting is in progress. See the [Windows porting checklist](README.windows.md)
+for confirmed blockers, dependency availability and acceptance criteria; no Windows
+installer is available yet.
+
 ## Platform and version matrix
 
 | Distribution | Verified reference | Build environment | Python/dependencies |
