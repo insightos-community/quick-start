@@ -25,6 +25,8 @@ def check_project(root, base, token, report):
     project = request('/projects', {'name':'Native macOS device startup regression'})['project']
     project_path = '/projects/'+project['id']+'/simulation'
     diagnostics = {}
+    release = json.loads((root/'current/release.json').read_text())
+    expected_skills = {(skill['name'], skill['version']) for skill in release['robot_skills']}
     try:
         catalog = request('/simulation/scene-catalog?project_id='+project['id'])['scenes']
         scene = next(item for item in catalog if item['scene_id'] == 'depalletizing-r1pro')
@@ -54,8 +56,13 @@ def check_project(root, base, token, report):
             states = [json.loads(path.read_text()) for path in (root/'robots').glob('*/*/run/state.json')]
             diagnostics['supervisors'] = states
             failed = [state for state in states if state.get('status') == 'failed']
+            failed += [device.get('runtime_instance') for device in devices
+                       if (device.get('runtime_instance') or {}).get('status') in ('failed', 'interrupted')]
             assert not failed, failed
             if devices and states and all(state.get('status') == 'running' for state in states) and all(
+                (device.get('runtime_instance') or {}).get('status') == 'ready' and
+                {(skill['name'], skill['version']) for skill in device.get('installed_skills', [])
+                 if skill.get('status') == 'installed'} == expected_skills and
                 device.get('pilot', {}).get('status') == 'online' and
                 device.get('ability_framework', {}).get('status') == 'ready' and
                 device.get('ability_framework', {}).get('healthy_instances') == 7

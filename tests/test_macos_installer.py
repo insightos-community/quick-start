@@ -99,3 +99,21 @@ class MacAbilityPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'native Ability binary'):
                 adapt_python_abilities(root, [{'file':'ability.zip'}])
             self.assertEqual(path.read_bytes(), original)
+
+
+class MacSkillDependencyTests(unittest.TestCase):
+    def test_rejects_skill_dependency_not_in_offline_wheelhouse(self):
+        import zipfile
+        sys.path.insert(0, str(ROOT/'artifacts/macos'))
+        from build import validate_skill_wheels
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root/'skills'; skills.mkdir()
+            wheels = root/'wheels'; wheels.mkdir()
+            with zipfile.ZipFile(skills/'grasp.zip', 'w') as z:
+                z.writestr('requirements.lock', 'pydantic==2.13.4\n')
+            (wheels/'pydantic-2.11.5-py3-none-any.whl').touch()
+            with self.assertRaisesRegex(ValueError, 'offline wheel missing for pydantic==2.13.4'):
+                validate_skill_wheels(skills, wheels)
+            (wheels/'pydantic-2.13.4-py3-none-any.whl').touch()
+            validate_skill_wheels(skills, wheels)

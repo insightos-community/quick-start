@@ -78,6 +78,25 @@ def adapt_python_abilities(bundle, entries):
         temporary.replace(path)
 
 
+def validate_skill_wheels(skills, wheelhouse):
+    """Reject an offline installer missing an exact dependency of a shipped Skill."""
+    available = {tuple(path.name.split('-')[:2]) for path in wheelhouse.glob('*.whl')}
+    for path in skills.glob('*.zip'):
+        with zipfile.ZipFile(path) as archive:
+            lock = archive.read('requirements.lock').decode()
+        for line in lock.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            match = re.fullmatch(r'([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+!-]+)', line)
+            if not match:
+                raise ValueError('Unsupported Skill dependency lock: '+line)
+            name, version = match.groups()
+            name = re.sub(r'[-_.]+', '_', name).lower()
+            if (name, version) not in available:
+                raise ValueError(f'{path.name}: offline wheel missing for {line}')
+
+
 def relocate_python(root, original):
     """uv fixes libpython's install name for its own prefix; undo that for shipping."""
     changed = []
@@ -245,6 +264,7 @@ def build(a):
     runtime = sources/'mujoco-runtime'
     for project in (runtime, runtime/'packages/mujoco-visuals'):
         run('uv', 'build', '--wheel', '--project', project, '--out-dir', wheelhouse)
+    validate_skill_wheels(payload/'robot-skills', wheelhouse)
     lock_text, wheel_changes = relocate(wheelhouse, (HERE/'installer-requirements.lock').read_text())
     installed_lock = work/'installer-requirements.lock'
     installed_lock.write_text(lock_text)

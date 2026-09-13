@@ -101,4 +101,4 @@ different version and does not migrate databases automatically. Stop the old
 installation before using the same ports, keep its configuration/user data, and
 reload the browser page to load the updated Web assets.
 
-The rc.3 installer fixes Robot instance supervisor exits caused by x86_64 metadata in the seven Python Ability packages. Native CI now starts all project robots and checks AbilityFramework, all seven abilities and Pilot readiness. Stop your old instance and install this release into a new directory; existing databases are not migrated automatically.
+The rc.3 installer fixes Robot instance supervisor exits caused by x86_64 metadata in the seven Python Ability packages. Native CI now starts all project robots and checks AbilityFramework, all seven abilities, Pilot, Robot Skill installation and Robot Runtime readiness. The offline wheelhouse includes Pydantic 2.13.4 required by the three bundled Skills. Stop your old instance and install this release into a new directory; existing databases are not migrated automatically.
