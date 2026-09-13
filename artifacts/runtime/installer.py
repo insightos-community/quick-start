@@ -256,6 +256,7 @@ def check_port(port, host='127.0.0.1'):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
+            s.listen(1)  # Also detect BSD wildcard/specific-address listener conflicts.
         except OSError as e:
             raise RuntimeError(f'端口 {port} 已占用；请显式选择其他端口，不会停止已有服务') from e
 

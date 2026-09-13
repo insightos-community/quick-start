@@ -50,6 +50,7 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind((address, port))
+                probe.listen(1)  # BSD can defer wildcard-address conflicts until listen.
             except OSError as error:
                 raise RuntimeError(f'Port {port} ({name}, {address}) is unavailable; stop its service or use --{name}-port PORT. No archive was downloaded.') from error
 

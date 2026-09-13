@@ -221,6 +221,7 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind((address, port))
+                probe.listen(1)  # BSD can defer wildcard-address conflicts until listen.
             except OSError as error:
                 raise RuntimeError(f'Port {port} ({name}, {address}) is unavailable; stop its service or use --{name}-port PORT. No archive was downloaded.') from error
 
@@ -863,6 +864,7 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind((address, port))
+                probe.listen(1)  # BSD can defer wildcard-address conflicts until listen.
             except OSError as error:
                 raise RuntimeError(f'Port {port} ({name}, {address}) is unavailable; stop its service or use --{name}-port PORT. No archive was downloaded.') from error
 
@@ -1411,6 +1413,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n'
             '        try:\n'
             '            s.bind((host, port))\n'
+            '            s.listen(1)  # Also detect BSD wildcard/specific-address listener conflicts.\n'
             '        except OSError as e:\n'
             "            raise RuntimeError(f'Port {port} is in use; choose a different port. Existing services will not be stopped') from e\n"
             '\n'
