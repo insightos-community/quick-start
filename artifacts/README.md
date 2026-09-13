@@ -101,7 +101,7 @@ curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --install-syste
 当前制品目标：Linux x86_64、glibc >= 2.28，完整 Server + Web + Native MuJoCo +
 R1 Pro Bundle。应用程序采用静态 ELF，glibc 门槛来自 uv/Python/Wheel 运行栈；
 满足门槛不等于所有发行版都已通过产品验收。实测范围见 [PORTABILITY.md](PORTABILITY.md)。
-ARM64 和 Windows/macOS 尚不支持。
+以上门槛适用于默认 Linux x86_64 包。另提供 Apple Silicon / macOS 15.5+ 原生预览包，见 [macOS 构建说明](macos/README.md)；Windows 尚未提供安装包。
 
 Linux x86_64 使用额外的 `--musl` 参数可选择 musl 包；默认 glibc 路径不变。`--musl-runtime bundled`（默认）使用随包提供的 musl，可运行于 glibc 或 musl 宿主；`--musl-runtime system` 使用宿主已有的 musl。运行时选择保存在实例中，切换时使用新目录，不修改宿主 `/lib`。中英文脚本与 `python3 semantic_installer.py --release --musl` 均支持。可选包自带 CPython 3.13.15、NumPy 2.3.5、机器人依赖与 Mesa，详见 [musl/README.md](musl/README.md)。GPU 探测和软件回退入口见 [mesa/README.md](mesa/README.md)。
 
@@ -375,3 +375,7 @@ Regenerate after changing the canonical installer or its runtime modules:
 `python artifacts/build_english_installer.py`. Verify with `--check`.
 Translations live in `artifacts/installer.en.json`; do not edit generated
 `install-en.sh` directly. See [site deployment](site/README.md) for publishing.
+
+## 构建复现总入口
+
+[三平台构建指南](../README.build.md)列出 glibc、musl、macOS 的实际脚本、完整指令、固定版本和所有组件/依赖仓库入口。

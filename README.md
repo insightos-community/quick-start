@@ -188,3 +188,7 @@ This is an unsigned preview. See its `validation.json` for executed checks;
 physical Mac CGL rendering and complete AI-driven pallet tasks remain pending.
 Intel Mac, LIBERO/Robosuite and hardware vendor drivers are outside this release.
 See [macOS build details](artifacts/macos/README.md).
+
+## Reproducible platform builds
+
+See [glibc, musl and macOS build instructions](README.build.md) for pinned source revisions, exact scripts, tool requirements, local commands, CI reproduction and platform support boundaries.

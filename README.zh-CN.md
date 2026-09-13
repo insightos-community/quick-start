@@ -181,3 +181,7 @@ bash install.command --yes
 这是未签名预览版，已执行的验证见 Release 的 `validation.json`。
 真机 CGL 图形和完整 AI 拆码垛任务仍待验收；暂不承诺 Intel Mac、LIBERO/Robosuite
 或厂商硬件驱动。详见 [macOS 构建说明](artifacts/macos/README.md)。
+
+## 三个平台的构建复现
+
+参见 [glibc、musl 与 macOS 构建说明](README.build.md)：包含已锁定的源码版本、实际脚本入口、工具要求、本地与 CI 指令、产物位置和平台验证范围。
