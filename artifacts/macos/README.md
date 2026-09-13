@@ -6,8 +6,8 @@ Intel Mac and optional LIBERO/Robosuite profiles are outside this release.
 
 ## Install
 
-Download `semantic-0.1.0-rc.1-macos-arm64.tar.gz` from the
-[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.1),
+Download `semantic-0.1.0-rc.2-macos-arm64.tar.gz` from the
+[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2),
 verify its SHA-256 against `SHA256SUMS`, extract it, and run:
 
 ```bash
@@ -20,7 +20,7 @@ The release's `install-macos.sh` downloads and verifies the same archive using
 system curl, shasum and tar; it needs no preinstalled Python. For offline use:
 
 ```bash
-bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.1-macos-arm64.tar.gz \
+bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.2-macos-arm64.tar.gz \
   --sha256 SHA256_FROM_RELEASE --dir "$HOME/semantic" --yes
 ```
 
@@ -89,3 +89,14 @@ not substitutes for the complete installer archive.
 ## Reproduce from source and Releases
 
 See the [three-platform build guide](../../README.build.md) for complete local/CI commands, pinned versions, output paths and all component/dependency repository recipes.
+
+## Rendering backend compatibility
+
+The Web client requests `render_backend: auto`, so the Runtime uses its configured
+`cgl` backend on macOS. This also works when the browser and Runtime run on
+different operating systems. An explicitly requested incompatible backend is
+still rejected. Preview rc.2 fixes the rc.1 Web default that requested Linux EGL.
+Install rc.2 into a **new `--dir`**; the preview installer rejects overwriting a
+different version and does not migrate databases automatically. Stop the old
+installation before using the same ports, keep its configuration/user data, and
+reload the browser page to load the updated Web assets.

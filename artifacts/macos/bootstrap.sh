@@ -6,7 +6,7 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   echo 'This installer requires native Apple Silicon macOS.' >&2
   exit 1
 fi
-release_tag='macos-v0.1.0-rc.1'
+release_tag='macos-v0.1.0-rc.2'
 archive_path=''
 expected_sha=''
 options=()

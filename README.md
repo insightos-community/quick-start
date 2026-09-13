@@ -171,7 +171,7 @@ The macOS package targets **Apple Silicon / macOS 15.5+** and bundles Python
 3.13.15, NumPy 2.3.5, native services, offline Python wheels and MuJoCo assets.
 It does not require Homebrew, system Python or a compiler. Download the
 `semantic-*-macos-arm64.tar.gz` archive from the
-[macOS preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.1),
+[macOS preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.2),
 extract it, then run:
 
 ```bash

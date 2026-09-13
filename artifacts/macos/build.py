@@ -260,7 +260,8 @@ def build(a):
             if 'authoring' in version:
                 version['authoring']['asset_catalog_version'] = asset_version
     catalog.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True))
-    request = json.loads(smoke.read_text()); request['render_backend'] = 'cgl'; write(smoke, request)
+    # Match the Web client: let the Runtime select its configured CGL backend.
+    request = json.loads(smoke.read_text()); request['render_backend'] = 'auto'; write(smoke, request)
     write(verification, {'source_commit': pins['mujoco-runtime']['commit'], 'python_version': '3.13.15', 'platform': 'macos-arm64'})
     local_runtime = []
     deps = []
@@ -313,7 +314,7 @@ def build(a):
     archive(payload, target)
     for name in ('release.json', 'repo-versions.json', 'native-linkage.json', 'wheel-relocation.json'):
         copy(payload/name, output/name)
-    (output/'install-macos.sh').write_text((HERE/'bootstrap.sh').read_text().replace("release_tag='macos-v0.1.0-rc.1'", f"release_tag='macos-v{a.version}'"))
+    (output/'install-macos.sh').write_text(re.sub(r"^release_tag='macos-v[^']+'$", f"release_tag='macos-v{a.version}'", (HERE/'bootstrap.sh').read_text(), count=1, flags=re.MULTILINE))
     write(output/'manifest.json', {'version':a.version, 'platform':'macos-arm64', 'archive':target.name,
                                   'sha256':digest(target), 'size':target.stat().st_size})
     (output/'SHA256SUMS').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in sorted(output.iterdir()) if p.is_file() and p.name != 'SHA256SUMS'))
