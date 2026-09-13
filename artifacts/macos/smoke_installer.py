@@ -52,6 +52,10 @@ def main(a):
         report['checks'].append('Installed Mach-O architecture and package-local dependency resolution; upstream search hints recorded')
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}
         run(robot,HERE/'smoke.py',env=env)
+        octomap = robot.parent.parent/'lib/python3.13/site-packages/cmeel.prefix/bin/compare_octrees'
+        probe = subprocess.run([str(octomap)], capture_output=True, text=True, env=env)
+        assert probe.returncode >= 0 and 'Compare two octrees' in probe.stdout+probe.stderr, probe.stderr
+        report['checks'].append('Relocated OctoMap executable starts without build-machine library paths')
         run(robot, '-c', 'import ability_py, semantic_robot_sdk_core, semantic_robot_sdk_r1pro, semantic_robot_skill_sdk, r1pro_abilities', env=env)
         run(robot,'-c',"import runpy,tempfile,inspect; from pathlib import Path; checks=runpy.run_path("+repr(str(HERE.parent/'musl/robot_checks.py'))+");\nwith tempfile.TemporaryDirectory() as tmp:\n for name, fn in checks.items():\n  if name.startswith('test_'): fn(Path(tmp)) if inspect.signature(fn).parameters else fn()",env=env)
         run(release/'bin/uv','pip','check','--python',robot,env=env)

@@ -47,7 +47,11 @@ the pinned native macOS source. Every downloaded component asset is checked
 against its Release inventory and source identity.
 
 `installer-requirements.lock` pins the complete third-party Python set with
-hashes. It can be regenerated from `installer-requirements.in` with:
+upstream hashes. The assembler repairs upstream Mach-O build-directory and
+Linux `$ORIGIN` search paths, applies ad-hoc integrity signatures, regenerates
+wheel RECORD entries and derives the bundled lock from the resulting wheel
+hashes. `wheel-relocation.json` records original and modified SHA-256 values
+and every load-command change. It can be regenerated from `installer-requirements.in` with:
 
 ```bash
 uv pip compile artifacts/macos/installer-requirements.in --python-version 3.13 \

@@ -21,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 from fetch_releases import digest, download, extract, fetch
+from relocate_wheels import relocate
 
 
 def run(*args, **kwargs):
@@ -215,6 +216,10 @@ def build(a):
     runtime = sources/'mujoco-runtime'
     for project in (runtime, runtime/'packages/mujoco-visuals'):
         run('uv', 'build', '--wheel', '--project', project, '--out-dir', wheelhouse)
+    lock_text, wheel_changes = relocate(wheelhouse, (HERE/'installer-requirements.lock').read_text())
+    installed_lock = work/'installer-requirements.lock'
+    installed_lock.write_text(lock_text)
+    write(payload/'wheel-relocation.json', wheel_changes)
     for wheel in wheelhouse.glob('*.whl'):
         with zipfile.ZipFile(wheel) as z:
             if z.testzip():
@@ -226,7 +231,7 @@ def build(a):
     spec['spec']['platform'] = {'os': 'darwin', 'arch': 'arm64'}
     spec['spec']['artifacts']['pythonWheels'] = ['wheels/'+p.name for p in sorted(wheelhouse.glob('*.whl'))]
     (bundle/'bundle.yaml').write_text(yaml.safe_dump(spec, sort_keys=False))
-    copy(HERE/'installer-requirements.lock', bundle/'python-requirements.lock')
+    copy(installed_lock, bundle/'python-requirements.lock')
     for entry in spec['spec']['artifacts']['abilities']:
         if not (bundle/entry['file']).is_file():
             raise ValueError('Missing ability: '+str(entry))
@@ -266,7 +271,7 @@ def build(a):
             dest = stage/'wheelhouse'/wheel.name; deps.append(dest)
         copy(wheel, dest)
     lock = stage/'locks/requirements.lock'
-    copy(HERE/'installer-requirements.lock', lock)
+    copy(installed_lock, lock)
     record = lambda p: builder.file_record(stage, p)
     pack_meta = dict(schema_version=1, pack_id='native-mujoco', pack_version='0.4.0-dev.0',
         profile=profile.profile, runner=profile.runner, python_version='3.13.15', endpoint=profile.endpoint,
@@ -306,7 +311,7 @@ def build(a):
     write(payload/'files.json', {p.relative_to(payload).as_posix():digest(p) for p in sorted(payload.rglob('*')) if p.is_file()})
     target = output/f'semantic-{a.version}-macos-arm64.tar.gz'
     archive(payload, target)
-    for name in ('release.json', 'repo-versions.json', 'native-linkage.json'):
+    for name in ('release.json', 'repo-versions.json', 'native-linkage.json', 'wheel-relocation.json'):
         copy(payload/name, output/name)
     (output/'install-macos.sh').write_text((HERE/'bootstrap.sh').read_text().replace("release_tag='macos-v0.1.0-rc.1'", f"release_tag='macos-v{a.version}'"))
     write(output/'manifest.json', {'version':a.version, 'platform':'macos-arm64', 'archive':target.name,
