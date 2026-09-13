@@ -67,6 +67,7 @@ const { createHash } = require('node:crypto');
       assert.match(await page.locator('#install-video source').getAttribute('src'), /semantic-install-d282bc52483d\.mp4$/);
       await page.locator('[data-language="en"]').click();
       assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+      assert.ok(!/[\u4e00-\u9fff]/.test(await page.locator('.terminal-head').textContent()));
       assert.equal(await page.locator('[data-language="en"]').getAttribute('aria-pressed'), 'true');
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `English overflow at ${width}px`);
       assert.equal(await page.locator('[data-language-panel="zh"]').isVisible(), false);
