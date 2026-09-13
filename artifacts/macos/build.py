@@ -113,8 +113,18 @@ def native_report(root):
         if any(tuple(map(int, v.split('.'))) > (15, 5, 0) for v in versions):
             raise ValueError('Binary requires newer macOS than declared: '+str(p))
         rpaths = re.findall(r'cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset', load_commands)
-        if any(r.startswith('/') and not r.startswith(('/usr/lib/', '/System/Library/')) for r in rpaths):
-            raise ValueError('Absolute build-time rpath: '+str(p))
+        external_rpaths = [r for r in rpaths if r.startswith('/') and not r.startswith(('/usr/lib/', '/System/Library/'))]
+        if external_rpaths:
+            # Official MuJoCo wheels retain a Jenkins search directory alongside
+            # @loader_path. A search hint is not a dependency: require every
+            # @rpath load to resolve within the package without that directory.
+            for library in libraries:
+                if not library.startswith('@rpath/'):
+                    continue
+                candidates = [(p.parent/r.removeprefix('@loader_path').lstrip('/')/library.removeprefix('@rpath/')).resolve()
+                              for r in rpaths if r == '@loader_path' or r.startswith('@loader_path/')]
+                if not any(c.is_file() and c.is_relative_to(root.resolve()) for c in candidates):
+                    raise ValueError(f'Library needs an external rpath: {p}: {library}')
         reports[p.relative_to(root).as_posix()] = dict(architectures=architectures, libraries=libraries,
                                                      minimum_macos=versions, rpaths=rpaths)
     return reports

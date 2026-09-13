@@ -218,7 +218,7 @@ jobs:
       run: ' .build-venv/bin/python artifacts/macos/smoke_installer.py --package "dist-macos/semantic-$INSTALLER_VERSION-macos-arm64.tar.gz"
         --root "$RUNNER_TEMP/Semantic Installer Smoke" --report dist-macos/validation.json
 
-        shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
+        shasum -a 256 dist-macos/validation.json dist-macos/installed-linkage.json dist-macos/loaded-libraries.json | sed ''s@dist-macos/@@'' >> dist-macos/SHA256SUMS
 
         '
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

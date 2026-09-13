@@ -49,12 +49,14 @@ def main(a):
         from build import native_report
         linkage = native_report(root)
         (a.report.parent/'installed-linkage.json').write_text(json.dumps(linkage, indent=2)+'\n')
-        report['checks'].append('Installed Mach-O libraries have arm64 support and no Homebrew/build-directory linkage')
+        report['checks'].append('Installed Mach-O architecture and package-local dependency resolution; upstream search hints recorded')
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}
         run(robot,HERE/'smoke.py',env=env)
         run(robot, '-c', 'import ability_py, semantic_robot_sdk_core, semantic_robot_sdk_r1pro, semantic_robot_skill_sdk, r1pro_abilities', env=env)
         run(robot,'-c',"import runpy,tempfile,inspect; from pathlib import Path; checks=runpy.run_path("+repr(str(HERE.parent/'musl/robot_checks.py'))+");\nwith tempfile.TemporaryDirectory() as tmp:\n for name, fn in checks.items():\n  if name.startswith('test_'): fn(Path(tmp)) if inspect.signature(fn).parameters else fn()",env=env)
         run(release/'bin/uv','pip','check','--python',robot,env=env)
+        run(robot, HERE/'loaded_libraries.py', release, a.report.parent/'loaded-libraries.json', env=env)
+        report['checks'].append('dyld confirms Python/native dependencies load only from this install or macOS system libraries')
         report['checks'].append('Shared Python/NumPy: Pinocchio, Ruckig, MuJoCo and actual Robot math checks; dependency consistency')
         runtime_pythons=list((root/'runtime-envs').rglob('bin/python'))
         assert runtime_pythons, 'Missing runtime venv'
