@@ -6,7 +6,7 @@
 
 🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
 
-Native **macOS Apple Silicon** adaptation has started. See [development validation and remaining work](artifacts/macos/README.md); the public installer currently supports Linux only.
+A native **macOS Apple Silicon / macOS 15.5+** installer preview is also available. See [installation and validation scope](#native-macos-installer-apple-silicon-preview); physical Mac graphics qualification is pending.
 
 ## Start here
 

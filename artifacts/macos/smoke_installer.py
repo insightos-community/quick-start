@@ -47,7 +47,7 @@ def main(a):
         metadata=json.loads((release/'release.json').read_text())
         robot=release/'robot-bundles'/metadata['bundle_name']/'python/venv/bin/python'
         from build import native_report
-        linkage = native_report(root)
+        linkage = native_report(root, installed=True)
         (a.report.parent/'installed-linkage.json').write_text(json.dumps(linkage, indent=2)+'\n')
         report['checks'].append('Installed Mach-O architecture and package-local dependency resolution; upstream search hints recorded')
         env={**os.environ, 'PYTHONPATH':'', 'PYTHONNOUSERSITE':'1', 'MUJOCO_GL':'cgl'}

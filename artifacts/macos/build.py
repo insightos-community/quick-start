@@ -88,7 +88,7 @@ def relocate_python(root, original):
     return changed
 
 
-def native_report(root):
+def native_report(root, *, installed=False):
     reports = {}
     for p in root.rglob('*'):
         if not p.is_file():
@@ -106,6 +106,11 @@ def native_report(root):
         libraries = [line.strip().split(' (', 1)[0] for line in output.splitlines()[1:]]
         for lib in libraries:
             if lib.startswith('/') and not lib.startswith(('/usr/lib/', '/System/Library/')):
+                # uv may rewrite a dylib's own install name to its installed
+                # location. Installed venvs need not be relocatable; the
+                # distributable payload must still have relative linkage.
+                if installed and Path(lib).is_file() and Path(lib).resolve().is_relative_to(root.resolve()):
+                    continue
                 raise ValueError(f'Nonportable library in {p}: {lib}')
         load_commands = subprocess.check_output(['otool', '-l', str(p)], text=True)
         versions = re.findall(r'\bminos ([0-9.]+)', load_commands)
