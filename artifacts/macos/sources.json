@@ -9,7 +9,7 @@
   },
   "mujoco-runtime": {
     "repository": "insightos-community/mujoco-runtime",
-    "commit": "d720d276ea23262a50bc0ddbc44ae50a5ffab434"
+    "commit": "3130cd12d4b88c4cbb760b6be78bdaf11d9180de"
   },
   "semantic-deployment": {
     "repository": "insightos-community/semantic-deployment",

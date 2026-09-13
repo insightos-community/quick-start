@@ -169,7 +169,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/mujoco-runtime
-        ref: d720d276ea23262a50bc0ddbc44ae50a5ffab434
+        ref: 3130cd12d4b88c4cbb760b6be78bdaf11d9180de
         path: sources/mujoco-runtime
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
