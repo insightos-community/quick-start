@@ -1,0 +1,235 @@
+{
+  "date": "2026-09-13",
+  "scope": "Planning audit only; no Windows execution or successful Windows product build claimed",
+  "baseline": "macos-v0.1.0-rc.3",
+  "target": "Windows 11 x64; CPython 3.13 non-free-threaded",
+  "sources": [
+    {
+      "path": "quick-start",
+      "commit": "8e73689640761205c6bb0a862da6ed053abe053b",
+      "dirty": false
+    },
+    {
+      "path": "worktrees/semantic-framework-macos",
+      "commit": "6d524fe4dbdfceb2029f7468619723274465c976",
+      "dirty": false
+    },
+    {
+      "path": "worktrees/deployment-macos-ability-cleanup",
+      "commit": "ef9bbebf9a6d1f2c25350d575d242d52f29e8e42",
+      "dirty": false
+    },
+    {
+      "path": "worktrees/ability-framework-macos",
+      "commit": "94d221c63f8ef6677dd6a8dca303f86701a4d6bb",
+      "dirty": false
+    },
+    {
+      "path": "worktrees/mujoco-macos-skill-pydantic",
+      "commit": "3130cd12d4b88c4cbb760b6be78bdaf11d9180de",
+      "dirty": false
+    },
+    {
+      "path": "forks/pinocchio",
+      "commit": "2e5854965571237a17934e1baca13d856d053b3c",
+      "dirty": false
+    },
+    {
+      "path": "forks/ruckig",
+      "commit": "950e957a51f217ac5fe04bb93fea23e3decb5d6f",
+      "dirty": false
+    },
+    {
+      "path": "repos/ability-framework/ability-py-sdk",
+      "commit": "3a90b6d94ea6babb890ffcd285ba55e5fef6fc8c",
+      "dirty": false
+    },
+    {
+      "path": "repos/semantic-robotsdk/robot-sdk",
+      "commit": "59a1a8364c3d0330f1802c020e37544e0dbfa7c5",
+      "dirty": false
+    },
+    {
+      "path": "repos/semantic-skill/robot-skill",
+      "commit": "660345e5ff7c0985d7b317a192dcc0b13fc6ea8c",
+      "dirty": false
+    }
+  ],
+  "cross_build": {
+    "command": "GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/...",
+    "framework": {
+      "result": "failed",
+      "diagnostics": [
+        "go: downloading github.com/ncruces/go-strftime v0.1.9",
+        "go: downloading github.com/ebitengine/purego v0.8.4",
+        "go: downloading github.com/jupiterrider/ffi v0.5.0",
+        "go: downloading github.com/Microsoft/go-winio v0.4.14",
+        "# insightos.cn/semantic-framework/internal/simulation",
+        "internal/simulation/launcher.go:66:45: unknown field Setpgid in struct literal of type syscall.SysProcAttr",
+        "internal/simulation/launcher.go:114:14: undefined: syscall.Kill",
+        "internal/simulation/launcher.go:122:15: undefined: syscall.Kill"
+      ]
+    },
+    "semantic-deployment": {
+      "result": "failed",
+      "diagnostics": [
+        "# insightos.cn/semantic-robot-deployment/internal/instance",
+        "internal/instance/debug_stack.go:49:20: undefined: syscall.Flock",
+        "internal/instance/debug_stack.go:49:54: undefined: syscall.LOCK_EX",
+        "internal/instance/debug_stack.go:49:70: undefined: syscall.LOCK_NB",
+        "internal/instance/debug_stack.go:52:16: undefined: syscall.Flock",
+        "internal/instance/debug_stack.go:52:50: undefined: syscall.LOCK_UN",
+        "internal/instance/runner.go:72:45: unknown field Setpgid in struct literal of type syscall.SysProcAttr",
+        "internal/instance/runner.go:99:20: undefined: syscall.Kill",
+        "internal/instance/runner.go:108:24: undefined: syscall.Kill",
+        "internal/instance/runner.go:116:17: undefined: syscall.Kill",
+        "internal/instance/runner.go:122:15: undefined: syscall.Kill",
+        "internal/instance/runner.go:122:15: too many errors"
+      ]
+    }
+  },
+  "resolution": {
+    "uv_version": "0.12.7",
+    "python_version": "3.13",
+    "python_platform": "x86_64-pc-windows-msvc",
+    "full_installer_requirements": "failed: pin==3.9.0 has no usable wheels",
+    "without_pin_and_cmeel_requirements": "success: 38 packages; dependency metadata only, not an install test; newly resolved transitive versions, not identical to macOS lock",
+    "uvloop": "excluded by Windows marker in the successfully resolved subset"
+  },
+  "pypi_inventory": [
+    {
+      "name": "cmeel-assimp",
+      "version": "6.0.5",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-assimp/6.0.5/json"
+    },
+    {
+      "name": "cmeel-boost",
+      "version": "1.89.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-boost/1.89.0/json"
+    },
+    {
+      "name": "cmeel-console-bridge",
+      "version": "1.0.2.3",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-console-bridge/1.0.2.3/json"
+    },
+    {
+      "name": "cmeel-octomap",
+      "version": "1.10.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-octomap/1.10.0/json"
+    },
+    {
+      "name": "cmeel-qhull",
+      "version": "8.0.2.1",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-qhull/8.0.2.1/json"
+    },
+    {
+      "name": "cmeel-tinyxml2",
+      "version": "10.0.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-tinyxml2/10.0.0/json"
+    },
+    {
+      "name": "cmeel-urdfdom",
+      "version": "4.0.1",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-urdfdom/4.0.1/json"
+    },
+    {
+      "name": "cmeel-zlib",
+      "version": "1.3.2",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/cmeel-zlib/1.3.2/json"
+    },
+    {
+      "name": "coal",
+      "version": "3.0.2",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/coal/3.0.2/json"
+    },
+    {
+      "name": "eigenpy",
+      "version": "3.12.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/eigenpy/3.12.0/json"
+    },
+    {
+      "name": "glfw",
+      "version": "2.10.2",
+      "compatible_wheels": [
+        "glfw-2.10.2-py2.py3-none-win_amd64.whl"
+      ],
+      "source": "https://pypi.org/pypi/glfw/2.10.2/json"
+    },
+    {
+      "name": "libcoal",
+      "version": "3.0.2",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/libcoal/3.0.2/json"
+    },
+    {
+      "name": "libpinocchio",
+      "version": "3.9.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/libpinocchio/3.9.0/json"
+    },
+    {
+      "name": "mujoco",
+      "version": "3.4.0",
+      "compatible_wheels": [
+        "mujoco-3.4.0-cp313-cp313-win_amd64.whl"
+      ],
+      "source": "https://pypi.org/pypi/mujoco/3.4.0/json"
+    },
+    {
+      "name": "numpy",
+      "version": "2.3.5",
+      "compatible_wheels": [
+        "numpy-2.3.5-cp313-cp313-win_amd64.whl"
+      ],
+      "source": "https://pypi.org/pypi/numpy/2.3.5/json"
+    },
+    {
+      "name": "pin",
+      "version": "3.9.0",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/pin/3.9.0/json"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "compatible_wheels": [
+        "pydantic-2.13.4-py3-none-any.whl"
+      ],
+      "source": "https://pypi.org/pypi/pydantic/2.13.4/json"
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.46.4",
+      "compatible_wheels": [
+        "pydantic_core-2.46.4-cp313-cp313-win_amd64.whl"
+      ],
+      "source": "https://pypi.org/pypi/pydantic-core/2.46.4/json"
+    },
+    {
+      "name": "ruckig",
+      "version": "0.19.4",
+      "compatible_wheels": [
+        "ruckig-0.19.4-cp313-cp313-win_amd64.whl"
+      ],
+      "source": "https://pypi.org/pypi/ruckig/0.19.4/json"
+    },
+    {
+      "name": "uvloop",
+      "version": "0.22.1",
+      "compatible_wheels": [],
+      "source": "https://pypi.org/pypi/uvloop/0.22.1/json"
+    }
+  ],
+  "ability_framework_release_source": "b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1",
+  "ability_framework_tree_comparison": "git diff b5e8e443d1a8f3911c19a43a3842dcbbe92b8cb1 94d221c63f8ef6677dd6a8dca303f86701a4d6bb is empty"
+}
