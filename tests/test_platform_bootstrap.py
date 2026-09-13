@@ -52,6 +52,13 @@ class PlatformBootstrapTests(unittest.TestCase):
         self.assertFalse(self.selection('install.sh', [])['use_github'])
         self.assertTrue(self.selection('install-en.sh', [])['use_github'])
 
+    def test_macos_system_bash_handles_empty_optional_arguments(self):
+        command = 'source "$1"; semantic_native_macos() { printf "%s\\n" "$@"; }; semantic_macos_dispatch --tag macos-v0.1.0-rc.2'
+        result = subprocess.run(['/bin/bash', '-euc', command, 'test', str(ROOT / 'artifacts/platform_bootstrap.sh')], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('macos-v0.1.0-rc.2', result.stdout)
+        self.assertIn('--dir', result.stdout)
+
     def test_macos_offline_route_needs_no_host_python_and_checks_archive_integrity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
