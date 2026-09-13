@@ -85,3 +85,7 @@ promoting this preview to a fully qualified graphics release.
 The earlier `macos-native.yml`, `requirements.lock` and `smoke.py` retain the
 smaller dependency-foundation checks. Their binaries are development evidence,
 not substitutes for the complete installer archive.
+
+## Reproduce from source and Releases
+
+See the [three-platform build guide](../../README.build.md) for complete local/CI commands, pinned versions, output paths and all component/dependency repository recipes.

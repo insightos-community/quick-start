@@ -41,3 +41,7 @@ Local AMD radeonsi and software rendering have been exercised. Intel and Nouveau
 Only a successful `musl-vMAJOR.MINOR.PATCH-REVISION` tag build publishes a prerelease, without replacing the default latest Release. Pull requests and manual runs validate artifacts without publishing. Published assets are never overwritten.
 
 For a local build, use the same pinned container, mount this checkout at `/src` read-only and a new working directory at `/work`, set `MUSL_TAG=musl-v0.1.0-2` and `MUSL_VERSION=0.1.0-musl.2`, then run `sh /src/artifacts/musl/build.sh`. The target host needs Bash and Python 3.10+ to start the bootstrap. `--install-system-deps` uses its configured package repositories; no source URL is replaced.
+
+## Reproduce from source and Releases
+
+See the [three-platform build guide](../../README.build.md) for complete local/CI commands, pinned versions, output paths and all component/dependency repository recipes.

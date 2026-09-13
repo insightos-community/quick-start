@@ -120,3 +120,7 @@ Mesa prefix 约 47 MiB，收集的外部依赖约 177 MiB，仍为动态链接�
 - [Mesa EGL 驱动架构](https://docs.mesa3d.org/egl.html)
 - [Mesa 驱动环境变量](https://docs.mesa3d.org/envvars.html)
 - [NVIDIA 官方驱动系统要求](https://download.nvidia.com/XFree86/Linux-x86_64/580.76.05/README/minimumrequirements.html)
+
+## Reproduce from source and Releases
+
+See the [three-platform build guide](../../README.build.md) for complete local/CI commands, pinned versions, output paths and all component/dependency repository recipes.
