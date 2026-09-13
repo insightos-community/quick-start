@@ -35,13 +35,16 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 70c4a025c5995f8ad7b8770718b73932ef57febf
+        ref: 5885144c250cdf7cb3aa624a94f51565b591c99a
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
       with:
         go-version: 1.25.8
-        cache: false
+        cache: true
+        cache-dependency-path: 'sources/Semantic-Framework/go.sum
+
+          sources/semantic-deployment/go.sum'
     - name: Build and test native applications
       run: "mkdir -p native/bin\ncd sources/Semantic-Framework\nfor name in semantic-server semantic-pilot semantic; do\n\
         \  CGO_ENABLED=1 go build -p 2 -trimpath -o \"../../native/bin/$name\" \"./cmd/$name\"\ndone\ngo test -p 2 ./... -count=1\
@@ -150,7 +153,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 70c4a025c5995f8ad7b8770718b73932ef57febf
+        ref: 5885144c250cdf7cb3aa624a94f51565b591c99a
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
