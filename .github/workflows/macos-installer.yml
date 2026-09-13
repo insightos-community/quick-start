@@ -7,6 +7,8 @@ name: macOS Installer
     - install-en.sh
     - artifacts/install.sh
     - artifacts/platform_bootstrap.sh
+    - artifacts/bootstrap_support.py
+    - tests/test_install_preflight_cache.py
     - artifacts/build_installers.py
     - artifacts/build_english_installer.py
     - artifacts/macos/**
@@ -211,12 +213,14 @@ jobs:
     - name: Assemble offline installer
       env:
         GH_TOKEN: ${{ github.token }}
-        RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'macos-v0.1.0-rc.3' }}
+        RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'macos-v0.1.0-rc.4' }}
       run: 'version="${RELEASE_TAG#macos-v}"
 
         echo "INSTALLER_VERSION=$version" >> "$GITHUB_ENV"
 
         .build-venv/bin/python -m unittest discover -s tests -p test_platform_bootstrap.py
+
+        .build-venv/bin/python -m unittest discover -s tests -p test_install_preflight_cache.py
 
         .build-venv/bin/python artifacts/macos/build.py --version "$version" --output dist-macos --work "$RUNNER_TEMP/macos-build"
         --sources sources --binaries native/bin
@@ -273,6 +277,8 @@ jobs:
       run: 'cat > release-notes.md <<''EOF''
 
         Native Apple Silicon macOS installer preview (macOS 15.5+).
+
+        Adds pre-install port checks, persistent SHA-256-verified archive caching for retries, and offline uninstall from the standalone download script, including incomplete installations with bundled Python. The website provides local platform icons and matching management commands.
 
         Fixes macOS project devices failing with Robot instance supervisor exit status 1: all seven script-only Ability packages now declare arm64, matching native AbilityFramework. Also includes Pydantic 2.13.4 required by the bundled Robot Skills, so offline Skill installation and Robot Runtime readiness can complete. Cleans up owned Ability Python children after confirmed safe project stop on macOS. Includes full project device startup, release and uninstall regression checks.
 

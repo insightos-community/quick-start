@@ -53,7 +53,7 @@ semantic_macos_dispatch() (
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.3] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
     echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
@@ -63,8 +63,7 @@ semantic_macos_dispatch() (
     echo 'Use a macos-vMAJOR.MINOR.PATCH[-SUFFIX] tag on macOS.' >&2; exit 2
   fi
   if [[ "$action" == uninstall ]]; then
-    [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/bin/semanticctl" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
-    "$instance_dir/bin/semanticctl" uninstall ${forwarded[@]+"${forwarded[@]}"}
+    semantic_native_macos --uninstall --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   elif [[ "$action" == configure ]]; then
     [[ -f "$instance_dir/.semantic-install-root" && -x "$instance_dir/current/python/bin/python3.13" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
     "$instance_dir/current/python/bin/python3.13" -B "$instance_dir/bin/semantic-manager/installer.py" configure --payload "$instance_dir/current" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
@@ -84,32 +83,129 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   echo 'This installer requires native Apple Silicon macOS.' >&2
   exit 1
 fi
-release_tag='macos-v0.1.0-rc.3'
+release_tag='macos-v0.1.0-rc.4'
 archive_path=''
 expected_sha=''
+instance_dir="$HOME/Library/Application Support/Semantic"
+cache_dir="${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers"
+action=install
+no_start=0
+web_host=127.0.0.1
+http_port=8080
+ws_port=8081
+web_port=3000
+runtime_port=8090
 options=()
 while (($#)); do
   case "$1" in
     --tag) release_tag="${2:?Missing tag}"; shift 2 ;;
+    --tag=*) release_tag="${1#*=}"; shift ;;
     --package) archive_path="${2:?Missing package path}"; shift 2 ;;
+    --package=*) archive_path="${1#*=}"; shift ;;
     --sha256) expected_sha="${2:?Missing SHA256}"; shift 2 ;;
+    --sha256=*) expected_sha="${1#*=}"; shift ;;
+    --cache-dir) cache_dir="${2:?Missing cache directory}"; shift 2 ;;
+    --cache-dir=*) cache_dir="${1#*=}"; shift ;;
+    --dir) instance_dir="${2:?Missing instance directory}"; shift 2 ;;
+    --dir=*) instance_dir="${1#*=}"; shift ;;
+    --uninstall|uninstall) action=uninstall; shift ;;
+    --no-start) no_start=1; options+=("$1"); shift ;;
+    --lan) web_host=0.0.0.0; options+=("$1"); shift ;;
+    --http-port|--ws-port|--web-port|--runtime-port|--web-host)
+      flag="$1"; value="${2:?Missing option value}"
+      case "$flag" in
+        --http-port) http_port="$value" ;; --ws-port) ws_port="$value" ;;
+        --web-port) web_port="$value" ;; --runtime-port) runtime_port="$value" ;;
+        --web-host) web_host="$value" ;;
+      esac
+      options+=("$flag" "$value"); shift 2 ;;
+    --http-port=*|--ws-port=*|--web-port=*|--runtime-port=*|--web-host=*)
+      flag="${1%%=*}"; value="${1#*=}"
+      case "$flag" in
+        --http-port) http_port="$value" ;; --ws-port) ws_port="$value" ;;
+        --web-port) web_port="$value" ;; --runtime-port) runtime_port="$value" ;;
+        --web-host) web_host="$value" ;;
+      esac
+      options+=("$flag" "$value"); shift ;;
     --help|-h)
       echo 'Usage: bash install-macos.sh [--tag macos-vVERSION] [--dir PATH] [--yes] [--no-start]'
-      echo 'Offline: --package ARCHIVE --sha256 SHA256. Further options are passed to the installer.'
+      echo 'Offline: --package ARCHIVE --sha256 SHA256. Cache: --cache-dir PATH (verified archives survive failed installs).'
+      echo 'Uninstall: --uninstall --dir PATH [--yes] [--purge] [--dry-run]; uses installed files, no archive download.'
       exit 0 ;;
     *) options+=("$1"); shift ;;
   esac
 done
+[[ "$instance_dir" == /* && ! -L "$instance_dir" && "$instance_dir" != / && "$instance_dir" != "$HOME" ]] || { echo 'Use an absolute instance --dir, not a symlink or home directory.' >&2; exit 2; }
+if [[ "$action" == uninstall ]]; then
+  [[ -f "$instance_dir/.semantic-install-root" && -f "$instance_dir/install.json" ]] || { echo 'No managed installation at --dir.' >&2; exit 2; }
+  if [[ -x "$instance_dir/bin/semanticctl" ]]; then
+    "$instance_dir/bin/semanticctl" uninstall ${options[@]+"${options[@]}"}
+  else
+    # Failed installs may have copied Python but not yet created semanticctl.
+    found=0
+    for python in "$instance_dir"/releases/*/python/bin/python3.13; do
+      release="${python%/python/bin/python3.13}"
+      if [[ -x "$python" && -f "$release/uninstall.py" ]]; then
+        "$python" -I -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from uninstall import uninstall_entry; uninstall_entry(sys.argv[2:])' "$release" --dir "$instance_dir" ${options[@]+"${options[@]}"}
+        found=1; break
+      fi
+    done
+    [[ "$found" == 1 ]] || { echo 'Installed Python/management files are missing; no archive was downloaded.' >&2; exit 2; }
+  fi
+  exit 0
+fi
 [[ "$release_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag' >&2; exit 1; }
+for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
+  [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Ports must be numbers between 1024 and 65535' >&2; exit 2; }
+done
+http_port=$((10#$http_port)); ws_port=$((10#$ws_port)); web_port=$((10#$web_port)); runtime_port=$((10#$runtime_port))
+[[ "$http_port" != "$ws_port" && "$http_port" != "$web_port" && "$http_port" != "$runtime_port" && "$ws_port" != "$web_port" && "$ws_port" != "$runtime_port" && "$web_port" != "$runtime_port" ]] || { echo 'Ports must be distinct' >&2; exit 2; }
+# System lsof supplies an early check without requiring a preinstalled Python.
+# Existing instances are checked by the manager, which can identify their own services.
+if [[ -z "$archive_path" && ! -f "$instance_dir/.semantic-install-root" ]]; then
+  command -v lsof >/dev/null || { echo 'System lsof is required for the port preflight.' >&2; exit 2; }
+  for name in http ws web runtime; do
+    [[ "$no_start" == 0 || "$name" == runtime ]] || continue
+    case "$name" in http) port="$http_port" ;; ws) port="$ws_port" ;; web) port="$web_port" ;; runtime) port="$runtime_port" ;; esac
+    host=127.0.0.1; [[ "$name" != web ]] || host="$web_host"
+    listeners="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fn)" || [[ $? == 1 ]]
+    if printf '%s\n' "$listeners" | awk -v host="$host" -v port="$port" '
+      /^n/ {address=substr($0,2); if (host=="0.0.0.0" || address=="*:"port || address==host":"port || address=="[::]:"port) busy=1}
+      END {exit !busy}'; then
+      echo "Port $port ($name) is occupied; stop its service or use --$name-port PORT. No archive was downloaded." >&2
+      exit 2
+    fi
+  done
+fi
 task_tmp="$(mktemp -d "${TMPDIR:-/tmp}/semantic-download.XXXXXXXX")"
-trap 'rm -rf -- "$task_tmp"' EXIT
+staged=''
+trap 'rm -rf -- "$task_tmp"; [[ -z "$staged" ]] || rm -f -- "$staged"' EXIT
 if [[ -z "$archive_path" ]]; then
   archive_name="semantic-${release_tag#macos-v}-macos-arm64.tar.gz"
   release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
   curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/SHA256SUMS" -o "$task_tmp/SHA256SUMS"
   expected_sha="$(awk -v name="$archive_name" '$2 == name {print $1}' "$task_tmp/SHA256SUMS")"
-  archive_path="$task_tmp/$archive_name"
-  curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/$archive_name" -o "$archive_path"
+  [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'A valid SHA256 is required' >&2; exit 1; }
+  [[ "$cache_dir" == /* ]] || { echo 'Cache directory must be absolute' >&2; exit 2; }
+  parent="$cache_dir"
+  while [[ "$parent" != / ]]; do
+    [[ ! -L "$parent" ]] || { echo 'Cache path must not contain symlinks' >&2; exit 2; }
+    parent="${parent%/*}"; [[ -n "$parent" ]] || parent=/
+  done
+  (umask 077; mkdir -p "$cache_dir")
+  [[ -z "$(find "$cache_dir" -prune \( -perm -0020 -o -perm -0002 \) -print)" ]] || { echo 'Cache directory must not be writable by other users' >&2; exit 2; }
+  [[ -O "$cache_dir" ]] || { echo 'Cache directory must belong to you' >&2; exit 2; }
+  archive_path="$cache_dir/$expected_sha.tar.gz"
+  [[ ! -L "$archive_path" ]] || { echo 'Cached archive must not be a symlink' >&2; exit 2; }
+  if [[ -f "$archive_path" && "$(shasum -a 256 "$archive_path" | awk '{print $1}')" == "$expected_sha" ]]; then
+    echo "[OK] Using verified cached archive: $archive_path" >&2
+  else
+    staged="$(mktemp "$cache_dir/.download.XXXXXXXX")"
+    curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/$archive_name" -o "$staged"
+    [[ "$(shasum -a 256 "$staged" | awk '{print $1}')" == "$expected_sha" ]] || { echo 'SHA256 mismatch; download was not cached' >&2; exit 1; }
+    mv -f "$staged" "$archive_path"; staged=''
+    echo "[OK] Archive cached for retries: $archive_path" >&2
+  fi
 fi
 [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'A valid SHA256 is required' >&2; exit 1; }
 actual_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
@@ -122,7 +218,7 @@ tar -tvzf "$archive_path" > "$task_tmp/types"
 awk 'substr($0,1,1) != "-" && substr($0,1,1) != "d" {exit 1}' "$task_tmp/types"
 mkdir "$task_tmp/payload"
 tar -xzf "$archive_path" -C "$task_tmp/payload"
-bash "$task_tmp/payload/install.command" "${options[@]}"
+bash "$task_tmp/payload/install.command" --dir "$instance_dir" ${options[@]+"${options[@]}"}
 
 )
 # END GENERATED PLATFORM ROUTER
@@ -468,6 +564,11 @@ if arguments and arguments[0] == 'uninstall':
     arguments = ['--uninstall', *arguments[1:]]
 if '--uninstall' in arguments:
     arguments.remove('--uninstall')
+    management = argparse.ArgumentParser(add_help=False)
+    for option in ('--tag', '--version', '--source', '--cache-dir', '--base-url', '--ticket', '--package', '--sha256', '--musl-runtime'):
+        management.add_argument(option)
+    management.add_argument('--musl', action='store_true')
+    _, arguments = management.parse_known_args(arguments)
     try:
         uninstall_entry(arguments)
     except Exception as error:
@@ -486,6 +587,7 @@ p.add_argument('--musl-runtime', choices=['bundled', 'system'])
 p.add_argument('--package', type=pathlib.Path)
 p.add_argument('--ticket', type=pathlib.Path, help='Private OSS download ticket; no long-lived credentials required')
 p.add_argument('--sha256')
+p.add_argument('--cache-dir', type=pathlib.Path, default=pathlib.Path(os.environ.get('XDG_CACHE_HOME', str(pathlib.Path.home()/'.cache')))/'semantic/installers')
 p.add_argument('--allow-http', action='store_true', help='Only for local/private test mirrors')
 p.add_argument('--configure-existing', action='store_true', help='Only update installed instance management, LAN access and shortcuts; preserve app version/data')
 p.add_argument('-h', '--help', action='store_true')
@@ -514,7 +616,7 @@ if a.musl and not a.configure_existing:
     rest = ['--musl', *rest]
 if a.help:
     print('Semantic: --base-url HTTPS_URL [--version VERSION] | --package FILE [--sha256 HASH]')
-    print('Tags: --tag v0.1.0 | --tag musl-v0.1.0-2 | --tag macos-v0.1.0-rc.2')
+    print('Tags: --tag v0.1.0 | --tag musl-v0.1.0-2 | --tag macos-v0.1.0-rc.4')
     print('Sources: --source auto|github|oss; explicit tags use GitHub by default. musl/macOS currently use GitHub Releases.')
     print('musl: --musl [--musl-runtime bundled|system] [--render-backend auto|mesa-gpu|software]; Linux x86_64; bundled works on glibc hosts')
     print('安装选项: --dir ABS_PATH --yes --no-start --install-system-deps')
@@ -522,6 +624,7 @@ if a.help:
     print('自定义: --web-host IPv4 --web-port PORT；仅本机用 --web-host 127.0.0.1')
     print('桌面入口: 自动检测；--desktop-shortcut 强制创建 / --no-desktop-shortcut 跳过')
     print('已有实例: --configure-existing --dir ABS_PATH --lan（只更新管理工具，不升级业务产物）')
+    print('Cache: verified archives persist across retries; --cache-dir ABS_PATH selects their location.')
     print('离线卸载: --uninstall --dir ABS_PATH [--purge] [--yes] [--dry-run]')
     print('私有 OSS: --ticket /绝对路径/download.json（由 oss_client.py 生成的限时下载票据）')
     print('端口: --http-port 8080 --ws-port 8081 --web-port 3000 --runtime-port 8090')
@@ -593,6 +696,103 @@ def digest(path):
 # BEGIN GENERATED GITHUB HELPERS
 # Copyright 2026 InsightOS
 # SPDX-License-Identifier: Apache-2.0
+"""Small pre-download checks and verified, persistent archive caching."""
+import argparse
+import fcntl
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import tempfile
+
+
+def bootstrap_preflight(arguments, managed=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    parser.add_argument('--no-start', action='store_true')
+    parser.add_argument('--web-host')
+    parser.add_argument('--lan', action='store_true')
+    for name, port in [('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)]:
+        parser.add_argument('--'+name+'-port', type=int, default=port)
+    args, _ = parser.parse_known_args(arguments)
+    root = Path(args.dir).expanduser()
+    if not root.is_absolute() or root.is_symlink() or root.resolve() in (Path('/'), Path.home().resolve()):
+        raise ValueError('--dir must be an absolute instance path, not a symlink or home directory')
+    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
+        raise ValueError('Installation directory is not empty or managed; choose another --dir')
+    ports = {name: getattr(args, name+'_port') for name in ('http', 'ws', 'web', 'runtime')}
+    if len(set(ports.values())) != 4 or any(not 1024 <= port <= 65535 for port in ports.values()):
+        raise ValueError('Ports must be distinct numbers between 1024 and 65535')
+    state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
+    if state and any(state.get(name+'_port') != port for name, port in ports.items()):
+        raise ValueError('Existing instance ports differ; use its original options or a new --dir')
+    host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', '0.0.0.0')
+    ipaddress.IPv4Address(host)
+    owned = managed(root) if managed and state else {}
+    records = json.loads((root/'run/services.json').read_text()) if (root/'run/services.json').is_file() else {}
+    for name, port in ports.items():
+        if name == 'runtime' and state.get('ready'):
+            continue  # A completed install does not repeat Runtime setup.
+        if name != 'runtime' and args.no_start:
+            continue
+        service = 'web' if name == 'web' else 'server'
+        if name != 'runtime' and records.get(service, {}).get('pid') in owned:
+            continue  # Already-running services belonging to this exact instance.
+        address = host if name == 'web' else '127.0.0.1'
+        with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind((address, port))
+            except OSError as error:
+                raise RuntimeError(f'Port {port} ({name}, {address}) is unavailable; stop its service or use --{name}-port PORT. No archive was downloaded.') from error
+
+
+def cached_archive(url, expected, directory, download, status=print):
+    if not re.fullmatch(r'[0-9a-f]{64}', expected or ''):
+        raise ValueError('A valid archive SHA256 is required before downloading')
+    directory = Path(directory).expanduser()
+    if not directory.is_absolute() or any(p.is_symlink() for p in [directory, *directory.parents]):
+        raise ValueError('Cache directory must be absolute and must not contain symlinks')
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if directory.stat().st_uid != os.geteuid() or directory.stat().st_mode & 0o022:
+        raise ValueError('Cache directory must be owned by you and not writable by other users')
+    target = directory/(expected+'.tar.gz')
+    descriptor = os.open(directory/(expected+'.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'a') as lock:
+        if os.fstat(lock.fileno()).st_nlink != 1 or os.fstat(lock.fileno()).st_uid != os.geteuid():
+            raise ValueError('Invalid cache lock ownership or hard link')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if target.is_symlink() or (target.exists() and (not target.is_file() or target.stat().st_nlink != 1)):
+            raise ValueError('Invalid cached archive path')
+        def checksum(path):
+            result = hashlib.sha256()
+            with path.open('rb') as stream:
+                while block := stream.read(1024*1024):
+                    result.update(block)
+            return result.hexdigest()
+        if target.is_file() and checksum(target) == expected:
+            status('[OK] Using verified cached archive: '+str(target))
+            return target
+        if target.exists():
+            status('[>] Cached archive checksum differs; downloading a verified replacement')
+        descriptor, path = tempfile.mkstemp(prefix='.download-', dir=directory)
+        os.close(descriptor)
+        staged = Path(path)
+        try:
+            download(url, staged, 8*1024**3)
+            if checksum(staged) != expected:
+                raise ValueError('Archive SHA256 mismatch; download was not cached')
+            staged.replace(target)
+        finally:
+            staged.unlink(missing_ok=True)
+        status('[OK] Archive cached for retries: '+str(target))
+        return target
+
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """GitHub Release and LFS helpers embedded in the standalone English installer."""
 import hashlib
 import json
@@ -618,7 +818,7 @@ def github_digest(path):
     return digest.hexdigest()
 
 
-def github_archive(work, version, download, requested_sha=None, musl=False):
+def github_archive(work, version, download, requested_sha=None, musl=False, archive_download=None):
     tag = GITHUB_DEFAULT_TAG if version == 'stable' else 'v' + version.removeprefix('v')
     if not musl and not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z0-9._+-]*)', tag):
         raise ValueError('Invalid GitHub release version')
@@ -655,7 +855,10 @@ def github_archive(work, version, download, requested_sha=None, musl=False):
     if expected is None or (requested_sha and requested_sha != expected):
         raise ValueError('GitHub archive checksum is missing or differs from --sha256')
     archive = work/name
-    download(base+name, archive, 8*1024**3)
+    if archive_download:
+        archive = archive_download(base+name, expected)
+    else:
+        download(base+name, archive, 8*1024**3)
     # The canonical bootstrap verifies this digest again before extracting anything.
     if github_digest(archive) != expected:
         raise ValueError('GitHub archive SHA256 mismatch')
@@ -755,6 +958,10 @@ def hydrate_github_assets(payload, download):
             target.chmod(0o644)
     return len(pending)
 # END GENERATED GITHUB HELPERS
+def archive_download(url, sha):
+    if not a.configure_existing:
+        bootstrap_preflight(rest, uninstall_managed)
+    return cached_archive(url, sha, a.cache_dir, download, status)
 with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
     work = pathlib.Path(temporary)
     if a.package:
@@ -762,7 +969,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
         sidecar = pathlib.Path(str(archive) + '.sha256')
         expected = a.sha256 or (sidecar.read_text().split()[0] if sidecar.exists() else '')
     elif use_github:
-        archive, expected = github_archive(work, a.version, download, a.sha256, musl=a.musl)
+        archive, expected = github_archive(work, a.version, download, a.sha256, musl=a.musl, archive_download=archive_download)
     else:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', a.version): raise ValueError('非法版本')
         if a.ticket:
@@ -798,7 +1005,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             expected_url = urllib.parse.urlsplit(m['base_url'].rstrip('/')+'/'+str(path))
             if (actual.scheme, actual.netloc, actual.path) != (expected_url.scheme, expected_url.netloc, expected_url.path) or actual.username or actual.fragment:
                 raise ValueError('签名下载 URL 与票据中的 Bucket/制品路径不一致')
-        download(url, archive, 8*1024**3)
+        archive = archive_download(url, expected)
     if not re.fullmatch(r'[0-9a-f]{64}', expected): raise ValueError('缺少有效 SHA256，请传 --sha256 或保留 .sha256 文件')
     status('[>] 校验 SHA-256')
     if digest(archive) != expected: raise ValueError('制品 SHA256 不匹配，停止安装')

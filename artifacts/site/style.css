@@ -95,3 +95,20 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8
 #tag-error { color: #ffb4ab; }
 .command-row code { overflow-wrap: anywhere; }
 @media (max-width: 520px) { .install-selectors { grid-template-columns: 1fr; padding: 16px 16px 0; gap: 12px; } .tag-help { padding: 0 16px; } }
+
+/* Platform icons remain local SVGs, readable with either page language. */
+.install-selectors { grid-template-columns: minmax(0, 1fr) 215px; align-items: start; }
+.platform-picker { min-width: 0; font-size: 13px; }
+.platform-symbols { position: absolute; overflow: hidden; }
+.platform-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.platform-options button { position: relative; display: flex; align-items: center; gap: 9px; min-width: 0; padding: 12px 10px; border: 1px solid #435674; border-radius: 9px; background: #142440; color: #dce7f7; cursor: pointer; font: inherit; text-align: left; }
+.platform-options button:hover { background: #223857; border-color: #8eaed1; }
+.platform-options button[aria-pressed="true"] { background: #24473e; border-color: #b0e19b; box-shadow: inset 0 0 0 1px #b0e19b; color: #f3ffe9; }
+.platform-options svg { width: 30px; height: 34px; flex: 0 0 30px; }
+.platform-options strong, .platform-options small { display: block; }
+.platform-options strong { font-size: 14px; font-weight: 600; }
+.platform-options small { margin-top: 4px; font-size: 10px; color: #b6c9df; white-space: nowrap; }
+.platform-check { position: absolute; right: 5px; top: 3px; color: #c6f0af; font-size: 10px; visibility: hidden; }
+.platform-options [aria-pressed="true"] .platform-check { visibility: visible; }
+@media(max-width:760px) { .install-selectors { grid-template-columns: 1fr; } }
+@media(max-width:430px) { .platform-options { grid-template-columns: 1fr; gap: 6px; } .platform-options button { padding: 8px 14px; gap: 12px; } .platform-options button>span:not(.platform-check) { display: flex; align-items: baseline; gap: 12px; } .platform-options small { margin: 0; } .platform-options svg { height: 29px; } .platform-check { right: 12px; top: 14px; font-size: 13px; } }

@@ -280,6 +280,22 @@ def services(root):
     return load(path) if path.exists() else {}
 
 
+def preflight_install_ports(root, args, state, host):
+    """Check before dependency installation or payload deployment, preserving retries."""
+    from uninstall import uninstall_managed
+    owned = uninstall_managed(root) if state else {}
+    records = services(root)
+    for name in ('http', 'ws', 'web', 'runtime'):
+        if name == 'runtime' and state.get('ready'):
+            continue
+        if name != 'runtime' and getattr(args, 'no_start', False):
+            continue
+        service = 'web' if name == 'web' else 'server'
+        if name != 'runtime' and records.get(service, {}).get('pid') in owned:
+            continue
+        check_port(getattr(args, name+'_port'), host if name == 'web' else '127.0.0.1')
+
+
 def show_status(root):
     from uninstall import uninstall_managed, uninstall_processes
     records = services(root)
@@ -566,6 +582,7 @@ def install(a):
     if a.web_host and old:
         if host != old.get('web_host', '127.0.0.1'):
             raise ValueError('已有实例请使用 --configure-existing --lan/--web-host 修改监听地址')
+    preflight_install_ports(root, a, old, host)
     settings_form('安装配置', [('版本', manifest['version']), ('目录', str(root)),
         ('Web', f'{host}:{a.web_port}', 'command'), ('桌面', {'auto': '自动检测', 'always': '创建入口', 'never': '跳过'}[a.desktop]),
         ('网络', 'Web 所有 IPv4 网卡；仅向可信内网放行' if host == '0.0.0.0' else 'Web 按指定地址监听', 'warn'),

@@ -47,7 +47,18 @@ limitations under the License.
       <div class="hero-tags"><span>Server + Web</span><i>·</i><span>Native MuJoCo</span><i>·</i><span>Robot Bundle</span></div>
       <div class="install-box" id="install">
         <div class="install-selectors">
-          <label><span data-i18n="platformLabel">安装平台</span><select id="install-platform"><option value="glibc">Linux x86_64 · glibc</option><option value="musl">Linux x86_64 · musl</option><option value="macos">macOS · Apple Silicon</option></select></label>
+          <div class="platform-picker"><span id="platform-label" data-i18n="platformLabel">安装平台</span>
+            <svg class="platform-symbols" width="0" height="0" aria-hidden="true"><defs>
+              <symbol id="platform-linux-icon" viewBox="0 0 40 40"><ellipse cx="20" cy="23" rx="12" ry="15" fill="#172333"/><circle cx="20" cy="11" r="9" fill="#172333"/><ellipse cx="20" cy="25" rx="8" ry="10" fill="#fff"/><ellipse cx="17" cy="10" rx="2.5" ry="3.5" fill="#fff"/><ellipse cx="23" cy="10" rx="2.5" ry="3.5" fill="#fff"/><circle cx="17.5" cy="11" r="1" fill="#172333"/><circle cx="22.5" cy="11" r="1" fill="#172333"/><path d="M15 15 20 12 25 15 20 18Z" fill="#f6c451"/><path d="M5 35Q10 29 17 34L18 38H5ZM22 38 23 34Q30 29 35 35L35 38Z" fill="#f6c451"/></symbol>
+              <symbol id="platform-apple-icon" viewBox="0 0 40 40"><path d="M21 10C20 5 24 2 28 2 28 6 25 10 21 10ZM30 12C26 9 23 11 20 12 17 11 14 9 10 12 3 17 7 29 12 35 15 39 17 35 20 35 24 35 25 39 29 34 31 31 33 28 34 25 27 23 26 17 30 12Z" fill="currentColor"/></symbol>
+            </defs></svg>
+            <div class="platform-options" role="group" aria-labelledby="platform-label">
+              <button type="button" data-platform="glibc" aria-pressed="true"><svg aria-hidden="true"><use href="#platform-linux-icon"/></svg><span><strong>Linux</strong><small>x86_64 · glibc</small></span><span class="platform-check" aria-hidden="true">✓</span></button>
+              <button type="button" data-platform="musl" aria-pressed="false"><svg aria-hidden="true"><use href="#platform-linux-icon"/></svg><span><strong>Linux</strong><small>x86_64 · musl</small></span><span class="platform-check" aria-hidden="true">✓</span></button>
+              <button type="button" data-platform="macos" aria-pressed="false"><svg aria-hidden="true"><use href="#platform-apple-icon"/></svg><span><strong>macOS</strong><small>Apple Silicon</small></span><span class="platform-check" aria-hidden="true">✓</span></button>
+            </div>
+            <select id="install-platform" hidden aria-hidden="true" tabindex="-1"><option value="glibc">Linux glibc</option><option value="musl">Linux musl</option><option value="macos">macOS</option></select>
+          </div>
           <label><span data-i18n="tagLabel">版本标签 / 默认渠道</span><input id="install-tag" value="stable" spellcheck="false" autocomplete="off" aria-describedby="tag-help"></label>
         </div>
         <p id="tag-help" class="tag-help" data-i18n="tagHelp">stable 保留默认 Linux 渠道；填写 Release 标签可锁定版本。musl / macOS 使用 GitHub Release。</p>
@@ -74,10 +85,10 @@ limitations under the License.
         <summary data-i18n="macosTitle">macOS 原生安装（Apple Silicon）</summary>
         <p data-i18n="macosIntro">macOS 15.5+，支持 Apple Silicon arm64。使用同一个安装入口，按 <code>--tag</code> 选择 macOS Release；当前没有 OSS 镜像，直接从 GitHub 下载并校验。</p>
         <pre><code id="macos-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"</code></pre>
+  --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"</code></pre>
         <p data-i18n="macosRuntime">随包提供 Python 3.13.15、NumPy 2.3.5、MuJoCo 和机器人依赖，无需 Homebrew 或预装 Python。Web 请求 auto，由 Runtime 使用配置的 CGL。预览版未公证；真机 GPU 渲染仍需复测。</p>
         <p data-i18n="macosUpgrade">更换标签时先停止旧实例，使用新的 <code>--dir</code> 安装并刷新浏览器。安装器不会覆盖其他版本或自动迁移数据库；旧配置和数据保留在原目录。</p>
-        <p data-i18n="macosRelease"><a href="https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3">macos-v0.1.0-rc.3 ↗</a> · 约 412 MiB · 安装、API、物理仿真与启停检查已通过。</p>
+        <p data-i18n="macosRelease"><a href="https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4">macos-v0.1.0-rc.4 ↗</a> · 约 412 MiB · 安装、API、物理仿真与启停检查已通过。</p>
       </details>
       <figure class="install-demo" aria-labelledby="demo-title">
         <div class="demo-heading"><h2 id="demo-title" data-i18n="demoTitle">看看安装过程</h2><span data-i18n="demoLength">35 秒 · 1080p · 无音轨</span></div>
@@ -121,10 +132,10 @@ limitations under the License.
       <span class="eyebrow">GOOD TO KNOW</span><h2 data-i18n="faqTitle">常见问题</h2>
       <details><summary data-i18n="faqLanTitle">已经安装，如何开启局域网访问并创建桌面入口？</summary><p data-i18n="faqLan">下面命令只更新管理工具、监听配置和桌面入口，不升级业务版本，不重新部署数据库或运行包。请替换为实际安装目录。</p><pre><code data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
   --configure-existing --dir "$HOME/.local/share/semantic" --lan --desktop-shortcut</code></pre><p data-i18n="faqShortcuts">快捷入口使用 InsightOS 图标，打开本机 Web。没有桌面环境时可省略 <code>--desktop-shortcut</code>；桌面如提示不受信任，请选择“允许启动”。添加完成页提供的 PATH 后，可用 <code>semanticctl welcome</code> 再次查看地址与终端密码。</p></details>
-      <details><summary data-i18n="faqUninstallTitle">如何卸载？数据会被删除吗？</summary><p data-i18n="faqUninstall">先停止场景与 Robot Runtime。默认卸载保留配置、数据和日志；先用 <code>--dry-run</code> 查看计划。请将目录替换为实际的绝对安装路径。</p><pre><code data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh -o semantic-install.sh
-bash semantic-install.sh --uninstall --dir "$HOME/.local/share/semantic" --dry-run
-bash semantic-install.sh --uninstall --dir "$HOME/.local/share/semantic"</code></pre><p data-i18n="faqUninstallSafety">新版管理工具也可运行 <code>semanticctl uninstall</code>。若提示终端占用，请在对应终端执行 <code>cd ~</code>；已删除的工作目录不会阻塞卸载，不需要 kill。只有显式增加 <code>--purge</code> 并确认后，才会永久删除该实例的全部内容。系统软件包不会被卸载。</p></details>
-      <details><summary data-i18n="faqTroubleTitle">安装遇到问题，应该检查什么？</summary><p data-i18n="faqTrouble">Linux 检查 Python 3.10+；macOS 检查 Apple Silicon 和系统版本。检查磁盘与网络，使用 <code>semanticctl doctor</code> 和实例 <code>logs/</code> 排查；脚本支持 <code>--help</code>。</p></details>
+      <details id="uninstall-guide"><summary data-i18n="faqUninstallTitle">如何卸载？数据会被删除吗？</summary><p data-i18n="faqUninstall">直接使用已安装的管理命令，无需重新下载安装包。先停止场景与 Robot Runtime；下方目录随安装平台切换，请替换为实际安装路径。默认保留配置、数据和日志。</p><pre><code id="uninstall-local-command">"$HOME/.local/share/semantic/bin/semanticctl" uninstall --dry-run
+"$HOME/.local/share/semantic/bin/semanticctl" uninstall</code></pre><p data-i18n="uninstallFallback">旧版或安装未完成时，可重新获取小型入口脚本执行卸载；不会下载完整安装包：</p><pre><code id="uninstall-bootstrap-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --uninstall --dir "$HOME/.local/share/semantic"</code></pre><p data-i18n="faqUninstallSafety">新版管理工具也可运行 <code>semanticctl uninstall</code>。若提示终端占用，请在对应终端执行 <code>cd ~</code>；已删除的工作目录不会阻塞卸载，不需要 kill。只有显式增加 <code>--purge</code> 并确认后，才会永久删除该实例的全部内容。系统软件包不会被卸载。</p></details>
+      <details><summary data-i18n="faqTroubleTitle">安装遇到问题，应该检查什么？</summary><p data-i18n="faqTrouble">Linux 检查 Python 3.10+；macOS 检查 Apple Silicon 和系统版本。安装前会检查端口占用；可通过 <code>--http-port / --ws-port / --web-port / --runtime-port</code> 选择空闲端口。已校验的安装包会保留缓存，重试时复用；可用 <code>--cache-dir</code> 指定缓存目录。检查磁盘与网络，使用 <code>semanticctl doctor</code> 和实例 <code>logs/</code> 排查；脚本支持 <code>--help</code>。</p></details>
       <details><summary data-i18n="faqSiteTitle">这是线上机器人控制台吗？</summary><p data-i18n="faqSite">不是。这是 Semantic 的介绍与安装入口，静态站点不运行你的机器人服务。控制台、模型密钥与机器人数据都属于你自行部署的实例。请为生产使用另行配置访问控制、网络隔离和备份。</p></details>
     </section>
     <section class="closing wrap"><span class="eyebrow">BUILD SOMETHING THAT MOVES.</span><h2 data-i18n="closing">让想法，不止于屏幕。</h2><a class="cta" href="#install" data-i18n="cta">安装 Semantic <span aria-hidden="true">↗</span></a></section>

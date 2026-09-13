@@ -6,8 +6,8 @@ Intel Mac and optional LIBERO/Robosuite profiles are outside this release.
 
 ## Install
 
-Download `semantic-0.1.0-rc.3-macos-arm64.tar.gz` from the
-[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.3),
+Download `semantic-0.1.0-rc.4-macos-arm64.tar.gz` from the
+[preview release](https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4),
 verify its SHA-256 against `SHA256SUMS`, extract it, and run:
 
 ```bash
@@ -20,7 +20,7 @@ The release's `install-macos.sh` downloads and verifies the same archive using
 system curl, shasum and tar; it needs no preinstalled Python. For offline use:
 
 ```bash
-bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.3-macos-arm64.tar.gz \
+bash install-macos.sh --package /absolute/path/semantic-0.1.0-rc.4-macos-arm64.tar.gz \
   --sha256 SHA256_FROM_RELEASE --dir "$HOME/semantic" --yes
 ```
 
@@ -96,9 +96,33 @@ The Web client requests `render_backend: auto`, so the Runtime uses its configur
 `cgl` backend on macOS. This also works when the browser and Runtime run on
 different operating systems. An explicitly requested incompatible backend is
 still rejected. Preview rc.2 fixes the rc.1 Web default that requested Linux EGL.
-Install rc.2 into a **new `--dir`**; the preview installer rejects overwriting a
+Install the current preview into a **new `--dir`**; the preview installer rejects overwriting a
 different version and does not migrate databases automatically. Stop the old
 installation before using the same ports, keep its configuration/user data, and
 reload the browser page to load the updated Web assets.
 
 The rc.3 installer fixes Robot instance supervisor exits caused by x86_64 metadata in the seven Python Ability packages. Native CI now starts all project robots and checks AbilityFramework, all seven abilities, Pilot, Robot Skill installation and Robot Runtime readiness. The offline wheelhouse includes Pydantic 2.13.4 required by the three bundled Skills. Stop your old instance and install this release into a new directory; existing databases are not migrated automatically.
+
+## Cached downloads and offline management
+
+The download script checks a new instance's ports before downloading an archive.
+Verified archives stay in `${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers`
+after success or failure. `--cache-dir /absolute/path` overrides that location.
+Every reuse checks SHA-256 against the selected Release; corrupt files are replaced.
+Small Release metadata may still be fetched on a retry. To work entirely offline,
+use the existing `--package` and `--sha256` options.
+
+Uninstall uses installed files and does not download an archive:
+
+```bash
+"$HOME/semantic-macos/bin/semanticctl" uninstall --dry-run
+"$HOME/semantic-macos/bin/semanticctl" uninstall
+# Also works through the small download script, including incomplete installs
+# that have already copied the bundled Python and uninstaller:
+bash install-macos.sh --uninstall --dir "$HOME/semantic-macos"
+```
+
+The installer also rechecks ports before deploying files or installing dependencies.
+Port checks are a snapshot; a competing process can still bind after the check.
+If installation fails later, fix the reported cause and retry with the same options;
+the archive cache is retained. Stop scenes and Robot Runtime before uninstalling.
