@@ -14,7 +14,7 @@
 
 | 下载来源 | 独立安装脚本 | 默认版本 |
 |---|---|---|
-| 阿里云 OSS | [install.sh](install.sh)，中文提示 | OSS `stable` 通道 |
+| 阿里云 OSS | [install.sh](install.sh)，中文提示 | OSS `stable` → GitHub `v0.1.0` 原包 |
 | GitHub Releases | [install-en.sh](install-en.sh)，英文提示 | 已验证的 `v0.1.0` Release |
 
 ### 从阿里云 OSS 安装
@@ -35,7 +35,7 @@ bash install-en.sh --version v0.1.0 --install-system-deps
 
 安装器下载 [GitHub Release](https://github.com/insightos-community/quick-start/releases/tag/v0.1.0)，校验文件哈希、发布身份和 `v0.1.0` 固定源码提交。模型缺失或仍为 LFS 指针时，按清单锁定的 GitHub 资产提交通过 Git LFS 补齐，并校验大小和 SHA-256；无需克隆组件仓库或安装 Git LFS 客户端。`--version` 对应 GitHub Tag，省略时也默认使用 `v0.1.0`。
 
-两个通道的版本号和发布时间各自独立，OSS `stable` 不一定与 GitHub `v0.1.0` 是同一构建。
+OSS `stable` 已统一为 GitHub `v0.1.0` 的原始安装包，SHA-256 完全一致。musl 和 macOS 也按相同标签镜像；旧 OSS 版本继续保留在固定路径，安装已有版本时请使用原目录和原版本参数。
 
 ### 可选 musl 安装（包内或宿主运行时）
 
@@ -48,11 +48,11 @@ bash install.sh --musl --musl-runtime bundled --install-system-deps
 
 选择 `--musl-runtime bundled` 使用随包提供的 musl 1.2.5；选择 `--musl-runtime system` 使用宿主的 `/lib/ld-musl-x86_64.so.1`（musl 1.2+）。省略此选项时，新版本默认 `bundled`，重装保留已有选择。切换运行时须使用新的 `--dir`，不会写入系统 `/lib` 或修改全局库路径。
 
-中英文脚本均支持此参数，并默认从 GitHub Release 下载 musl 制品。Robot 与 MuJoCo 的独立虚拟环境共用一套随包提供的 CPython 3.13.15，均使用 NumPy 2.3.5；同时包含验证过的 musl 机器人依赖与 Mesa。安装期间无需下载 Python 或编译源码。Alpine 软件包依赖通过用户机器现有的 APK 源安装，不改写源配置。
+中英文脚本均支持此参数；中文默认从阿里云 OSS 镜像下载 musl 制品，英文默认使用 GitHub Release。Robot 与 MuJoCo 的独立虚拟环境共用一套随包提供的 CPython 3.13.15，均使用 NumPy 2.3.5；同时包含验证过的 musl 机器人依赖与 Mesa。安装期间无需下载 Python 或编译源码。Alpine 软件包依赖通过用户机器现有的 APK 源安装，不改写源配置。
 
 默认 `--render-backend auto` 会测试 Mesa GPU 渲染，不可用时回退到 llvmpipe；`--render-backend software` 强制软件渲染，`--render-backend mesa-gpu` 要求 GPU 测试成功。AMD radeonsi 已完成本地实机测试；包含的 Intel、Nouveau 驱动尚未经过对应硬件验证。NVIDIA 专有驱动仍使用默认 glibc 安装路径。详见 [musl 制品与验证说明](artifacts/musl/README.md)。
 
-尝试不同变体请使用独立的 `--dir`。`--musl --version musl-v0.1.0-2` 指定可选版本；普通 `v0.1.0` 和 OSS stable 安装渠道保持原样。
+尝试不同变体请使用独立的 `--dir`。`--musl --version musl-v0.1.0-2` 指定可选版本；glibc 的 OSS stable 与 GitHub `v0.1.0` 现在使用相同原包。
 
 ### 从仓库运行与实例管理
 
@@ -194,21 +194,21 @@ Linux x86_64 / glibc:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag v0.1.0 --install-system-deps --dir "$HOME/semantic-glibc"
+  --source oss --tag v0.1.0 --install-system-deps --dir "$HOME/semantic-glibc"
 ```
 
 Linux x86_64 / musl:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
+  --source oss --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
 ```
 
 macOS 15.5+ / Apple Silicon arm64:
 
 ```bash
 curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
+  --source oss --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
 ```
 
 两种语言均可使用已有的 glibc OSS 默认渠道：
@@ -218,7 +218,7 @@ curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
   --source oss --version stable --install-system-deps
 ```
 
-`--tag` 自动选择平台，不可与 `--version` 同时使用。Linux 仍兼容 `--musl`、`--version`、`--package`、`--base-url` 和私有 OSS 票据。`--source auto` 保留未指定标签时中文 glibc 默认 OSS、英文默认 GitHub 的行为；显式标签和 musl 默认从 GitHub 下载，显式指定源或镜像时按该配置执行。当前 musl / macOS 缺少 OSS 产物，请使用 GitHub。macOS 支持 auto/github 或带校验和的离线包，显式 OSS 配置会被拒绝。Linux 安装依赖沿用机器已有源；macOS 无需 Homebrew 或预装 Python。
+`--tag` 自动选择平台，不可与 `--version` 同时使用。Linux 仍兼容 `--musl`、`--version`、`--package`、`--base-url` 和私有 OSS 票据。`--source auto` 默认：中文三个平台均使用 OSS，英文使用 GitHub。使用 `--source github` 可切换到原始 Release，`--source oss` 明确选择镜像。已镜像 `v0.1.0`、`musl-v0.1.0-2`、`macos-v0.1.0-rc.4` 的全部 Release 文件，压缩包和 SHA256SUMS 与 GitHub 完全一致。其他尚未镜像的标签请使用 GitHub。macOS 同样支持 `--base-url HTTPS_URL` 和带校验和的离线包。Linux 安装依赖沿用机器已有源；macOS 无需 Homebrew 或预装 Python。
 
 更换版本时先停止旧实例，使用新的 `--dir`；不支持自动数据库迁移或跨版本覆盖。较早的 musl 标签可能需要在 musl 宿主使用 `--musl-runtime system`，包内 musl 从 `musl-v0.1.0-2` 开始支持。参见[官网部署说明](artifacts/site/README.md)和[全部 Release](https://github.com/insightos-community/quick-start/releases)。
 

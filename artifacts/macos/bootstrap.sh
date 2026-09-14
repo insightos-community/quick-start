@@ -8,6 +8,9 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
 fi
 release_tag='macos-v0.1.0-rc.4'
 archive_path=''
+download_source=auto
+download_base='https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
+explicit_base=0
 expected_sha=''
 instance_dir="$HOME/Library/Application Support/Semantic"
 cache_dir="${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers"
@@ -21,6 +24,10 @@ runtime_port=8090
 options=()
 while (($#)); do
   case "$1" in
+    --source) download_source="${2:?Missing source}"; shift 2 ;;
+    --source=*) download_source="${1#*=}"; shift ;;
+    --base-url) download_base="${2:?Missing base URL}"; explicit_base=1; shift 2 ;;
+    --base-url=*) download_base="${1#*=}"; explicit_base=1; shift ;;
     --tag) release_tag="${2:?Missing tag}"; shift 2 ;;
     --tag=*) release_tag="${1#*=}"; shift ;;
     --package) archive_path="${2:?Missing package path}"; shift 2 ;;
@@ -52,6 +59,7 @@ while (($#)); do
       options+=("$flag" "$value"); shift ;;
     --help|-h)
       echo 'Usage: bash install-macos.sh [--tag macos-vVERSION] [--dir PATH] [--yes] [--no-start]'
+      echo 'Sources: --source auto|github|oss; auto uses GitHub, or an explicit --base-url HTTPS mirror.'
       echo 'Offline: --package ARCHIVE --sha256 SHA256. Cache: --cache-dir PATH (verified archives survive failed installs).'
       echo 'Uninstall: --uninstall --dir PATH [--yes] [--purge] [--dry-run]; uses installed files, no archive download.'
       exit 0 ;;
@@ -77,6 +85,13 @@ if [[ "$action" == uninstall ]]; then
   fi
   exit 0
 fi
+case "$download_source" in
+  auto) if ((explicit_base)); then download_source=oss; else download_source=github; fi ;;
+  github) ((explicit_base == 0)) || { echo '--source github cannot be combined with --base-url' >&2; exit 2; } ;;
+  oss) ;;
+  *) echo 'Use --source auto|github|oss' >&2; exit 2 ;;
+esac
+[[ "$download_base" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]] || { echo 'Use an HTTPS mirror URL without credentials, query or fragment' >&2; exit 2; }
 [[ "$release_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag' >&2; exit 1; }
 for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
   [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Ports must be numbers between 1024 and 65535' >&2; exit 2; }
@@ -240,7 +255,12 @@ staged=''
 trap 'rm -rf -- "$task_tmp"; [[ -z "$staged" ]] || rm -f -- "$staged"' EXIT
 if [[ -z "$archive_path" ]]; then
   archive_name="semantic-${release_tag#macos-v}-macos-arm64.tar.gz"
-  release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
+  if [[ "$download_source" == oss ]]; then
+    release_url="${download_base%/}/releases/${release_tag#macos-v}/macos-arm64"
+  else
+    release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
+  fi
+  echo "[>] Download source: $download_source ($release_tag)" >&2
   curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/SHA256SUMS" -o "$task_tmp/SHA256SUMS"
   expected_sha="$(awk -v name="$archive_name" '$2 == name {print $1}' "$task_tmp/SHA256SUMS")"
   [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'A valid SHA256 is required' >&2; exit 1; }

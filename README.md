@@ -14,7 +14,7 @@ Install prebuilt Semantic on **Linux x86_64** (verified on **Ubuntu 24.04**). Yo
 
 | Download source | Standalone script | Default version |
 |---|---|---|
-| Alibaba Cloud OSS | [install.sh](install.sh), Chinese prompts | OSS `stable` channel |
+| Alibaba Cloud OSS | [install.sh](install.sh), Chinese prompts | OSS `stable` → GitHub `v0.1.0` archive |
 | GitHub Releases | [install-en.sh](install-en.sh), English prompts | Verified `v0.1.0` Release |
 
 ### Install from Alibaba Cloud OSS
@@ -35,7 +35,7 @@ bash install-en.sh --version v0.1.0 --install-system-deps
 
 The installer downloads the [GitHub Release](https://github.com/insightos-community/quick-start/releases/tag/v0.1.0), verifies checksums and release identity, and checks the fixed source commit for `v0.1.0`. Missing model files or LFS pointers are restored through the pinned GitHub asset revision and Git LFS, with size and SHA-256 verification. No component checkout or Git LFS client is required. `--version` selects a GitHub tag; omitting it also selects `v0.1.0`.
 
-The two channels have separate version names and publication schedules; OSS `stable` does not necessarily contain the same build as GitHub `v0.1.0`.
+OSS `stable` now selects the original GitHub `v0.1.0` archive with the identical SHA-256. musl and macOS are mirrored under their matching tags too. Older OSS versions remain at their immutable paths.
 
 ### Optional musl installation (bundled or system runtime)
 
@@ -222,7 +222,7 @@ curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
   --source oss --version stable --install-system-deps
 ```
 
-`--tag` infers the platform; do not combine it with `--version`. Existing `--musl`, `--version`, `--package`, `--base-url` and private OSS tickets remain available on Linux. `--source auto` preserves the Chinese OSS / English GitHub default for untagged glibc; explicit tags and musl use GitHub unless an explicit source/mirror is selected. musl/macOS OSS artifacts are currently absent, so use GitHub for those releases. macOS accepts `auto`/`github` or a checksummed offline `--package`; explicit OSS inputs are rejected. Linux system dependencies use existing package sources; macOS needs no Homebrew or host Python.
+`--tag` infers the platform; do not combine it with `--version`. Existing `--musl`, `--version`, `--package`, `--base-url` and private OSS tickets remain available on Linux. `--source auto` uses OSS for Chinese glibc, musl and macOS installs, and GitHub for English installs. `--source oss` selects the identical OSS mirror for `v0.1.0`, `musl-v0.1.0-2` and `macos-v0.1.0-rc.4`; use GitHub for tags not yet mirrored. macOS accepts HTTPS `--base-url` mirrors and checksummed offline packages. Linux system dependencies use existing package sources; macOS needs no Homebrew or host Python.
 
 Stop the old instance and use a new `--dir` when changing versions; automatic database migration and cross-version replacement are not supported. Older musl tags may need `--musl-runtime system` on a musl host; bundled runtime support begins with `musl-v0.1.0-2`. See the [website guide](artifacts/site/README.md) and [all Releases](https://github.com/insightos-community/quick-start/releases).
 

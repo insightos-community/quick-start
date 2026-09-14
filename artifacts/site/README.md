@@ -32,26 +32,28 @@ remain available without JavaScript.
 
 | Platform | Verified tag | Source | Target requirements |
 |---|---|---|---|
-| Linux glibc x86_64 | `v0.1.0` | GitHub Release; untagged Chinese `stable` retains the separate OSS channel | Python 3.10+, glibc >=2.28 |
-| Linux musl x86_64 | `musl-v0.1.0-2` | GitHub Release; no OSS manifest currently exists | Bundled musl by default; host mode requires a musl loader |
-| macOS arm64 | `macos-v0.1.0-rc.3` | GitHub Release; no OSS manifest currently exists | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
+| Linux glibc x86_64 | `v0.1.0` | Identical GitHub/OSS archive; OSS stable selects v0.1.0 | Python 3.10+, glibc >=2.28 |
+| Linux musl x86_64 | `musl-v0.1.0-2` | Identical GitHub/OSS mirror | Bundled musl by default; host mode requires a musl loader |
+| macOS arm64 | `macos-v0.1.0-rc.4` | Identical GitHub/OSS mirror | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
 
 ```bash
 # English; replace install-en.sh with install.sh for the Chinese entry.
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag v0.1.0 --install-system-deps
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
-curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.3 --dir "$HOME/semantic-macos"
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
 # The existing Linux OSS channel is available from either language entry.
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source oss --version stable --install-system-deps
 ```
 
 `--tag` infers the target platform and cannot be combined with `--version`.
-`--source auto|github|oss` selects the download route. Explicit tags default to
-GitHub; without a tag, the Chinese Linux default stays OSS and English stays
-GitHub. The OSS stable channel and GitHub v0.1.0 are separate distributions.
-Linux custom `--base-url` and private tickets remain supported. macOS rejects
-explicit OSS inputs until corresponding artifacts exist; it uses the embedded
-native bootstrap before testing for a host Python. Offline `--package` /
+`--source auto|github|oss` selects the download route. Chinese defaults to OSS;
+English defaults to GitHub for all platforms. Mirrored tags are `v0.1.0`,
+`musl-v0.1.0-2` and `macos-v0.1.0-rc.4`; use GitHub for older unmirrored tags.
+OSS glibc stable now selects the original GitHub v0.1.0 archive. Release assets
+and SHA256SUMS are copied byte-for-byte; only mutable channel manifests use a
+base-relative archive path. Linux private tickets remain supported. macOS accepts
+public HTTPS `--base-url` mirrors and routes before host Python detection.
+Offline `--package` /
 `--sha256` remains supported. Native macOS uses the release's installer UI.
 
 The musl guide retains bundled/system loader selection, Mesa GPU/software
@@ -113,3 +115,22 @@ Verify HTTPS, both installer hashes, content types, unknown-path rejection, and 
 The bilingual-video/footer update was verified locally and on the public site at 1440, 768, 390, and 320 px: both recordings play and seek, language switching resets only a different recording, the filing icon loads under CSP, and the legal footer remains available without JavaScript. The English OSS object passed SHA-256 verification and a Range/206 request. Installer contents and the business artifact release were unchanged.
 
 See [installer management](../README.md), [OSS publishing](../OSS.md), and [verification history](../VERIFICATION.md).
+
+## Reproduce an OSS release mirror
+
+Use Python 3.13, `gh`, curl, and `alibabacloud-oss-v2==1.4.0`. Keep the existing
+OSS config outside Git at `~/.config/semantic-artifacts/oss.env` with mode 600.
+The mirror command validates GitHub asset digests, archive identity and the
+complete release SHA256SUMS before uploading immutable objects. The glibc or
+musl channel is promoted only after every object verifies. Existing objects with
+different content are refused; replacing a managed channel preserves a backup.
+
+```bash
+python artifacts/mirror_release_to_oss.py stage --tag v0.1.0 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag v0.1.0 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag musl-v0.1.0-2 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag macos-v0.1.0-rc.4 --output /absolute/release-cache
+```
+
+`stage` only downloads and verifies; `publish` also writes the configured OSS
+prefix. It never changes bucket ACLs or embeds credentials in installers.
