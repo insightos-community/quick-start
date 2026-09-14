@@ -1,0 +1,204 @@
+name: Windows offline installer preview
+'on':
+  workflow_dispatch: {}
+  push:
+    branches:
+    - feat/windows-installer-payload
+    paths:
+    - artifacts/windows/build.py
+    - artifacts/windows/install.py
+    - artifacts/windows/smoke.py
+    - artifacts/windows/fetch_native.py
+    - artifacts/windows/sources.json
+    - .github/workflows/windows-installer.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: pwsh
+jobs:
+  core:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    env:
+      CGO_ENABLED: '1'
+      GOFLAGS: -ldflags=-extldflags=-static
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Semantic-Framework
+        ref: c966d90b859644c0da1880c1c05fbbdcc1e557bc
+        path: sources/framework
+        persist-credentials: false
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version: 1.25.8
+        cache-dependency-path: sources/framework/go.sum
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/semantic-deployment
+        ref: 2773494d35876f66afce393b0b26320945ef6f4e
+        path: sources/deployment
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+    - name: Install pinned native compiler
+      run: '$archive = Join-Path $env:RUNNER_TEMP ''llvm-mingw.zip''
+
+        Invoke-WebRequest ''https://github.com/mstorsjo/llvm-mingw/releases/download/20260908/llvm-mingw-20260908-ucrt-x86_64.zip''
+        -OutFile $archive
+
+        if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne ''1bcf74d06b724aeecaa6412ca85f5b26fb1da770e7cdcefa9263c9c5c3ad34b6'')
+        { throw ''Compiler SHA-256 mismatch'' }
+
+        Expand-Archive $archive $env:RUNNER_TEMP
+
+        "$env:RUNNER_TEMP/llvm-mingw-20260908-ucrt-x86_64/bin" >> $env:GITHUB_PATH
+
+        ''CC=x86_64-w64-mingw32-clang'' >> $env:GITHUB_ENV
+
+        ''CXX=x86_64-w64-mingw32-clang++'' >> $env:GITHUB_ENV
+
+        '
+    - name: Build real Framework executables
+      working-directory: sources/framework
+      run: "New-Item -ItemType Directory -Force .output/bin | Out-Null\nforeach ($name in @('semantic', 'semantic-server',\
+        \ 'semantic-pilot')) {\n  go build -trimpath -o \".output/bin/$name.exe\" \"./cmd/$name\"\n  if ($LASTEXITCODE\
+        \ -ne 0) { throw \"Build failed: $name\" }\n}\n\"SEMANTIC_NATIVE_BIN=$((Resolve-Path .output/bin).Path)\"\
+        \ >> $env:GITHUB_ENV\n"
+    - name: Build native Web gateway
+      run: '$env:CGO_ENABLED = ''0''
+
+        go build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-web-gateway.exe" artifacts/gateway/main.go artifacts/gateway/stop_windows.go
+
+        if ($LASTEXITCODE -ne 0) { throw ''Gateway build failed'' }
+
+        '
+    - name: Build native Robot supervisor
+      run: '$env:CGO_ENABLED = ''0''
+
+        go -C sources/deployment build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-robot-instance.exe" ./cmd/semantic-robot-instance
+
+        if ($LASTEXITCODE -ne 0) { throw ''Robot supervisor build failed'' }
+
+        '
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: windows-core
+        path: sources/framework/.output/bin/*.exe
+        include-hidden-files: true
+        if-no-files-found: error
+  assemble:
+    needs: core
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      PYTHONUTF8: '1'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Semantic-Framework
+        ref: c966d90b859644c0da1880c1c05fbbdcc1e557bc
+        path: sources/Semantic-Framework
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/AbilityFramework
+        ref: acabeb6d6e62ebec98968b3da730ecc615541876
+        path: sources/AbilityFramework
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/mujoco-runtime
+        ref: bbb75005f84c329026d333ca428658f444e681d6
+        path: sources/mujoco-runtime
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/semantic-deployment
+        ref: 2773494d35876f66afce393b0b26320945ef6f4e
+        path: sources/semantic-deployment
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/ability-scaffold
+        ref: 90917ecb0953605fa7bc47ea54e17a7e8273c1af
+        path: sources/ability-scaffold
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Ability-SDK-Python
+        ref: 064c36d0510b387318027213b39aaa2ffb7ea35e
+        path: sources/Ability-SDK-Python
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/r1pro-ability
+        ref: 29d0540c8d516407b036a27082483fb83192dc33
+        path: sources/r1pro-ability
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/pinocchio
+        ref: 5849355887d18ee67ee5b9831cb5dc9e850ec33c
+        path: sources/pinocchio
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: windows-core
+        path: native/bin
+    - name: Fetch qualified native inputs
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'uv python install 3.13.15
+
+        if ($LASTEXITCODE -ne 0) { throw ''Python installation failed'' }
+
+        uv run --no-project --python 3.13.15 python artifacts/windows/fetch_native.py native
+
+        if ($LASTEXITCODE -ne 0) { throw ''Native input verification failed'' }
+
+        '
+    - name: Assemble offline installer
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: 'uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/build.py --version
+        0.1.0-windows-preview.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin
+        --abilities native/abilities/windows --pin-wheels native/pin
+
+        if ($LASTEXITCODE -ne 0) { throw ''Windows assembly failed'' }
+
+        '
+    - name: Verify native offline installation
+      run: "uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload\
+        \ .work/windows/payload --root \"$env:RUNNER_TEMP/\u8BED\u4E49 Windows test\" --report .output/windows/windows-installation.json\n\
+        if ($LASTEXITCODE -ne 0) { throw 'Windows installation validation failed' }\n"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: semantic-installer-windows-amd64-preview
+        path: .output/windows/*
+        include-hidden-files: true
+        if-no-files-found: error
+    - name: Preserve failure evidence
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: windows-installation-failure
+        path: "${{ runner.temp }}/\u8BED\u4E49 Windows test/logs/**"
+        include-hidden-files: true
+        if-no-files-found: ignore

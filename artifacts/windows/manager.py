@@ -15,6 +15,7 @@ import urllib.request
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent/'runtime'))  # Source checkout; payload keeps helpers beside this file.
 import installer as shared
 from install_support import component_values, read_component_config, validate_components, component_yaml, export_components
@@ -150,6 +151,10 @@ class Manager:
                     time.sleep(0.1)
                 else:
                     raise RuntimeError(name+' health check timed out')
+            if not self.state.get('skills_published', True):
+                shared.publish(self.root, self.release, self.state, quiet=True)
+                self.state['skills_published'] = True
+                shared.write_json(self.root/'install.json', self.state)
         except Exception:
             self.stop(reversed(created))
             raise
