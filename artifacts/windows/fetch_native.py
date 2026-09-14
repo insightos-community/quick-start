@@ -30,4 +30,9 @@ with zipfile.ZipFile(archives[0]) as archive:
             raise ValueError('Unexpected native archive member')
     archive.extractall(root/'bin')
 fetch('r1pro-ability',34812933585,'r1pro-abilities-windows-amd64',root/'abilities')
-fetch('pinocchio',34813368953,'pinocchio-windows-cp313',root/'pin')
+fetch('pinocchio',34813368953,'pinocchio-windows-cp313',root/'pin-inputs')
+
+reports = list((root/'pin-inputs').rglob('windows-validation.json'))
+if len(reports) != 1:
+    raise ValueError('Expected one standalone Pinocchio validation report')
+shutil.copytree(reports[0].parent, root/'pin')

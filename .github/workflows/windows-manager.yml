@@ -1,10 +1,4 @@
 name: Windows installer manager contracts
-on:
-  workflow_dispatch:
-  push:
-    branches: [feat/windows-manager-ports, feat/windows-installer-payload]
-  pull_request:
-    paths: ['artifacts/windows/**', 'artifacts/gateway/**', 'artifacts/runtime/**', 'tests/test_windows_manager_ports.py', '.github/workflows/windows-manager.yml']
 permissions:
   contents: read
 jobs:
@@ -13,50 +7,94 @@ jobs:
     timeout-minutes: 25
     env:
       CGO_ENABLED: '1'
-      GOFLAGS: '-ldflags=-extldflags=-static'
+      GOFLAGS: -ldflags=-extldflags=-static
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: insightos-community/Semantic-Framework
-          ref: c966d90b859644c0da1880c1c05fbbdcc1e557bc
-          path: sources/framework
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version: 1.25.8
-          cache-dependency-path: sources/framework/go.sum
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-        with:
-          version: 0.12.12
-      - name: Install pinned native compiler
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'llvm-mingw.zip'
-          Invoke-WebRequest 'https://github.com/mstorsjo/llvm-mingw/releases/download/20260908/llvm-mingw-20260908-ucrt-x86_64.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne '1bcf74d06b724aeecaa6412ca85f5b26fb1da770e7cdcefa9263c9c5c3ad34b6') { throw 'Compiler SHA-256 mismatch' }
-          Expand-Archive $archive $env:RUNNER_TEMP
-          "$env:RUNNER_TEMP/llvm-mingw-20260908-ucrt-x86_64/bin" >> $env:GITHUB_PATH
-          'CC=x86_64-w64-mingw32-clang' >> $env:GITHUB_ENV
-          'CXX=x86_64-w64-mingw32-clang++' >> $env:GITHUB_ENV
-      - name: Build real Framework executables
-        working-directory: sources/framework
-        run: |
-          New-Item -ItemType Directory -Force .output/bin | Out-Null
-          foreach ($name in @('semantic', 'semantic-server')) {
-            go build -trimpath -o ".output/bin/$name.exe" "./cmd/$name"
-            if ($LASTEXITCODE -ne 0) { throw "Build failed: $name" }
-          }
-          "SEMANTIC_NATIVE_BIN=$((Resolve-Path .output/bin).Path)" >> $env:GITHUB_ENV
-      - name: Build native Web gateway
-        run: |
-          $env:CGO_ENABLED = '0'
-          go build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-web-gateway.exe" artifacts/gateway/main.go artifacts/gateway/stop_windows.go
-          if ($LASTEXITCODE -ne 0) { throw 'Gateway build failed' }
-      - name: Exercise native manager contracts
-        run: |
-          uv python install 3.13.15
-          if ($LASTEXITCODE -ne 0) { throw 'Python install failed' }
-          uv run --python 3.13.15 --with PyYAML==6.0.2 --no-project python tests/test_windows_manager_ports.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native manager contracts failed' }
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: insightos-community/Semantic-Framework
+        ref: c966d90b859644c0da1880c1c05fbbdcc1e557bc
+        path: sources/framework
+        persist-credentials: false
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version: 1.25.8
+        cache-dependency-path: sources/framework/go.sum
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+    - name: Install pinned native compiler
+      run: '$archive = Join-Path $env:RUNNER_TEMP ''llvm-mingw.zip''
+
+        Invoke-WebRequest ''https://github.com/mstorsjo/llvm-mingw/releases/download/20260908/llvm-mingw-20260908-ucrt-x86_64.zip''
+        -OutFile $archive
+
+        if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne ''1bcf74d06b724aeecaa6412ca85f5b26fb1da770e7cdcefa9263c9c5c3ad34b6'')
+        { throw ''Compiler SHA-256 mismatch'' }
+
+        Expand-Archive $archive $env:RUNNER_TEMP
+
+        "$env:RUNNER_TEMP/llvm-mingw-20260908-ucrt-x86_64/bin" >> $env:GITHUB_PATH
+
+        ''CC=x86_64-w64-mingw32-clang'' >> $env:GITHUB_ENV
+
+        ''CXX=x86_64-w64-mingw32-clang++'' >> $env:GITHUB_ENV
+
+        '
+    - name: Build real Framework executables
+      working-directory: sources/framework
+      run: "New-Item -ItemType Directory -Force .output/bin | Out-Null\nforeach ($name in @('semantic', 'semantic-server'))\
+        \ {\n  go build -trimpath -o \".output/bin/$name.exe\" \"./cmd/$name\"\n  if ($LASTEXITCODE -ne 0) { throw\
+        \ \"Build failed: $name\" }\n}\n\"SEMANTIC_NATIVE_BIN=$((Resolve-Path .output/bin).Path)\" >> $env:GITHUB_ENV\n"
+    - name: Build native Web gateway
+      run: '$env:CGO_ENABLED = ''0''
+
+        go build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-web-gateway.exe" artifacts/gateway/main.go artifacts/gateway/stop_windows.go
+
+        if ($LASTEXITCODE -ne 0) { throw ''Gateway build failed'' }
+
+        '
+    - name: Exercise native manager contracts
+      run: 'uv python install 3.13.15
+
+        if ($LASTEXITCODE -ne 0) { throw ''Python install failed'' }
+
+        uv run --python 3.13.15 --with PyYAML==6.0.2 --no-project python tests/test_windows_manager_ports.py
+
+        if ($LASTEXITCODE -ne 0) { throw ''Native manager contracts failed'' }
+
+        '
+  cleanup:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+    - name: Verify offline cleanup without build tools
+      run: 'uv run --no-project --python 3.13.15 python tests/test_windows_manager_ports.py WindowsManagerContracts.test_offline_uninstall_preserves_data_and_explicit_purge_removes_instance
+
+        if ($LASTEXITCODE -ne 0) { throw ''Offline cleanup failed'' }
+
+        '
+'on':
+  workflow_dispatch: null
+  push:
+    branches:
+    - feat/windows-manager-ports
+    - feat/windows-installer-payload
+  pull_request:
+    paths:
+    - artifacts/windows/**
+    - artifacts/gateway/**
+    - artifacts/runtime/**
+    - tests/test_windows_manager_ports.py
+    - .github/workflows/windows-manager.yml
+concurrency:
+  group: windows-manager-${{ github.ref }}
+  cancel-in-progress: true

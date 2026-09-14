@@ -37,19 +37,23 @@ function RemoveTree([string]$Path) {
     }
 }
 try {
+    [Console]::WriteLine('Cleanup helper started')
     $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
     if ($Root -eq [IO.Path]::GetPathRoot($Root).TrimEnd('\') -or $Root -eq [Environment]::GetFolderPath('UserProfile')) { throw 'Dedicated installation directory required' }
     Plain $Root
+    [Console]::WriteLine('Installation path validated')
     $parent = $null
     try { $parent = [Diagnostics.Process]::GetProcessById($ParentPid) } catch [ArgumentException] {}
     if ($parent) {
         try {
             if ($parent.StartTime.ToUniversalTime().ToFileTimeUtc().ToString('x16') -eq $ParentCreated) {
+                [Console]::WriteLine('Waiting for installer PID '+$ParentPid)
                 if (!$parent.WaitForExit(120000)) { throw 'Installer process has not exited; no files removed' }
             }
         } finally { $parent.Dispose() }
     }
     Plain (Join-Path $Root '.semantic-management.lock')
+    [Console]::WriteLine('Acquiring installation lock')
     $lock = [IO.File]::Open((Join-Path $Root '.semantic-management.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     if (!(Test-Path -LiteralPath (Join-Path $Root '.semantic-install-root') -PathType Leaf)) { throw 'Ownership marker missing' }
     $statePath = Join-Path $Root 'install.json'
@@ -64,6 +68,7 @@ try {
     if ($Purge) { $targets = @([IO.Directory]::EnumerateFileSystemEntries($Root) | Where-Object { [IO.Path]::GetFileName($_) -ne '.semantic-management.lock' }) }
     # Validate the whole selected tree before the first deletion.
     foreach ($target in $targets) { CheckTree $target }
+    [Console]::WriteLine('Cleanup targets validated')
     foreach ($target in $targets) { RemoveTree $target }
     if (!$Purge) {
         $state.ready = $false
