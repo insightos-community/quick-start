@@ -2,9 +2,9 @@ name: Windows installer manager contracts
 on:
   workflow_dispatch:
   push:
-    branches: [feat/windows-manager-ports]
+    branches: [feat/windows-manager-ports, feat/windows-installer-payload]
   pull_request:
-    paths: ['artifacts/windows/**', 'artifacts/gateway/**', 'tests/test_windows_manager_ports.py', '.github/workflows/windows-manager.yml']
+    paths: ['artifacts/windows/**', 'artifacts/gateway/**', 'artifacts/runtime/**', 'tests/test_windows_manager_ports.py', '.github/workflows/windows-manager.yml']
 permissions:
   contents: read
 jobs:

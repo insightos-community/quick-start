@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -162,6 +163,104 @@ class WindowsManagerContracts(unittest.TestCase):
                 if child.poll() is None:
                     child.terminate()
                     child.wait(timeout=10)
+
+    def test_manager_reconfigures_real_services_and_rolls_back_failed_restart(self):
+        import manager as managed
+        import yaml
+        from unittest.mock import patch
+        from install_support import component_values, export_components
+
+        def free_values():
+            listeners = [socket.socket() for _ in range(4)]
+            try:
+                for listener in listeners:
+                    listener.bind(('127.0.0.1', 0))
+                values = component_values()
+                values.update(zip(('http_port','ws_port','web_port','runtime_port'),
+                                  (listener.getsockname()[1] for listener in listeners)))
+                values['web_host'] = '127.0.0.1'
+                return values
+            finally:
+                for listener in listeners:
+                    listener.close()
+
+        values = free_values()
+        binaries = Path(os.environ['SEMANTIC_NATIVE_BIN'])
+        release = self.root/'releases/0.1.0-test.1'
+        for name in ('bin', 'web'):
+            (release/name).mkdir(parents=True)
+        for name in ('semantic-server.exe', 'semantic-web-gateway.exe'):
+            shutil.copyfile(binaries/name, release/'bin'/name)
+        (release/'web/index.html').write_text('Semantic manager test', encoding='utf-8')
+        for name in ('run', 'logs', 'tmp', 'runtimes.d', 'robots/test/robot'):
+            (self.root/name).mkdir(parents=True, exist_ok=True)
+        (self.root/'.semantic-install-root').touch()
+        config = self.root/'configs/semantic-server.yaml'
+        subprocess.run([binaries/'semantic.exe', 'init', '-c', config], check=True)
+        cfg = yaml.safe_load(config.read_text(encoding='utf-8'))
+        cfg['server'].update(http_addr=f"127.0.0.1:{values['http_port']}", ws_addr=f"127.0.0.1:{values['ws_port']}")
+        cfg['robot_runtime']['enabled'] = False  # No Robot/physical scene in this manager fixture.
+        config.write_text(json.dumps(cfg,ensure_ascii=False),encoding='utf-8')
+        runtime = self.root/'runtimes.d/local-native-mujoco.yaml'
+        runtime.write_text(f"endpoint: http://127.0.0.1:{values['runtime_port']}\n",encoding='utf-8')
+        instance = self.root/'robots/test/robot/instance.yaml'
+        instance.write_text(f"server: http://127.0.0.1:{values['http_port']}\nws: ws://127.0.0.1:{values['ws_port']}/ws/pilot\n",encoding='utf-8')
+        state = dict(values, version='0.1.0-test.1', ready=True, platform='windows-amd64')
+        (self.root/'install.json').write_text(json.dumps(state),encoding='utf-8')
+        export_components(self.root/'configs/components.yaml', values)
+        service = managed.Manager(self.root)
+        client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def healthy(expected):
+            self.assertEqual(service.status(), {'server':True,'web':True})
+            # This checks real gateway-to-Server discovery after the HTTP port moves.
+            with client.open(f"http://127.0.0.1:{expected['web_port']}/api/v1/system/healthz", timeout=3) as response:
+                self.assertEqual(response.status, 200)
+
+        try:
+            service.start()
+            healthy(values)
+            before = (self.root/'install.json').read_bytes()
+            records = service.records()
+            with socket.socket() as busy:
+                busy.bind(('127.0.0.1',0)); busy.listen(1)
+                blocked = self.root/'blocked.yaml'
+                export_components(blocked, dict(values,web_port=busy.getsockname()[1]))
+                with self.assertRaises(RuntimeError):
+                    service.configure(blocked)
+                self.assertEqual((self.root/'install.json').read_bytes(), before)
+                self.assertEqual(service.records(), records)
+                healthy(values)
+            changed = free_values()
+            new_config = self.root/'changed.yaml'
+            export_components(new_config, changed)
+            service.configure(new_config)
+            healthy(changed)
+            self.assertIn(f"http://127.0.0.1:{changed['runtime_port']}", runtime.read_text())
+            self.assertIn(f"http://127.0.0.1:{changed['http_port']}", instance.read_text())
+            self.assertIn(f"ws://127.0.0.1:{changed['ws_port']}/ws/pilot", instance.read_text())
+            cfg = json.loads(config.read_text(encoding='utf-8'))
+            self.assertEqual(cfg['robot_runtime']['server_http_url'], f"http://127.0.0.1:{changed['http_port']}")
+            attempts = 0
+            original_start = service.start
+
+            def fail_once(names=('server','web')):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    raise RuntimeError('injected restart failure')
+                return original_start(names)
+
+            previous = self.root/'previous.yaml'
+            export_components(previous, values)
+            with patch.object(service, 'start', side_effect=fail_once):
+                with self.assertRaisesRegex(RuntimeError, 'injected restart failure'):
+                    service.configure(previous)
+            self.assertEqual(service.values, changed)
+            healthy(changed)
+        finally:
+            service.stop()
+            self.assertEqual(service.status(), {'server':False,'web':False})
 
 
 if __name__ == '__main__':
