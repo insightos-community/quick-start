@@ -202,7 +202,11 @@ class WindowsManagerContracts(unittest.TestCase):
         cfg['robot_runtime']['enabled'] = False  # No Robot/physical scene in this manager fixture.
         config.write_text(json.dumps(cfg,ensure_ascii=False),encoding='utf-8')
         runtime = self.root/'runtimes.d/local-native-mujoco.yaml'
-        runtime.write_text(f"endpoint: http://127.0.0.1:{values['runtime_port']}\n",encoding='utf-8')
+        template = self.root/'runtimes.d/native-mujoco.yaml'
+        runtime_cfg = yaml.safe_load(template.read_text(encoding='utf-8'))
+        runtime_cfg.update(endpoint=f"http://127.0.0.1:{values['runtime_port']}", enabled=False)
+        runtime.write_text(yaml.safe_dump(runtime_cfg),encoding='utf-8')
+        template.unlink()
         instance = self.root/'robots/test/robot/instance.yaml'
         instance.write_text(f"server: http://127.0.0.1:{values['http_port']}\nws: ws://127.0.0.1:{values['ws_port']}/ws/pilot\n",encoding='utf-8')
         state = dict(values, version='0.1.0-test.1', ready=True, platform='windows-amd64')
@@ -268,4 +272,6 @@ class WindowsManagerContracts(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     unittest.main(verbosity=2)
