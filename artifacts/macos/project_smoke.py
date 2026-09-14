@@ -52,15 +52,20 @@ def check_project(root, base, token, report):
         assert expected_ids, 'Scene has no robots'
         deadline = time.monotonic()+180
         while True:
-            devices = request('/devices')['devices']
+            devices = [device for device in request('/devices')['devices']
+                       if (device.get('runtime_instance') or {}).get('scene_instance_id') == instance['instance_id']]
             diagnostics['devices'] = devices
-            states = [json.loads(path.read_text()) for path in (root/'robots').glob('*/*/run/state.json')]
+            current_ids = {device['runtime_instance']['instance_id'] for device in devices}
+            # Released scenes retain their shutdown evidence. Only this scene's
+            # supervisors must be running, including on the second smoke pass.
+            states = [state for path in (root/'robots').glob('*/*/run/state.json')
+                      if (state := json.loads(path.read_text())).get('instance_name') in current_ids]
             diagnostics['supervisors'] = states
             failed = [state for state in states if state.get('status') == 'failed']
             failed += [device.get('runtime_instance') for device in devices
                        if (device.get('runtime_instance') or {}).get('status') in ('failed', 'interrupted')]
             assert not failed, failed
-            if devices and states and all(state.get('status') == 'running' for state in states) and all(
+            if {device['robot_id'] for device in devices} == expected_ids and len(states) == len(expected_ids) and all(state.get('status') == 'running' for state in states) and all(
                 (device.get('runtime_instance') or {}).get('status') == 'ready' and
                 {(skill['name'], skill['version']) for skill in device.get('installed_skills', [])
                  if skill.get('status') == 'installed'} == expected_skills and
