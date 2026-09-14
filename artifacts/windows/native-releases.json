@@ -1,0 +1,10 @@
+{
+  "AbilityFramework": {
+    "tag": "windows-v2.4.1-preview.1",
+    "checksums_sha256": "843c1f956260bb4f28de8986afb8934542492381359309716b8d3b00bb1a4e44"
+  },
+  "r1pro-ability": {
+    "tag": "windows-v0.4.0-preview.1",
+    "checksums_sha256": "a11b58144c503dbf0eb51ba84c6dff17a7f3e4ac8dbc34dccd56ad48684080d7"
+  }
+}

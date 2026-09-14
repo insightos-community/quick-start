@@ -77,7 +77,11 @@ try {
         $state | Add-Member -NotePropertyName uninstalled_at -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
         $temporary = Join-Path $Root '.uninstall-state.json'
         [IO.File]::WriteAllText($temporary, ($state | ConvertTo-Json -Depth 30), $utf8)
-        [IO.File]::Replace($temporary, $statePath, $null)
+        # Windows PowerShell 5.1 binds $null to an empty string for this overload.
+        $backup = Join-Path $Root ('.uninstall-state-'+$Nonce+'.bak')
+        Plain $backup
+        [IO.File]::Replace($temporary, $statePath, $backup)
+        [IO.File]::Delete($backup)
     }
     $lock.Dispose(); $lock = $null
     if ($Purge) {
