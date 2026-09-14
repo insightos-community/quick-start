@@ -288,4 +288,4 @@ web_host: 0.0.0.0  # macOS 默认 127.0.0.1
 
 重新配置前请停止场景和 Robot Runtime。安装器检查端口，备份配置，同步 Server、Web 代理、Robot/Pilot 连接地址及 MuJoCo 发现端点，然后重启受影响的托管服务；启动失败时恢复原配置。仅修改 Web 时保留 Server 进程。配置不含密码；数据库、业务发布包和凭据保留。安装后配置写入实例的 `configs/components.yaml`，备份位于 `configs/reconfigure-backup-*`。
 
-已有 Robot 实例分配的 Ability 端口范围需要先在 Studio 中移除对应实例才能更改；安装器会拒绝使现有端口分配失效的范围变更。新 Mac 无需预装 Python 即可导出默认模板；已有 Mac 使用随包 Python 导出和重新配置。
+尚未生成 Robot 配置时可以重新配置 Ability 范围；已有 Robot 配置时，调整该范围需使用新的安装目录，安装器会拒绝使现有端口分配失效的范围变更。新 Mac 无需预装 Python 即可导出默认模板；已有 Mac 使用随包 Python 导出和重新配置。

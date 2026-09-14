@@ -808,7 +808,7 @@ def component_updates(root, old, values):
     for name in ('instance.yaml', 'robot-deployment.yaml'):
         paths.update((root/'robots').glob('*/*/'+name))
     if paths and any(old[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
-        raise ValueError('Existing Robot instances have allocated Ability ports; remove those instances in Studio before changing the Ability range')
+        raise ValueError('Existing Robot configurations have allocated Ability ports; use a new installation directory to change the Ability range')
     for path in paths:
         text = original = path.read_text()
         for key, protocols in (('http_port', ('http',)), ('ws_port', ('http', 'ws')), ('runtime_port', ('http', 'ws'))):
@@ -861,7 +861,9 @@ def configure_existing(a):
         for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
             if values[key] not in owned_ports:
                 check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
-        settings_form('Reconfigure components', [(key, str(value)) for key, value in values.items()])
+        labels = dict(http_port='HTTP', ws_port='WS', web_port='Web', runtime_port='MuJoCo',
+                      ability_port_first='AF first', ability_port_last='AF last', web_host='Web host')
+        settings_form('Reconfigure components', [(labels[key], str(value)) for key, value in values.items()])
         confirm('Apply component configuration and restart managed services?', a.yes)
         state.update(values)
         updates[root/'install.json'] = (json.dumps(state, ensure_ascii=False, indent=2)+'\n').encode()
