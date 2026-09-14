@@ -589,7 +589,10 @@ def install(a):
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
         raise ValueError('目标目录非空且不是本安装器管理的目录；请选择新目录')
     old = load(root/'install.json') if (root/'install.json').exists() else {}
-    values = apply_component_options(a, configured_components(root, old))
+    previous_values = configured_components(root, old)
+    values = apply_component_options(a, previous_values)
+    if old.get('configured') and any(previous_values[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
+        raise ValueError('Use reconfigure to change the Ability port range')
     for key, value in values.items():
         setattr(a, key, value)
     ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]

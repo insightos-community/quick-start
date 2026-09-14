@@ -1035,7 +1035,10 @@ def install(a):
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
         raise ValueError('Target directory is non-empty and not managed by this installer; choose a new directory')
     old = load(root/'install.json') if (root/'install.json').exists() else {}
-    values = apply_component_options(a, configured_components(root, old))
+    previous_values = configured_components(root, old)
+    values = apply_component_options(a, previous_values)
+    if old.get('configured') and any(previous_values[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
+        raise ValueError('Use reconfigure to change the Ability port range')
     for key, value in values.items():
         setattr(a, key, value)
     ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]
@@ -1858,6 +1861,8 @@ COMPONENT_DEFAULTS = dict(http_port=8034, ws_port=8035, web_port=3000,
 def component_values(state=None):
     values = dict(COMPONENT_DEFAULTS)
     if sys.platform == 'darwin':
+        values['web_host'] = '127.0.0.1'
+    if state and 'web_host' not in state:
         values['web_host'] = '127.0.0.1'
     values.update({k: v for k, v in (state or {}).items() if k in values})
     return values
@@ -3811,7 +3816,10 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():\n"
             "        raise ValueError('Target directory is non-empty and not managed by this installer; choose a new directory')\n"
             "    old = load(root/'install.json') if (root/'install.json').exists() else {}\n"
-            '    values = apply_component_options(a, configured_components(root, old))\n'
+            '    previous_values = configured_components(root, old)\n'
+            '    values = apply_component_options(a, previous_values)\n'
+            "    if old.get('configured') and any(previous_values[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):\n"
+            "        raise ValueError('Use reconfigure to change the Ability port range')\n"
             '    for key, value in values.items():\n'
             '        setattr(a, key, value)\n'
             '    ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]\n'
@@ -4634,6 +4642,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             'def component_values(state=None):\n'
             '    values = dict(COMPONENT_DEFAULTS)\n'
             "    if sys.platform == 'darwin':\n"
+            "        values['web_host'] = '127.0.0.1'\n"
+            "    if state and 'web_host' not in state:\n"
             "        values['web_host'] = '127.0.0.1'\n"
             '    values.update({k: v for k, v in (state or {}).items() if k in values})\n'
             '    return values\n'

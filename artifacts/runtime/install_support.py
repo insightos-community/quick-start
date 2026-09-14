@@ -391,6 +391,8 @@ def component_values(state=None):
     values = dict(COMPONENT_DEFAULTS)
     if sys.platform == 'darwin':
         values['web_host'] = '127.0.0.1'
+    if state and 'web_host' not in state:
+        values['web_host'] = '127.0.0.1'
     values.update({k: v for k, v in (state or {}).items() if k in values})
     return values
 

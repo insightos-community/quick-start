@@ -40,6 +40,7 @@ class ComponentConfigTests(unittest.TestCase):
                                no_start=True, desktop='never', **changes)
 
     def test_yaml_round_trip_validation_and_cli_precedence(self):
+        self.assertEqual(support.component_values({'ready':True})['web_host'], '127.0.0.1')
         path = self.root/'components.yaml'
         values = support.component_values()
         support.export_components(path, values)
