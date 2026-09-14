@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -57,6 +58,9 @@ def main():
     subprocess.run(command,env=env,check=True)
     subprocess.run(command,env=env,check=True)
     report['offline_install_and_retry']=True
+    native_shortcuts = shared.load(root/'install.json')['native_shortcuts']
+    assert len(native_shortcuts) == 4 and all(Path(p).is_file() for p in native_shortcuts)
+    report['native_application_entries']=True
     manager=Manager(root)
     python=manager.release/'python/python.exe'
     def verify_shared_python(minimum):
@@ -93,6 +97,10 @@ def main():
             check_project(root,base,token,args.report.with_name(label+'.json'),release_dir=manager.release,readiness_timeout=360)
         project('windows-project-first')
         report['project_abilities_skills_pilot']=True
+        skill_envs = list((root/'runtime-envs/skills').glob('*/pyvenv.cfg'))
+        assert len(skill_envs) >= 3, 'Skills must use the short installation-owned environment root'
+        assert not list((root/'robots').glob('**/skills/environments/**/.semantic-ready'))
+        report['offline_uv_skill_environments']=True
         changed=free_values()
         config=root.parent/(root.name+' reconfigured components.yaml')
         export_components(config,changed)
@@ -111,9 +119,13 @@ def main():
         deadline=time.monotonic()+120
         while not result.exists() and time.monotonic()<deadline:
             time.sleep(0.2)
+        if not result.exists():
+            shutil.copyfile(result.parent/'cleanup.log', root/'logs/cleanup-failure.log')
+            raise RuntimeError('Offline cleanup did not finish within 120 seconds; see logs/cleanup-failure.log')
         evidence=json.loads(result.read_text(encoding='utf-8'))
         assert evidence['success'],evidence
         assert not (root/'releases').exists() and (root/'data/semantic.db').is_file()
+        assert all(not Path(p).exists() for p in native_shortcuts)
         report['offline_uninstall_preserves_data']=True
     finally:
         # Keep the originating project error if conservative cleanup refuses an

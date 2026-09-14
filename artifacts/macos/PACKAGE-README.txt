@@ -30,3 +30,9 @@ No security settings are modified by this installer.
 This preview covers native MuJoCo only, not LIBERO/Robosuite or vendor drivers.
 Models and Web content are included under their respective notices/licenses.
 Configure your model provider in Semantic before requesting AI plans.
+
+Native application entries
+Open Semantic from your application launcher to start services and open the current Web URL.
+Use Uninstall Semantic to remove programs locally while preserving configuration and data.
+Release simulation scenes first. --no-desktop-shortcut skips entry creation.
+Entries are in ~/Applications. Deleting only the launcher App does not remove the runtime.

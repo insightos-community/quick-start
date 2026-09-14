@@ -86,8 +86,30 @@ class WindowsManagerContracts(unittest.TestCase):
             (root/'releases/0.1.0-test.1/bin/program.exe').write_bytes(b'test-owned payload')
             (root/'data/user.txt').write_text('keep my data', encoding='utf-8')
             (root/'configs/user.yaml').write_text('keep: true', encoding='utf-8')
+            # Cleanup must stay bounded for populated Skill environments and use
+            # native long paths even when the host's Python can create them.
+            tree = root/'releases/0.1.0-test.1/many-files'
+            tree.mkdir()
+            for index in range(1500):
+                (tree/f'module-{index}.py').write_bytes(b'# installed dependency\n')
+            deep = tree/('long-directory-'*10)/('nested-module-'*10)/'owned.py'
+            self.assertGreater(len(str(deep)), 260)
+            native_deep = Path('\\\\?\\'+str(deep))
+            native_deep.parent.mkdir(parents=True)
+            native_deep.write_bytes(b'# long path\n')
+
             (root/'install.json').write_text(json.dumps(dict(component_values(), version='0.1.0-test.1',
                 platform='windows-amd64', ready=True)), encoding='utf-8')
+            (root/'bin').mkdir(exist_ok=True)
+            (root/'releases/0.1.0-test.1/assets').mkdir()
+            (root/'releases/0.1.0-test.1/python').mkdir()
+            shutil.copyfile(sys.executable, root/'releases/0.1.0-test.1/python/python.exe')
+            shutil.copyfile(ROOT/'artifacts/assets/ios.png', root/'releases/0.1.0-test.1/assets/ios.png')
+            entries = json.loads(subprocess.check_output(['powershell.exe', '-NoProfile', '-NonInteractive',
+                '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'artifacts/windows/desktop.ps1'),
+                '-Root', str(root), '-Version', '0.1.0-test.1']).decode('utf-8-sig'))
+            state = json.loads((root/'install.json').read_text(encoding='utf-8'))
+            (root/'install.json').write_text(json.dumps(dict(state, **entries)), encoding='utf-8')
             command = [sys.executable, '-B', str(ROOT/'artifacts/windows/manager.py'),
                        '--dir', str(root), 'uninstall', '--yes']
             if purge:
@@ -99,7 +121,13 @@ class WindowsManagerContracts(unittest.TestCase):
                 while not report.exists() and time.monotonic() < deadline:
                     time.sleep(0.1)
                 self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
-                return json.loads(report.read_text(encoding='utf-8'))
+                result = json.loads(report.read_text(encoding='utf-8'))
+                if result.get('success'):
+                    self.assertTrue(all(not Path(p).exists() for p in entries['native_shortcuts']))
+                    import winreg
+                    with self.assertRaises(FileNotFoundError):
+                        winreg.OpenKey(winreg.HKEY_CURRENT_USER, entries['uninstall_registry'].removeprefix('HKCU:\\'))
+                return result
             if not purge:
                 outside = self.root/'outside'
                 outside.mkdir()

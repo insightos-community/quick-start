@@ -22,7 +22,7 @@ sys.path.insert(0, str(HERE))
 if not (HERE/'installer.py').is_file():
     sys.path.insert(0, str(HERE.parent/'runtime'))  # Source checkout only.
 import installer as shared
-from install_support import component_values, read_component_config, validate_components, component_yaml, export_components
+from install_support import web_probe, component_values, read_component_config, validate_components, component_yaml, export_components
 import windows_ports as ports
 
 
@@ -92,6 +92,8 @@ class Manager:
         env.update(PATH=str(self.release/'python')+os.pathsep+env['PATH'],
                    TMP=str(self.root/'tmp'), TEMP=str(self.root/'tmp'),
                    SEMANTIC_MUJOCO_GL='glfw', MUJOCO_GL='glfw',
+                   SEMANTIC_SKILL_UV=str(self.release/'bin/uv.exe'),
+                   SEMANTIC_SKILL_ENV_ROOT=str(self.root/'runtime-envs/skills'),
                    UV_OFFLINE='1', UV_PYTHON_DOWNLOADS='never',
                    UV_PYTHON_PREFERENCE='only-system', PYTHONNOUSERSITE='1', PYTHONUTF8='1')
         return env
@@ -107,13 +109,14 @@ class Manager:
             records.pop(name)
             shared.write_json(self.root/'run/services.json', records)
 
-    def uninstall(self, purge=False):
+    def uninstall(self, purge=False, interactive=False):
         self.stop()
         temporary = plain(Path(tempfile.mkdtemp(prefix='semantic-uninstall-')))
         if temporary.is_relative_to(self.root):
             raise ValueError('Uninstall cleanup must run outside the installation directory')
         helper = temporary/'uninstall.ps1'
         shutil.copyfile(HERE/'uninstall.ps1', helper)
+        shutil.copyfile(HERE/'cleanup_tree.cs', temporary/'cleanup_tree.cs')
         result = temporary/'result.json'
         identity = ports.process_record(os.getpid())
         original = dict(self.state)
@@ -125,6 +128,8 @@ class Manager:
                    '-ParentPid', str(identity['pid']), '-ParentCreated', identity['created'], '-Result', str(result)]
         if purge:
             command.append('-Purge')
+        if interactive:
+            command.append('-Interactive')
         try:
             with (temporary/'cleanup.log').open('wb') as log:
                 child = subprocess.Popen(command, cwd=temporary, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
@@ -245,19 +250,22 @@ def main():
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'reconfigure', 'export-config', 'uninstall'])
+    parser.add_argument('command', choices=['open', 'start', 'stop', 'status', 'reconfigure', 'export-config', 'uninstall'])
     parser.add_argument('--dir', type=Path, required=True)
     parser.add_argument('-f', '--config', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--purge', action='store_true', help='Delete this installation including its configuration and data')
+    parser.add_argument('--interactive', action='store_true', help='Keep a shortcut console visible on failure')
     parser.add_argument('--yes', action='store_true')
     args = parser.parse_args()
     manager = Manager(args.dir)
     with ports.directory_lock(manager.root):
         manager.reload()
-        if args.command == 'start':
+        if args.command in ('start', 'open'):
             manager.start()
+            if args.command == 'open':
+                os.startfile(f"http://{web_probe(manager.values['web_host'])}:{manager.values['web_port']}")
         elif args.command == 'stop':
             manager.stop()
         elif args.command == 'status':
@@ -266,7 +274,10 @@ def main():
             message = 'Permanently delete this instance and all its data' if args.purge else 'Remove programs and preserve configuration, data and logs'
             if not args.yes and input(message+'? [y/N] ').strip().lower() not in ('y','yes'):
                 raise RuntimeError('Uninstallation cancelled')
-            print('Cleanup will finish after this command exits. Result: '+str(manager.uninstall(args.purge)))
+            result = manager.uninstall(args.purge, args.interactive)
+            print('Cleanup will finish after this command exits. Result: '+str(result))
+            if args.interactive:
+                print('Configuration and data will be preserved unless --purge was selected.')
         elif args.command == 'export-config':
             if args.output:
                 export_components(args.output, manager.values)
@@ -279,4 +290,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as exc:
+        if '--interactive' in sys.argv:
+            print(str(exc), file=sys.stderr)
+            input('Press Enter to close...')
+        raise

@@ -29,7 +29,7 @@ def main(a):
     root=a.root.resolve()
     package=a.package.resolve()
     checksum=hashlib.file_digest(package.open('rb'),'sha256').hexdigest()
-    options=['--package',package,'--sha256',checksum,'--dir',root,'--yes','--no-desktop-shortcut',
+    options=['--package',package,'--sha256',checksum,'--dir',root,'--yes','--desktop-shortcut',
              '--http-port','28080','--ws-port','28081','--web-port','28082','--runtime-port','28083']
     ctl=root/'bin/semanticctl'
     report={'checks':[], 'graphics':'not-qualified: physical Mac CGL validation required'}
@@ -38,6 +38,9 @@ def main(a):
         report['checks'].append('Unified Chinese bootstrap, archive SHA256, offline install and native scene startup smoke')
         state=json.loads((root/'install.json').read_text())
         assert state['web_host']=='127.0.0.1'
+        app_entries = state['application_bundles']
+        assert len(app_entries) == 2 and all(Path(p).is_dir() for p in app_entries)
+        report['checks'].append('Native signed application entries with icons registered for this user')
         password=json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']
         response=request('http://127.0.0.1:28082/api/v1/auth/login',{'username':'admin','password':password})
         assert response['token']
@@ -103,7 +106,8 @@ def main(a):
         run(ctl,'uninstall','--dry-run')
         run(ctl,'uninstall','--yes')
         assert (root/'configs/secrets.json').is_file() and not (root/'releases').exists()
-        report['checks'].append('Uninstall preserves user configuration and removes installed programs')
+        assert all(not Path(p).exists() for p in app_entries)
+        report['checks'].append('Uninstall preserves user configuration and removes installed programs and application entries')
         report['success']=True
     finally:
         a.report.parent.mkdir(parents=True,exist_ok=True)

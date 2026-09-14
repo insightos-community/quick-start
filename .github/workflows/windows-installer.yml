@@ -54,11 +54,16 @@ jobs:
       id: native_core
       with:
         path: sources/framework/.output/bin
-        key: windows2022-core-go1258-llvm60908-${{ hashFiles('artifacts/windows/sources.json', 'artifacts/gateway/*.go') }}-v1
+        key: windows2022-core-go1258-llvm60908-${{ hashFiles('artifacts/windows/sources.json', 'artifacts/gateway/*.go', '.github/workflows/windows-installer.yml') }}-v2
+    - name: Read pinned source revisions
+      id: pins
+      run: |
+        $sources = Get-Content artifacts/windows/sources.json -Raw | ConvertFrom-Json | ConvertTo-Json -Compress -Depth 10
+        "sources=$sources" >> $env:GITHUB_OUTPUT
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Semantic-Framework
-        ref: 8a12584441a13410091a7091e0af811453792bbf
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['Semantic-Framework'].commit }}
         path: sources/framework
         persist-credentials: false
       if: steps.native_core.outputs.cache-hit != 'true'
@@ -70,7 +75,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 23b36f16eeed4578634e9e988a7b08fc8593c670
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['semantic-deployment'].commit }}
         path: sources/deployment
         persist-credentials: false
       if: steps.native_core.outputs.cache-hit != 'true'
@@ -136,52 +141,57 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+    - name: Read pinned source revisions
+      id: pins
+      run: |
+        $sources = Get-Content artifacts/windows/sources.json -Raw | ConvertFrom-Json | ConvertTo-Json -Compress -Depth 10
+        "sources=$sources" >> $env:GITHUB_OUTPUT
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Semantic-Framework
-        ref: 8a12584441a13410091a7091e0af811453792bbf
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['Semantic-Framework'].commit }}
         path: sources/Semantic-Framework
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/AbilityFramework
-        ref: e281a39d84097d78890041a7f679c37c12e7ce07
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['AbilityFramework'].commit }}
         path: sources/AbilityFramework
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/mujoco-runtime
-        ref: bbb75005f84c329026d333ca428658f444e681d6
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['mujoco-runtime'].commit }}
         path: sources/mujoco-runtime
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 23b36f16eeed4578634e9e988a7b08fc8593c670
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['semantic-deployment'].commit }}
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/ability-scaffold
-        ref: 90917ecb0953605fa7bc47ea54e17a7e8273c1af
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['ability-scaffold'].commit }}
         path: sources/ability-scaffold
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Ability-SDK-Python
-        ref: 064c36d0510b387318027213b39aaa2ffb7ea35e
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['Ability-SDK-Python'].commit }}
         path: sources/Ability-SDK-Python
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/r1pro-ability
-        ref: 29d0540c8d516407b036a27082483fb83192dc33
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['r1pro-ability'].commit }}
         path: sources/r1pro-ability
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/pinocchio
-        ref: 635953fa9fd83c289e1af984944cf55885b2b53c
+        ref: ${{ fromJSON(steps.pins.outputs.sources)['pinocchio'].commit }}
         path: sources/pinocchio
         persist-credentials: false
     - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
@@ -211,8 +221,13 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw 'Windows assembly failed' }
     - name: Verify native offline installation
       run: |
-        uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:RUNNER_TEMP/语义 Windows test" --report .output/windows/windows-installation.json
-        if ($LASTEXITCODE -ne 0) { throw 'Windows installation validation failed' }
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+        $previous = (Get-ItemProperty $key).LongPathsEnabled
+        try {
+          Set-ItemProperty $key -Name LongPathsEnabled -Value 0
+          uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:RUNNER_TEMP/语义 Windows test" --report .output/windows/windows-installation.json
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installation validation failed' }
+        } finally { Set-ItemProperty $key -Name LongPathsEnabled -Value $previous }
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: semantic-installer-windows-amd64-preview

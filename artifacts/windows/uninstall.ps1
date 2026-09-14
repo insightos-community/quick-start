@@ -5,11 +5,17 @@ param(
     [Parameter(Mandatory=$true)][int]$ParentPid,
     [Parameter(Mandatory=$true)][string]$ParentCreated,
     [Parameter(Mandatory=$true)][string]$Result,
-    [switch]$Purge
+    [switch]$Purge,
+    [switch]$Interactive
 )
 $ErrorActionPreference = 'Stop'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $lock = $null
+function FileDigest([string]$Path) {
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($hash.ComputeHash([IO.File]::ReadAllBytes($Path)))).Replace('-', '').ToLower() }
+    finally { $hash.Dispose() }
+}
 function Plain([string]$Path) {
     $current = [IO.Path]::GetFullPath($Path)
     while ($current) {
@@ -20,22 +26,9 @@ function Plain([string]$Path) {
         $current = if ($parent) { $parent.FullName } else { $null }
     }
 }
-function CheckTree([string]$Path) {
-    Plain $Path
-    if ([IO.Directory]::Exists($Path)) {
-        foreach ($child in [IO.Directory]::EnumerateFileSystemEntries($Path)) { CheckTree $child }
-    }
-}
-function RemoveTree([string]$Path) {
-    Plain $Path
-    if ([IO.Directory]::Exists($Path)) {
-        foreach ($child in [IO.Directory]::EnumerateFileSystemEntries($Path)) { RemoveTree $child }
-        [IO.Directory]::Delete($Path, $false)
-    } elseif ([IO.File]::Exists($Path)) {
-        [IO.File]::SetAttributes($Path, [IO.FileAttributes]::Normal)
-        [IO.File]::Delete($Path)
-    }
-}
+function CheckTree([string]$Path) { [SemanticCleanupTree]::Check($Path) }
+function RemoveTree([string]$Path) { [SemanticCleanupTree]::Remove($Path) }
+
 try {
     [IO.File]::WriteAllText($Result+'.started', 'started', $utf8)
     [Console]::WriteLine('Cleanup helper started')
@@ -43,6 +36,7 @@ try {
     if ($Root -eq [IO.Path]::GetPathRoot($Root).TrimEnd('\') -or $Root -eq [Environment]::GetFolderPath('UserProfile')) { throw 'Dedicated installation directory required' }
     Plain $Root
     [Console]::WriteLine('Installation path validated')
+    Add-Type -Path (Join-Path $PSScriptRoot 'cleanup_tree.cs')
     # Hold one native handle while checking creation time and waiting. A lazy
     # Diagnostics.Process.StartTime query can become null as the parent exits.
     Add-Type -TypeDefinition @'
@@ -96,6 +90,21 @@ public static class SemanticCleanupParent {
     # Validate the whole selected tree before the first deletion.
     foreach ($target in $targets) { CheckTree $target }
     [Console]::WriteLine('Cleanup targets validated')
+    # Remove only unchanged shortcuts belonging to this exact installation.
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $id = ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($Root.TrimEnd('\'))))).Replace('-', '').ToLower().Substring(0,12)
+    if ($state.PSObject.Properties['native_shortcuts']) {
+        foreach ($record in $state.native_shortcuts.PSObject.Properties) {
+            $path = $record.Name
+            $parent = [IO.Path]::GetDirectoryName($path)
+            $name = [IO.Path]::GetFileName($path)
+            if ($parent -notin @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('DesktopDirectory')) -or $name -notin @("Semantic ($id).lnk", "Uninstall Semantic ($id).lnk")) { continue }
+            try { Plain $path } catch { continue }
+            if ((Test-Path -LiteralPath $path -PathType Leaf) -and (FileDigest $path) -eq $record.Value) { [IO.File]::Delete($path) }
+        }
+    }
+    $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Semantic-$id"
+    if ((Test-Path $key) -and (Get-ItemProperty $key).InstallLocation -eq $Root) { Remove-Item $key -Recurse }
     foreach ($target in $targets) { RemoveTree $target }
     if (!$Purge) {
         $state.ready = $false
@@ -115,8 +124,13 @@ public static class SemanticCleanupParent {
         [IO.Directory]::Delete($Root, $false)
     }
     [IO.File]::WriteAllText($Result, (@{success=$true; purge=[bool]$Purge; root=$Root} | ConvertTo-Json), $utf8)
+    if ($Interactive) {
+        $message = if ($Purge) { 'Semantic and its instance data have been removed.' } else { 'Semantic programs have been removed. Your configuration, data and logs were preserved.' }
+        (New-Object -ComObject WScript.Shell).Popup($message, 0, 'Semantic uninstall', 64) | Out-Null
+    }
 } catch {
     [IO.File]::WriteAllText($Result, (@{success=$false; error=$_.Exception.Message; location=$_.InvocationInfo.PositionMessage; root=$Root} | ConvertTo-Json), $utf8)
+    if ($Interactive) { (New-Object -ComObject WScript.Shell).Popup(('Uninstall failed: '+$_.Exception.Message+[Environment]::NewLine+'Details: '+$Result), 0, 'Semantic uninstall', 16) | Out-Null }
     exit 1
 } finally {
     if ($lock) { $lock.Dispose() }

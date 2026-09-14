@@ -8,6 +8,22 @@
 
 🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 13 个组件仓库，本身不是 Server。
 
+### 应用图标与本地卸载
+
+从本修订构建的安装器会使用 Semantic 图标创建各平台原生入口：
+
+| 平台 | 程序入口 | 卸载入口 |
+| --- | --- | --- |
+| Linux glibc / musl | 应用菜单及桌面（自动检测图形桌面） | Uninstall Semantic，或 `bin/semanticctl uninstall` |
+| macOS | `~/Applications/Semantic (<实例标识>).app`，注册到 LaunchServices，供 Finder 和系统应用启动器发现 | `~/Applications/Uninstall Semantic (<实例标识>).app` |
+| Windows | 开始菜单及桌面快捷方式 | Uninstall Semantic，或“设置 → 应用 → 已安装的应用 → Semantic” |
+
+打开 Semantic 会先启动托管服务，再按当前配置打开 Web 页面；修改端口后不必重建快捷方式。macOS 安装到当前用户的“应用程序”目录，无需管理员权限，可通过 Finder → 前往 → 个人 → Applications 找到。在提供 Launchpad 的 macOS 版本中可查找 Semantic；新版 macOS 使用系统的应用启动入口。名称带实例标识，避免多套安装相互覆盖。
+
+卸载完全使用本地文件，默认保留配置、数据和日志。请先在 Web 中释放运行中的仿真场景。macOS 仅把启动 App 拖入废纸篓不会移除运行环境，请使用 **Uninstall Semantic**。需要连同实例数据删除时，显式执行命令行 `uninstall --purge`。用户修改过的快捷方式或 App 会保留。安装时可用 `--no-desktop-shortcut` 跳过入口；无桌面的 Linux 可用 `--desktop-shortcut` 显式创建。Linux 桌面图标首次使用可能需选择“允许启动”。
+
+已发布的历史安装包内容不变，以上功能需要本修订或后续版本的安装器。macOS App 使用本地临时签名，尚未经过 Apple 公证。
+
 ## 从这里开始
 
 使用预编译产物安装 Semantic，支持 **Linux x86_64**，已在 **Ubuntu 24.04** 验证。需要 Bash、curl 和 Python 3.10+，可选择以下下载来源：
