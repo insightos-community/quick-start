@@ -43,7 +43,7 @@ semantic_config_entry() (
         if ((skip)); then skip=0; continue; fi
         if [[ "$value" == --web-host ]]; then skip=1; else filtered+=("$value"); fi
       done
-      config_args=("${filtered[@]}")
+      config_args=(${filtered[@]+"${filtered[@]}"})
     fi
   done
   # Carry the current manager so older release archives gain configuration support.
@@ -80,7 +80,7 @@ semantic_config_entry() (
           *) filtered+=("$line") ;;
         esac
       done
-      args=("${filtered[@]}")
+      args=(${filtered[@]+"${filtered[@]}"})
       "$python" -B "$manager/installer.py" configure --payload "$root/current" --dir "$root" ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"}
     fi
     exit

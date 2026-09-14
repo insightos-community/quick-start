@@ -84,6 +84,8 @@ class ComponentConfigTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('http_port: 8034', result.stdout)
             self.assertIn('web_host: 127.0.0.1', result.stdout)
+            help_result = subprocess.run(['bash', str(ROOT/script), '--lan', '--help'], capture_output=True, text=True, env=env)
+            self.assertEqual(help_result.returncode, 0, help_result.stderr)
             path = self.root/'overlap.yaml'; path.write_text('schema_version: 1\nhttp_port: 18101\n')
             result = subprocess.run(['bash', str(ROOT/script), '--dir', str(self.root/'new'), '-f', str(path)],
                                     capture_output=True, text=True, env=env)
