@@ -96,6 +96,10 @@ def main():
             check_project(root,base,token,args.report.with_name(label+'.json'),release_dir=manager.release,readiness_timeout=360)
         project('windows-project-first')
         report['project_abilities_skills_pilot']=True
+        skill_envs = list((root/'runtime-envs/skills').glob('*/pyvenv.cfg'))
+        assert len(skill_envs) >= 3, 'Skills must use the short installation-owned environment root'
+        assert not list((root/'robots').glob('**/skills/environments/**/.semantic-ready'))
+        report['offline_uv_skill_environments']=True
         changed=free_values()
         config=root.parent/(root.name+' reconfigured components.yaml')
         export_components(config,changed)

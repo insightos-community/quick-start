@@ -92,6 +92,8 @@ class Manager:
         env.update(PATH=str(self.release/'python')+os.pathsep+env['PATH'],
                    TMP=str(self.root/'tmp'), TEMP=str(self.root/'tmp'),
                    SEMANTIC_MUJOCO_GL='glfw', MUJOCO_GL='glfw',
+                   SEMANTIC_SKILL_UV=str(self.release/'bin/uv.exe'),
+                   SEMANTIC_SKILL_ENV_ROOT=str(self.root/'runtime-envs/skills'),
                    UV_OFFLINE='1', UV_PYTHON_DOWNLOADS='never',
                    UV_PYTHON_PREFERENCE='only-system', PYTHONNOUSERSITE='1', PYTHONUTF8='1')
         return env

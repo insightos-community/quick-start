@@ -35,7 +35,7 @@ try {
     $writer.Write([byte[]]@(0,0,0,0)); $writer.Write([uint16]1); $writer.Write([uint16]32)
     $writer.Write([uint32]$png.Length); $writer.Write([uint32]22); $writer.Write($png.ToArray())
 } finally { $writer.Dispose(); $png.Dispose(); $graphics.Dispose(); $bitmap.Dispose(); $image.Dispose() }
-$shell = New-Object -ComObject WScript.Shell
+Add-Type -Path (Join-Path $PSScriptRoot 'shell_link.cs')
 $records = @{}
 $programs = [Environment]::GetFolderPath('Programs')
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
@@ -51,15 +51,15 @@ foreach ($directory in @($programs, $desktop)) {
             $old = if ($state.PSObject.Properties['native_shortcuts']) { $state.native_shortcuts.PSObject.Properties[$path] } else { $null }
             if (!$old -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -ne $old.Value) { continue }
         }
-        $link = $shell.CreateShortcut($path)
         $targetPath = [IO.Path]::Combine($release, 'python', 'python.exe')
         if (!(Test-Path -LiteralPath $targetPath -PathType Leaf)) { throw "Shortcut executable is missing: $targetPath" }
-        $link.TargetPath = [string]$targetPath
-        $link.Arguments = '-I -B "'+(Join-Path $release 'manager.py')+'" --dir "'+$Root+'" '+$action+' --interactive'
-        $link.WorkingDirectory = [IO.Path]::GetTempPath()
-        $link.IconLocation = "$icon,0"
-        $link.Description = "$title - $Root"
-        $link.Save()
+        $arguments = '-I -B "'+(Join-Path $release 'manager.py')+'" --dir "'+$Root+'" '+$action+' --interactive'
+        $temporary = Join-Path $directory ([Guid]::NewGuid().ToString()+'.lnk')
+        try {
+            [SemanticShellLink]::Create($temporary, $targetPath, $arguments, $icon, "$title - $Root")
+            if (Test-Path -LiteralPath $path) { [IO.File]::Delete($path) }
+            [IO.File]::Move($temporary, $path)
+        } finally { if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) } }
         $records[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower()
     }
 }
