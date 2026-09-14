@@ -145,7 +145,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/AbilityFramework
-        ref: acabeb6d6e62ebec98968b3da730ecc615541876
+        ref: e281a39d84097d78890041a7f679c37c12e7ce07
         path: sources/AbilityFramework
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

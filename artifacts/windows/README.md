@@ -45,7 +45,7 @@ with its Windows SDK (`mt.exe`), and the compiler recipes in the
 pinned component repositories. [sources.json](sources.json) records exact source
 commits. The [preview workflow](../../.github/workflows/windows-installer.yml)
 builds the Framework, Pilot, Gateway and supervisor, then consumes successful
-[AbilityFramework](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1)
+[AbilityFramework](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.2)
 and [R1 Pro Ability](https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1)
 component releases. `native-releases.json` pins each checksum manifest; source
 identities and asset hashes are checked on download.

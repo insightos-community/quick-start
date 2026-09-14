@@ -5,7 +5,7 @@
   },
   "AbilityFramework": {
     "repository": "insightos-community/AbilityFramework",
-    "commit": "acabeb6d6e62ebec98968b3da730ecc615541876"
+    "commit": "e281a39d84097d78890041a7f679c37c12e7ce07"
   },
   "mujoco-runtime": {
     "repository": "insightos-community/mujoco-runtime",

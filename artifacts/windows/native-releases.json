@@ -1,7 +1,7 @@
 {
   "AbilityFramework": {
-    "tag": "windows-v2.4.1-preview.1",
-    "checksums_sha256": "843c1f956260bb4f28de8986afb8934542492381359309716b8d3b00bb1a4e44"
+    "tag": "windows-v2.4.1-preview.2",
+    "checksums_sha256": "deba3501690e9e0bb2abd78adff39930dea1bbe7e7dd1d5120cc40a261909e31"
   },
   "r1pro-ability": {
     "tag": "windows-v0.4.0-preview.1",
