@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -118,6 +119,9 @@ def main():
         deadline=time.monotonic()+120
         while not result.exists() and time.monotonic()<deadline:
             time.sleep(0.2)
+        if not result.exists():
+            shutil.copyfile(result.parent/'cleanup.log', root/'logs/cleanup-failure.log')
+            raise RuntimeError('Offline cleanup did not finish within 120 seconds; see logs/cleanup-failure.log')
         evidence=json.loads(result.read_text(encoding='utf-8'))
         assert evidence['success'],evidence
         assert not (root/'releases').exists() and (root/'data/semantic.db').is_file()

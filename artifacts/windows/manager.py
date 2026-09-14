@@ -116,6 +116,7 @@ class Manager:
             raise ValueError('Uninstall cleanup must run outside the installation directory')
         helper = temporary/'uninstall.ps1'
         shutil.copyfile(HERE/'uninstall.ps1', helper)
+        shutil.copyfile(HERE/'cleanup_tree.cs', temporary/'cleanup_tree.cs')
         result = temporary/'result.json'
         identity = ports.process_record(os.getpid())
         original = dict(self.state)

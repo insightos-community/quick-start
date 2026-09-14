@@ -26,22 +26,9 @@ function Plain([string]$Path) {
         $current = if ($parent) { $parent.FullName } else { $null }
     }
 }
-function CheckTree([string]$Path) {
-    Plain $Path
-    if ([IO.Directory]::Exists($Path)) {
-        foreach ($child in [IO.Directory]::EnumerateFileSystemEntries($Path)) { CheckTree $child }
-    }
-}
-function RemoveTree([string]$Path) {
-    Plain $Path
-    if ([IO.Directory]::Exists($Path)) {
-        foreach ($child in [IO.Directory]::EnumerateFileSystemEntries($Path)) { RemoveTree $child }
-        [IO.Directory]::Delete($Path, $false)
-    } elseif ([IO.File]::Exists($Path)) {
-        [IO.File]::SetAttributes($Path, [IO.FileAttributes]::Normal)
-        [IO.File]::Delete($Path)
-    }
-}
+function CheckTree([string]$Path) { [SemanticCleanupTree]::Check($Path) }
+function RemoveTree([string]$Path) { [SemanticCleanupTree]::Remove($Path) }
+
 try {
     [IO.File]::WriteAllText($Result+'.started', 'started', $utf8)
     [Console]::WriteLine('Cleanup helper started')
@@ -49,6 +36,7 @@ try {
     if ($Root -eq [IO.Path]::GetPathRoot($Root).TrimEnd('\') -or $Root -eq [Environment]::GetFolderPath('UserProfile')) { throw 'Dedicated installation directory required' }
     Plain $Root
     [Console]::WriteLine('Installation path validated')
+    Add-Type -Path (Join-Path $PSScriptRoot 'cleanup_tree.cs')
     # Hold one native handle while checking creation time and waiting. A lazy
     # Diagnostics.Process.StartTime query can become null as the parent exits.
     Add-Type -TypeDefinition @'
