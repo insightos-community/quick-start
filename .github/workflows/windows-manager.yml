@@ -96,7 +96,7 @@ jobs:
       with:
         version: 0.12.12
     - name: Verify bundled Python and native filenames
-      run: 'uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python tests/test_windows_python_payload.py
+      run: 'uv run --no-project --managed-python --python 3.13.15 --with PyYAML==6.0.2 python tests/test_windows_python_payload.py
 
         if ($LASTEXITCODE -ne 0) { throw ''Python payload verification failed'' }
 

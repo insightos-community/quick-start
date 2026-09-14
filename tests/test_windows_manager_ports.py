@@ -13,6 +13,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'artifacts/windows'))
+sys.path.insert(0, str(ROOT/'artifacts/runtime'))
 if os.name == 'nt':
     import windows_ports as ports
 
