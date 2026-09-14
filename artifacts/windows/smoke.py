@@ -6,6 +6,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import time
 import urllib.request
 
 sys.dont_write_bytecode = True
@@ -81,10 +82,20 @@ def main():
         control('start')
         control('stop')
         report['local_management_restart']=True
+        cleanup=subprocess.run(ctl+['uninstall','--yes'],env=env,check=True,capture_output=True)
+        result=Path(cleanup.stdout.decode('utf-8').strip().split('Result: ',1)[1])
+        deadline=time.monotonic()+120
+        while not result.exists() and time.monotonic()<deadline:
+            time.sleep(0.2)
+        evidence=json.loads(result.read_text(encoding='utf-8'))
+        assert evidence['success'],evidence
+        assert not (root/'releases').exists() and (root/'data/semantic.db').is_file()
+        report['offline_uninstall_preserves_data']=True
     finally:
         # The manager preserves any scene whose normal release was not confirmed.
         try:
-            control('stop')
+            if not report.get('offline_uninstall_preserves_data'):
+                control('stop')
         finally:
             args.report.parent.mkdir(parents=True,exist_ok=True)
             args.report.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')

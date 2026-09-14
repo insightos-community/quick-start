@@ -8,8 +8,11 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -102,6 +105,34 @@ class Manager:
                 ports.stop(records[name])
             records.pop(name)
             shared.write_json(self.root/'run/services.json', records)
+
+    def uninstall(self, purge=False):
+        self.stop()
+        temporary = plain(Path(tempfile.mkdtemp(prefix='semantic-uninstall-')))
+        if temporary.is_relative_to(self.root):
+            raise ValueError('Uninstall cleanup must run outside the installation directory')
+        helper = temporary/'uninstall.ps1'
+        shutil.copyfile(HERE/'uninstall.ps1', helper)
+        result = temporary/'result.json'
+        identity = ports.process_record(os.getpid())
+        original = dict(self.state)
+        self.state.update(uninstalling=True, uninstall_nonce=secrets.token_hex(32))
+        shared.write_json(self.root/'install.json', self.state)
+        command = [str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),
+                   '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', str(helper),
+                   '-Root', str(self.root), '-Nonce', self.state['uninstall_nonce'],
+                   '-ParentPid', str(identity['pid']), '-ParentCreated', identity['created'], '-Result', str(result)]
+        if purge:
+            command.append('-Purge')
+        try:
+            with (temporary/'cleanup.log').open('wb') as log:
+                subprocess.Popen(command, cwd=temporary, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
+        except Exception:
+            self.state = original
+            shared.write_json(self.root/'install.json', self.state)
+            raise
+        return result
 
     def start(self, names=('server', 'web')):
         if not self.state.get('ready') or self.state.get('uninstalling'):
@@ -204,12 +235,17 @@ class Manager:
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'reconfigure', 'export-config'])
+    parser.add_argument('command', choices=['start', 'stop', 'status', 'reconfigure', 'export-config', 'uninstall'])
     parser.add_argument('--dir', type=Path, required=True)
     parser.add_argument('-f', '--config', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--no-start', action='store_true')
+    parser.add_argument('--purge', action='store_true', help='Delete this installation including its configuration and data')
+    parser.add_argument('--yes', action='store_true')
     args = parser.parse_args()
     manager = Manager(args.dir)
     with ports.directory_lock(manager.root):
@@ -220,6 +256,11 @@ def main():
             manager.stop()
         elif args.command == 'status':
             print(json.dumps(manager.status()))
+        elif args.command == 'uninstall':
+            message = 'Permanently delete this instance and all its data' if args.purge else 'Remove programs and preserve configuration, data and logs'
+            if not args.yes and input(message+'? [y/N] ').strip().lower() not in ('y','yes'):
+                raise RuntimeError('Uninstallation cancelled')
+            print('Cleanup will finish after this command exits. Result: '+str(manager.uninstall(args.purge)))
         elif args.command == 'export-config':
             if args.output:
                 export_components(args.output, manager.values)

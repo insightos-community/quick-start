@@ -12,6 +12,10 @@ Installed management commands:
 "%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" stop
 "%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" start
 
+"%LOCALAPPDATA%\\Semantic\\bin\\semanticctl.cmd" uninstall --yes
+Uninstall uses local files, preserves configuration/data/logs, and prints an external cleanup result path.
+Add --purge only to permanently delete the whole instance.
+
 Release active scenes in the Web UI before stopping or reconfiguring.
 Default Web port: 3000. API: 8034. WebSocket: 8035. Runtime: 8036.
 Application-local native DLLs are bundled. A working OpenGL GPU driver is needed for rendering.

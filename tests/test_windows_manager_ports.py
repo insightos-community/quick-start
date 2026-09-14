@@ -75,6 +75,39 @@ class WindowsManagerContracts(unittest.TestCase):
             child.terminate()
             child.wait(timeout=10)
 
+    def test_offline_uninstall_preserves_data_and_explicit_purge_removes_instance(self):
+        import manager as managed
+        from install_support import component_values
+        for purge in (False, True):
+            root = self.root/('purge' if purge else 'preserve')
+            for name in ('releases/0.1.0-test.1/bin', 'configs', 'data', 'run'):
+                (root/name).mkdir(parents=True, exist_ok=True)
+            (root/'.semantic-install-root').touch()
+            (root/'releases/0.1.0-test.1/bin/program.exe').write_bytes(b'test-owned payload')
+            (root/'data/user.txt').write_text('keep my data', encoding='utf-8')
+            (root/'configs/user.yaml').write_text('keep: true', encoding='utf-8')
+            (root/'install.json').write_text(json.dumps(dict(component_values(), version='0.1.0-test.1',
+                platform='windows-amd64', ready=True)), encoding='utf-8')
+            command = [sys.executable, '-B', str(ROOT/'artifacts/windows/manager.py'),
+                       '--dir', str(root), 'uninstall', '--yes']
+            if purge:
+                command.append('--purge')
+            result = subprocess.run(command, check=True, capture_output=True, timeout=15)
+            report = Path(result.stdout.decode('utf-8').strip().split('Result: ',1)[1])
+            deadline = time.monotonic()+20
+            while not report.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
+            evidence = json.loads(report.read_text(encoding='utf-8'))
+            self.assertTrue(evidence['success'], evidence)
+            if purge:
+                self.assertFalse(root.exists())
+            else:
+                self.assertFalse((root/'releases').exists())
+                self.assertEqual((root/'data/user.txt').read_text(), 'keep my data')
+                self.assertEqual((root/'configs/user.yaml').read_text(), 'keep: true')
+                self.assertFalse(json.loads((root/'install.json').read_text())['ready'])
+
     def test_real_server_restarts_and_stops_from_python_manager(self):
         import yaml
         binaries = Path(os.environ['SEMANTIC_NATIVE_BIN'])
