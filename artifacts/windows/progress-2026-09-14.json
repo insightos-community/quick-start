@@ -22,15 +22,15 @@
     },
     "pinocchio": {
       "branch": "feat/windows-release",
-      "native_ci": 34810008059,
-      "result": "Native source compilation in progress after MSVC macro fixes; standalone wheels and DLL closure remain unverified"
+      "native_ci": 34811461571,
+      "result": "Core DLLs compiled in prior run; EigenPy MSVC pragma repair applied, native rebuild and standalone wheel validation in progress"
     },
     "AbilityFramework": {
       "branch": "feat/windows-native",
-      "native_ci": 34810397357,
-      "result": "Linux 22 cases / 125 assertions passed; native Windows build, unit tests and HTTP/Unicode workspace smoke pending",
+      "native_ci": 34811811362,
+      "result": "Linux 23 cases / 128 assertions passed; MSVC application compiled and linked; native unit/HTTP validation in progress",
       "pr": 5,
-      "source_commit": "30fc3a05ee05dbbacd36736f2433cede1d76a4aa"
+      "source_commit": "7306bb410c6d14120b67b4e09968cd0664ec96fe"
     },
     "ability-scaffold": {
       "branch": "feat/windows-launcher",
@@ -55,6 +55,12 @@
       "result": "Windows installed-wheel/native-launcher lifecycle and IPC cleanup passed; Linux installed-wheel lifecycle passed",
       "merge_commit": "064c36d0510b387318027213b39aaa2ffb7ea35e",
       "native_ci": 34810296542
+    },
+    "quick-start": {
+      "pr": 23,
+      "merged": false,
+      "native_ci": 34811878607,
+      "result": "Passed native Python manager against real Server/Web gateway: restart/graceful stop, SQLite unlock, stale identity, exclusive lock/crash recovery, wildcard TCP listener checks; 38 public Windows wheels downloaded with hashes. Full installer pending."
     }
   },
   "remaining": [
