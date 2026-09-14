@@ -1,0 +1,14 @@
+{
+  "AbilityFramework": {
+    "tag": "windows-v2.4.1-preview.2",
+    "checksums_sha256": "deba3501690e9e0bb2abd78adff39930dea1bbe7e7dd1d5120cc40a261909e31"
+  },
+  "r1pro-ability": {
+    "tag": "windows-v0.4.0-preview.1",
+    "checksums_sha256": "a11b58144c503dbf0eb51ba84c6dff17a7f3e4ac8dbc34dccd56ad48684080d7"
+  },
+  "pinocchio": {
+    "tag": "windows-v3.9.0-preview.1",
+    "checksums_sha256": "e7dbd15ddcc2fe48a0cd90b4601fc18f539e4168fa534193332c9da4951bc8e5"
+  }
+}

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'artifacts/windows'))
+sys.path.insert(0, str(ROOT/'artifacts/runtime'))
 if os.name == 'nt':
     import windows_ports as ports
 
@@ -73,6 +75,98 @@ class WindowsManagerContracts(unittest.TestCase):
         finally:
             child.terminate()
             child.wait(timeout=10)
+
+    def test_offline_uninstall_preserves_data_and_explicit_purge_removes_instance(self):
+        from install_support import component_values
+        for purge in (False, True):
+            root = self.root/('purge' if purge else 'preserve')
+            for name in ('releases/0.1.0-test.1/bin', 'configs', 'data', 'run'):
+                (root/name).mkdir(parents=True, exist_ok=True)
+            (root/'.semantic-install-root').touch()
+            (root/'releases/0.1.0-test.1/bin/program.exe').write_bytes(b'test-owned payload')
+            (root/'data/user.txt').write_text('keep my data', encoding='utf-8')
+            (root/'configs/user.yaml').write_text('keep: true', encoding='utf-8')
+            (root/'install.json').write_text(json.dumps(dict(component_values(), version='0.1.0-test.1',
+                platform='windows-amd64', ready=True)), encoding='utf-8')
+            command = [sys.executable, '-B', str(ROOT/'artifacts/windows/manager.py'),
+                       '--dir', str(root), 'uninstall', '--yes']
+            if purge:
+                command.append('--purge')
+            def cleanup():
+                result = subprocess.run(command, check=True, capture_output=True, timeout=30)
+                report = Path(result.stdout.decode('utf-8').strip().split('Result: ',1)[1])
+                deadline = time.monotonic()+30
+                while not report.exists() and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
+                return json.loads(report.read_text(encoding='utf-8'))
+            if not purge:
+                outside = self.root/'outside'
+                outside.mkdir()
+                (outside/'user.txt').write_text('external data',encoding='utf-8')
+                junction = root/'releases/0.1.0-test.1/bin/external'
+                subprocess.run(['cmd.exe','/d','/c','mklink','/J',str(junction),str(outside)],
+                               check=True,capture_output=True)
+                try:
+                    rejected = cleanup()
+                    self.assertFalse(rejected['success'], rejected)
+                    self.assertIn('Reparse point', rejected['error'])
+                    self.assertEqual((outside/'user.txt').read_text(), 'external data')
+                    self.assertTrue((root/'releases/0.1.0-test.1/bin/program.exe').is_file())
+                finally:
+                    os.rmdir(junction)
+            evidence = cleanup()
+            self.assertTrue(evidence['success'], evidence)
+            if purge:
+                self.assertFalse(root.exists())
+            else:
+                self.assertFalse((root/'releases').exists())
+                self.assertEqual((root/'data/user.txt').read_text(), 'keep my data')
+                self.assertEqual((root/'configs/user.yaml').read_text(), 'keep: true')
+                self.assertFalse(json.loads((root/'install.json').read_text())['ready'])
+
+    def test_cleanup_waits_for_parent_handle_and_preserves_reused_pid(self):
+        powershell = str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe')
+        for matched in (True, False):
+            root = self.root/('matching-parent' if matched else 'reused-parent')
+            root.mkdir()
+            (root/'.semantic-install-root').touch()
+            (root/'install.json').write_text(json.dumps(dict(platform='windows-amd64',
+                ready=True, uninstalling=True, uninstall_nonce='parent-handle-test')))
+            result = root.with_suffix('.result.json')
+            log = root.with_suffix('.log')
+            parent = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            helper = None
+            try:
+                identity = ports.process_record(parent.pid)
+                with log.open('wb') as stream:
+                    helper = subprocess.Popen([powershell, '-NoProfile', '-NonInteractive',
+                        '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'artifacts/windows/uninstall.ps1'),
+                        '-Root', str(root), '-Nonce', 'parent-handle-test', '-ParentPid', str(parent.pid),
+                        '-ParentCreated', identity['created'] if matched else '0000000000000000',
+                        '-Result', str(result), '-Purge'], stdout=stream, stderr=subprocess.STDOUT)
+                if matched:
+                    deadline = time.monotonic()+20
+                    while 'Waiting for installer PID' not in log.read_text(errors='replace'):
+                        self.assertIsNone(helper.poll(), log.read_text(errors='replace'))
+                        self.assertLess(time.monotonic(), deadline, log.read_text(errors='replace'))
+                        time.sleep(0.05)
+                    self.assertTrue(root.exists())
+                    self.assertFalse(result.exists(), 'Cleanup ran before the owned parent exited')
+                    parent.terminate()  # This test owns the inert sleeper.
+                    parent.wait(timeout=10)
+                helper.wait(timeout=30)
+                self.assertEqual(helper.returncode, 0, log.read_text(errors='replace'))
+                self.assertTrue(json.loads(result.read_text(encoding='utf-8'))['success'])
+                self.assertFalse(root.exists())
+                if not matched:
+                    self.assertIsNone(parent.poll(), 'Cleanup touched a reused PID')
+            finally:
+                if parent.poll() is None:
+                    parent.terminate()
+                parent.wait(timeout=10)
+                if helper is not None and helper.poll() is None:
+                    helper.wait(timeout=30)
 
     def test_real_server_restarts_and_stops_from_python_manager(self):
         import yaml
@@ -163,6 +257,113 @@ class WindowsManagerContracts(unittest.TestCase):
                     child.terminate()
                     child.wait(timeout=10)
 
+    def test_manager_reconfigures_real_services_and_rolls_back_failed_restart(self):
+        import manager as managed
+        import yaml
+        from unittest.mock import patch
+        from install_support import component_values, export_components
+
+        def free_values():
+            listeners = [socket.socket() for _ in range(4)]
+            try:
+                for listener in listeners:
+                    listener.bind(('127.0.0.1', 0))
+                values = component_values()
+                values.update(zip(('http_port','ws_port','web_port','runtime_port'),
+                                  (listener.getsockname()[1] for listener in listeners)))
+                values['web_host'] = '127.0.0.1'
+                return values
+            finally:
+                for listener in listeners:
+                    listener.close()
+
+        values = free_values()
+        binaries = Path(os.environ['SEMANTIC_NATIVE_BIN'])
+        release = self.root/'releases/0.1.0-test.1'
+        for name in ('bin', 'web'):
+            (release/name).mkdir(parents=True)
+        for name in ('semantic-server.exe', 'semantic-web-gateway.exe'):
+            shutil.copyfile(binaries/name, release/'bin'/name)
+        (release/'web/index.html').write_text('Semantic manager test', encoding='utf-8')
+        for name in ('run', 'logs', 'tmp', 'runtimes.d', 'robots/test/robot'):
+            (self.root/name).mkdir(parents=True, exist_ok=True)
+        (self.root/'.semantic-install-root').touch()
+        config = self.root/'configs/semantic-server.yaml'
+        subprocess.run([binaries/'semantic.exe', 'init', '-c', config], check=True)
+        cfg = yaml.safe_load(config.read_text(encoding='utf-8'))
+        cfg['server'].update(http_addr=f"127.0.0.1:{values['http_port']}", ws_addr=f"127.0.0.1:{values['ws_port']}")
+        cfg['robot_runtime']['enabled'] = False  # No Robot/physical scene in this manager fixture.
+        config.write_text(json.dumps(cfg,ensure_ascii=False),encoding='utf-8')
+        runtime = self.root/'runtimes.d/local-native-mujoco.yaml'
+        template = binaries.parents[1]/'configs/runtimes.d/native-mujoco.yaml'
+        runtime_cfg = yaml.safe_load(template.read_text(encoding='utf-8'))
+        runtime_cfg.update(endpoint=f"http://127.0.0.1:{values['runtime_port']}", enabled=False)
+        runtime.write_text(yaml.safe_dump(runtime_cfg),encoding='utf-8')
+        instance = self.root/'robots/test/robot/instance.yaml'
+        instance.write_text(f"server: http://127.0.0.1:{values['http_port']}\nws: ws://127.0.0.1:{values['ws_port']}/ws/pilot\n",encoding='utf-8')
+        state = dict(values, version='0.1.0-test.1', ready=True, platform='windows-amd64')
+        (self.root/'install.json').write_text(json.dumps(state),encoding='utf-8')
+        export_components(self.root/'configs/components.yaml', values)
+        service = managed.Manager(self.root)
+        client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def healthy(expected):
+            self.assertEqual(service.status(), {'server':True,'web':True})
+            # This checks real gateway-to-Server discovery after the HTTP port moves.
+            with client.open(f"http://127.0.0.1:{expected['web_port']}/api/v1/system/healthz", timeout=3) as response:
+                self.assertEqual(response.status, 200)
+
+        try:
+            service.start()
+            healthy(values)
+            before = (self.root/'install.json').read_bytes()
+            records = service.records()
+            with socket.socket() as busy:
+                busy.bind(('127.0.0.1',0)); busy.listen(1)
+                blocked = self.root/'blocked.yaml'
+                export_components(blocked, dict(values,web_port=busy.getsockname()[1]))
+                with self.assertRaises(RuntimeError):
+                    service.configure(blocked)
+                self.assertEqual((self.root/'install.json').read_bytes(), before)
+                self.assertEqual(service.records(), records)
+                healthy(values)
+            changed = free_values()
+            new_config = self.root/'changed.yaml'
+            export_components(new_config, changed)
+            service.configure(new_config)
+            healthy(changed)
+            self.assertIn(f"http://127.0.0.1:{changed['runtime_port']}", runtime.read_text())
+            self.assertIn(f"http://127.0.0.1:{changed['http_port']}", instance.read_text())
+            self.assertIn(f"ws://127.0.0.1:{changed['ws_port']}/ws/pilot", instance.read_text())
+            cfg = json.loads(config.read_text(encoding='utf-8'))
+            self.assertEqual(cfg['robot_runtime']['server_http_url'], f"http://127.0.0.1:{changed['http_port']}")
+            attempts = 0
+            original_start = service.start
+
+            def fail_once(names=('server','web')):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    raise RuntimeError('injected restart failure')
+                return original_start(names)
+
+            previous = self.root/'previous.yaml'
+            export_components(previous, values)
+            with patch.object(service, 'start', side_effect=fail_once):
+                with self.assertRaisesRegex(RuntimeError, 'injected restart failure'):
+                    service.configure(previous)
+            self.assertEqual(service.values, changed)
+            healthy(changed)
+        except Exception:
+            for log in (self.root/'logs').glob('*.log'):
+                print(log.name+':\n'+log.read_text(encoding='utf-8', errors='replace')[-16000:])
+            raise
+        finally:
+            service.stop()
+            self.assertEqual(service.status(), {'server':False,'web':False})
+
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     unittest.main(verbosity=2)

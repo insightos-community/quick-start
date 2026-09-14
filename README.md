@@ -54,6 +54,22 @@ The Chinese `install.sh` also accepts `--musl`; this option defaults to GitHub R
 
 Use a separate `--dir` when trying another variant. `--musl --version musl-v0.1.0-2` selects the pinned optional Release; the normal `v0.1.0` installer and OSS stable channel are unchanged.
 
+### Native Windows x64 installer preview
+
+The native Windows offline ZIP has passed [complete installation and project CI](https://github.com/insightos-community/quick-start/actions/runs/34823853506) on Windows Server 2022 runners. Qualified previews use `windows-v*` tags in [GitHub Releases](https://github.com/insightos-community/quick-start/releases); the tag workflow repeats installation qualification before publishing.
+
+Extract the complete ZIP into a short path, then use **Command Prompt**:
+
+```bat
+install.cmd --export-config components.yaml
+install.cmd --yes --dir "%LOCALAPPDATA%\Semantic" -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" status
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" reconfigure -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" uninstall --yes
+```
+
+Edit the exported YAML to change Web 3000, API 8034, WebSocket 8035 or Runtime 8036. Reconfiguration updates service URLs together. Release active scenes in the Web UI before reconfiguration or uninstall. Uninstall uses local files and preserves configuration, data and logs. One bundled CPython 3.13.15 base serves Robot, Runtime and Skill environments; installation needs no WSL, system Python or compiler. First project startup can take several minutes. Physical Windows 11 GPU rendering remains unverified; see [build instructions and validation scope](artifacts/windows/README.md).
+
 ### Run from a checkout and manage an instance
 
 The scripts are also included at the repository root on current `main`. After cloning this repository, choose one:

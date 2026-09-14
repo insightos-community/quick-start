@@ -389,7 +389,7 @@ COMPONENT_DEFAULTS = dict(http_port=8034, ws_port=8035, web_port=3000,
 
 def component_values(state=None):
     values = dict(COMPONENT_DEFAULTS)
-    if sys.platform == 'darwin':
+    if sys.platform in ('darwin', 'win32'):
         values['web_host'] = '127.0.0.1'
     if state and 'web_host' not in state:
         values['web_host'] = '127.0.0.1'

@@ -1,0 +1,35 @@
+{
+  "Semantic-Framework": {
+    "repository": "insightos-community/Semantic-Framework",
+    "commit": "8a12584441a13410091a7091e0af811453792bbf"
+  },
+  "AbilityFramework": {
+    "repository": "insightos-community/AbilityFramework",
+    "commit": "e281a39d84097d78890041a7f679c37c12e7ce07"
+  },
+  "mujoco-runtime": {
+    "repository": "insightos-community/mujoco-runtime",
+    "commit": "bbb75005f84c329026d333ca428658f444e681d6"
+  },
+  "semantic-deployment": {
+    "repository": "insightos-community/semantic-deployment",
+    "commit": "23b36f16eeed4578634e9e988a7b08fc8593c670"
+  },
+  "ability-scaffold": {
+    "repository": "insightos-community/ability-scaffold",
+    "commit": "90917ecb0953605fa7bc47ea54e17a7e8273c1af"
+  },
+  "Ability-SDK-Python": {
+    "repository": "insightos-community/Ability-SDK-Python",
+    "commit": "064c36d0510b387318027213b39aaa2ffb7ea35e"
+  },
+  "r1pro-ability": {
+    "repository": "insightos-community/r1pro-ability",
+    "commit": "29d0540c8d516407b036a27082483fb83192dc33"
+  },
+  "pinocchio": {
+    "repository": "insightos-community/pinocchio",
+    "commit": "635953fa9fd83c289e1af984944cf55885b2b53c",
+    "build_commit": "5849355887d18ee67ee5b9831cb5dc9e850ec33c"
+  }
+}

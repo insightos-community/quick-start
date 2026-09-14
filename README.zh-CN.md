@@ -54,6 +54,22 @@ bash install.sh --musl --musl-runtime bundled --install-system-deps
 
 尝试不同变体请使用独立的 `--dir`。`--musl --version musl-v0.1.0-2` 指定可选版本；glibc 的 OSS stable 与 GitHub `v0.1.0` 现在使用相同原包。
 
+### Windows x64 原生安装包预览版
+
+原生离线 ZIP 已在 Windows Server 2022 runner 上通过[完整安装和项目验证](https://github.com/insightos-community/quick-start/actions/runs/34823853506)。预览包使用 [GitHub Releases](https://github.com/insightos-community/quick-start/releases) 中的 `windows-v*` 标签，标签工作流会重新验证后发布。
+
+将完整 ZIP 解压到较短的路径，在 **命令提示符（CMD）** 中执行：
+
+```bat
+install.cmd --export-config components.yaml
+install.cmd --yes --dir "%LOCALAPPDATA%\Semantic" -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" status
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" reconfigure -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" uninstall --yes
+```
+
+修改导出的 YAML 可调整 Web 3000、API 8034、WebSocket 8035、Runtime 8036 等端口；重新配置会同步更新组件地址。重新配置或卸载前，请先在 Web 中正常释放场景。卸载使用本地文件并保留配置、数据与日志。Robot、Runtime 与 Skill 环境共用随包 CPython 3.13.15，无需 WSL、预装 Python 或编译器，首次项目启动可能需要数分钟。Windows 11 实体桌面 GPU 渲染尚未验收，详见[构建指令与验证范围](artifacts/windows/README.md)。
+
 ### 从仓库运行与实例管理
 
 当前 `main` 的仓库根目录也包含这两个脚本。克隆仓库后，选择其中一个执行：

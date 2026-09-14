@@ -1,26 +1,99 @@
-# Windows native installer work
+# Native Windows installer preview
 
-This directory contains development inputs and manager primitives. It does not
-yet provide a Windows installer, an installation command, or a qualified GPU build.
+The Windows x64 offline installer passed [complete native CI](https://github.com/insightos-community/quick-start/actions/runs/34823853506).
+The `windows-v*` tag workflow publishes a preview only after repeating that qualification.
+Windows desktop GPU rendering remains unverified. The existing Linux/musl/macOS entry points continue to use their
+platform installers.
 
-`windows_ports.py` provides an exclusive installation-directory lock, conservative
-Windows TCP port checks, process creation/executable identity, and graceful stop
-through Framework's named event. A missing endpoint, stale identity, or stop
-timeout preserves the process. No administrator privileges or Unix tools are used.
-The existing Linux/macOS installer does not import this adapter yet.
+## Native installation and management
 
-The [native workflow](../../.github/workflows/windows-manager.yml) builds the
-pinned Framework source and tests the Python adapter against the real Server:
-initialization in a Chinese/space/apostrophe path, two start/stop cycles, stale
-identity rejection, and SQLite unlock. It also tests cross-process lock contention,
-crash recovery, occupied reusable TCP sockets, and preservation of an unrelated
-process without a stop endpoint. These tests contain no active Robot instance.
-The Windows Web gateway uses the same stop event; native tests cover static
-assets, SPA routes, Windows path syntax rejection, and two graceful restart cycles.
+`build.py` assembles an offline ZIP with CPython 3.13.15, NumPy 2.3.5, native
+Framework/supervisor/AbilityFramework executables, application-local CRT DLLs,
+seven native Ability archives, three Skills and a MuJoCo Runtime pack. The public
+Windows wheels and custom Pinocchio/EigenPy/Coal wheels share the bundled base
+Python. Robot and Runtime use separate virtual environments for lifecycle isolation.
 
-To reproduce on Windows, build `semantic.exe` and `semantic-server.exe` from
-Framework commit `c966d90b859644c0da1880c1c05fbbdcc1e557bc` using its
-`docs/platforms/windows.md`, then run from this checkout with Go 1.25.8 and uv 0.12.12:
+From a successfully verified, extracted ZIP, use Command Prompt:
+
+```bat
+install.cmd --export-config components.yaml
+install.cmd --yes --dir "%LOCALAPPDATA%\Semantic" -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" status
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" reconfigure -f components.yaml
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" stop
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" start
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" uninstall --yes
+```
+
+Defaults are Web 3000, API 8034, WebSocket 8035, Runtime 8036 and Ability
+18100–18199. Reconfiguration updates the corresponding service URLs and rendered
+Robot configurations. A failed restart restores the prior configuration. Release
+active scenes normally in the Web UI before stopping, reconfiguring or uninstalling.
+An existing Robot installation keeps its allocated Ability port range.
+
+Installation checks ports before writing the payload and can resume copying from
+the extracted local ZIP. The installed management commands do not download an
+archive. Uninstall waits for the installed Python to exit, then removes program
+files and writes its result to the printed temporary path. It preserves configuration,
+data and logs; add `--purge` only to delete the entire instance permanently.
+No administrator privileges or Unix tools are required by the installer. Windows Skill
+activation uses persistent version references without requiring symlink privileges or
+Developer Mode. The first project start can take several minutes while seven Abilities
+start and three offline Skill environments are prepared.
+
+## Reproduce the assembly
+
+Use native Windows 10 1903+ x64, Git, Go 1.25.8, uv 0.12.12, Visual Studio 2022
+with its Windows SDK (`mt.exe`), and the compiler recipes in the
+pinned component repositories. [sources.json](sources.json) records exact source
+commits. The [preview workflow](../../.github/workflows/windows-installer.yml)
+builds the Framework, Pilot, Gateway and supervisor, then consumes successful
+[AbilityFramework](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.2)
+and [R1 Pro Ability](https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1)
+component releases. `native-releases.json` pins each checksum manifest; source
+identities and asset hashes are checked on download.
+[Pinocchio](https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1)
+is also a fixed component release. Its original `build_commit` is recorded
+separately from the verification/recipe `commit`; CI rejected changes to compiled
+inputs before revalidating the original wheels. Both revisions and verification
+evidence are included in the installer.
+
+The assembler removes pip's unused ARM/32-bit launcher templates and records their
+hashes. It preserves the x64 launchers. Regenerable Python bytecode caches are
+removed before payload checksums are generated, so normal first-run compilation
+does not make an unchanged installation fail retry verification. The bundled Python executable manifests
+enable the [UTF-8 process code page](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page)
+so native libraries can open UTF-8 filenames in Chinese installation directories.
+Original and modified executable hashes and manifests are included in the payload.
+A native test checks the relocated interpreter and an actual CRT `fopen` call.
+
+With those sources checked out under `sources/` and the native outputs available:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+uv python install 3.13.15
+uv run --no-project --python 3.13.15 python artifacts/windows/fetch_native.py native
+# Put semantic.exe, semantic-server.exe, semantic-pilot.exe,
+# semantic-robot-instance.exe and semantic-web-gateway.exe in native/bin.
+uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/build.py --version 0.1.0-rc.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin --abilities native/abilities/windows --pin-wheels native/pin
+uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:LOCALAPPDATA/Semantic Windows verification" --report .output/windows/windows-installation.json
+```
+
+The integration workflow checks offline installation/retry, a real project with
+seven healthy Abilities, installed Skills and an online Pilot, port reconfiguration,
+normal scene release, service restart and local uninstall. An uploaded package is
+still a preview until desktop rendering has been checked on a physical Windows host.
+
+## Focused manager verification
+
+[windows-manager.yml](../../.github/workflows/windows-manager.yml) exercises real
+Server and Gateway processes in Chinese/space/apostrophe paths, configuration
+rollback, SQLite unlock, exclusive directory locks, reusable TCP listeners,
+process identity, graceful stop and offline cleanup. Its Runtime metadata fixture
+does not launch a Robot; the complete project check belongs to the preview workflow.
+A stale PID, missing stop endpoint or stop timeout preserves the process.
+
+Build Framework from its pinned checkout using `docs/platforms/windows.md`, then:
 
 ```powershell
 $env:SEMANTIC_NATIVE_BIN = 'C:\path\to\framework\.output\bin'
@@ -29,17 +102,11 @@ go build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-web-gateway.exe" artifa
 uv run --python 3.13.15 --with PyYAML==6.0.2 --no-project python tests/test_windows_manager_ports.py
 ```
 
-`public-requirements.lock` pins the public CPython 3.13 Windows wheel set with
-hashes. It excludes the custom Pinocchio/EigenPy/Coal/private-DLL wheels and local
-project wheels; it must not be presented as the complete offline installer lock.
-Regenerate and download the public set with:
+`public-requirements.lock` contains only public CPython 3.13 Windows wheels;
+assembly adds the custom native math and local project wheels to a complete lock.
+To reproduce the public input set:
 
 ```powershell
 uv pip compile artifacts/windows/public-requirements.in --python-version 3.13 --python-platform x86_64-pc-windows-msvc --only-binary :all: --generate-hashes -o artifacts/windows/public-requirements.lock
 uv run --no-project --isolated --python 3.13.15 --with pip==25.2 python -m pip download --platform win_amd64 --python-version 313 --implementation cp --abi cp313 --only-binary=:all: --require-hashes -r artifacts/windows/public-requirements.lock -d public-wheelhouse
 ```
-
-Remaining integration includes payload assembly, configuration/reconfiguration,
-offline installation and uninstall, Robot/Ability/Skill lifecycle, and Windows 11
-desktop rendering. The normal `install.sh` and `install-en.sh` remain Linux/macOS
-entry points until the Windows package is verified and published.

@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 
 
-def check_project(root, base, token, report):
+def check_project(root, base, token, report, release_dir=None, readiness_timeout=180):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def request(path, data=None):
@@ -22,11 +22,11 @@ def check_project(root, base, token, report):
         except urllib.error.HTTPError as error:
             raise RuntimeError(f'{path}: HTTP {error.code}: {error.read().decode()}') from error
 
-    project = request('/projects', {'name':'Native macOS device startup regression'})['project']
+    project = request('/projects', {'name':'Native device startup regression'})['project']
     request('/projects/'+project['id']+'/activate', {})
     project_path = '/projects/'+project['id']+'/simulation'
     diagnostics = {}
-    release = json.loads((root/'current/release.json').read_text())
+    release = json.loads(((release_dir or root/'current')/'release.json').read_text(encoding='utf-8'))
     expected_skills = {(skill['name'], skill['version']) for skill in release['robot_skills']}
     try:
         catalog = request('/simulation/scene-catalog?project_id='+project['id'])['scenes']
@@ -39,7 +39,7 @@ def check_project(root, base, token, report):
         instance = request(project_path+'/project-scenes/'+reference['project_scene_id']+'/instances', {
             'request_id':'macos-ability-startup', 'variant_id':'layout001',
             'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
-        deadline = time.monotonic()+180
+        deadline = time.monotonic()+readiness_timeout
         while instance['state'] == 'starting':
             if time.monotonic() >= deadline:
                 raise AssertionError('Scene stayed in starting: '+json.dumps(instance))
@@ -50,7 +50,7 @@ def check_project(root, base, token, report):
         scene_robots = request(project_path+'/instances/'+instance['instance_id']+'/robots')['robots']
         expected_ids = {robot['robot_id'] for robot in scene_robots}
         assert expected_ids, 'Scene has no robots'
-        deadline = time.monotonic()+180
+        deadline = time.monotonic()+readiness_timeout
         while True:
             devices = [device for device in request('/devices')['devices']
                        if (device.get('runtime_instance') or {}).get('scene_instance_id') == instance['instance_id']]
@@ -59,7 +59,7 @@ def check_project(root, base, token, report):
             # Released scenes retain their shutdown evidence. Only this scene's
             # supervisors must be running, including on the second smoke pass.
             states = [state for path in (root/'robots').glob('*/*/run/state.json')
-                      if (state := json.loads(path.read_text())).get('instance_name') in current_ids]
+                      if (state := json.loads(path.read_text(encoding='utf-8'))).get('instance_name') in current_ids]
             diagnostics['supervisors'] = states
             failed = [state for state in states if state.get('status') == 'failed']
             failed += [device.get('runtime_instance') for device in devices
@@ -81,7 +81,7 @@ def check_project(root, base, token, report):
         assert len(states) == len(expected_ids)
         diagnostics['success'] = True
     finally:
-        diagnostics['supervisors'] = [json.loads(path.read_text())
+        diagnostics['supervisors'] = [json.loads(path.read_text(encoding='utf-8'))
             for path in (root/'robots').glob('*/*/run/state.json')]
         try:
             # The server performs the normal safe shutdown, including Pilot hold.

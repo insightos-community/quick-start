@@ -17,7 +17,6 @@
 """Install verified prebuilt Semantic artifacts; no source checkout or target builds."""
 import argparse
 import ctypes
-import fcntl
 import hashlib
 import json
 import os
@@ -31,6 +30,8 @@ import signal
 import socket
 import subprocess
 import sys
+if sys.platform != 'win32':
+    import fcntl
 import time
 import tempfile
 import traceback
@@ -66,7 +67,7 @@ def write_json(path, value):
 
 
 def load(path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
 def verify_payload(payload):
@@ -796,7 +797,7 @@ def component_updates(root, old, values):
     updates = {config: (json.dumps(cfg, ensure_ascii=False, indent=2)+'\n').encode()}
     runtime = root/'runtimes.d/local-native-mujoco.yaml'
     if old['runtime_port'] != values['runtime_port']:
-        text = runtime.read_text()
+        text = runtime.read_text(encoding='utf-8')
         pattern = r'(?m)^endpoint:\s*[\'\"]?http://127\.0\.0\.1:'+str(old['runtime_port'])+r'[\'\"]?\s*$'
         text, count = re.subn(pattern, 'endpoint: http://127.0.0.1:'+str(values['runtime_port']), text)
         if count != 1:
@@ -810,7 +811,7 @@ def component_updates(root, old, values):
     if paths and any(old[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
         raise ValueError('Existing Robot configurations have allocated Ability ports; use a new installation directory to change the Ability range')
     for path in paths:
-        text = original = path.read_text()
+        text = original = path.read_text(encoding='utf-8')
         for key, protocols in (('http_port', ('http',)), ('ws_port', ('http', 'ws')), ('runtime_port', ('http', 'ws'))):
             if old[key] == values[key]:
                 continue
