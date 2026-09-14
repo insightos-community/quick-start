@@ -309,7 +309,8 @@ def build(a):
             dest = stage/'wheelhouse'/wheel.name; deps.append(dest)
         copy(wheel, dest)
     lock = stage/'locks/requirements.lock'
-    copy(installed_lock, lock)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(wheel_lock(stage/'wheelhouse'), encoding='utf-8')
     record = lambda p: builder.file_record(stage, p)
     pack_meta = dict(schema_version=1, pack_id='native-mujoco', pack_version='0.4.0-dev.0',
         profile=profile.profile, runner=profile.runner, python_version='3.13.15', endpoint=profile.endpoint,
