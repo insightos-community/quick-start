@@ -24,7 +24,7 @@ semantic_config_entry() (
     # Emit separate argv tokens, never source/eval user-provided YAML.
     parsed=$(awk '
       BEGIN { count=0 }
-      { count+=length($0)+1; if(count>16384) {print "Component YAML exceeds 16 KiB" > "/dev/stderr"; exit 2}
+      { sub(/\r$/, ""); count+=length($0)+1; if(count>16384) {print "Component YAML exceeds 16 KiB" > "/dev/stderr"; exit 2}
         sub(/#.*/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); if($0=="" || $0=="---" || $0=="...") next
         if($0 !~ /^[a-z_]+:[ \t]*[0-9.]+$/ && $0 !~ /^[a-z_]+:[ \t]*"[0-9.]+"$/ && $0 !~ /^[a-z_]+:[ \t]*\047[0-9.]+\047$/) { print "Invalid flat component YAML at line " NR > "/dev/stderr"; exit 2 }
         key=$0; sub(/:.*/, "", key); value=$0; sub(/^[^:]+:[ \t]*/, "", value); gsub(/["\047]/, "", value)

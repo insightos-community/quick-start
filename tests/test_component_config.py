@@ -70,6 +70,26 @@ class ComponentConfigTests(unittest.TestCase):
             self.assertIn('Invalid flat component YAML', result.stderr)
             self.assertNotIn('Downloading', result.stderr)
 
+    def test_new_mac_exports_yaml_without_python_and_rejects_ability_overlap_before_download(self):
+        tools = self.root/'tools'; tools.mkdir()
+        for name, body in [('uname', 'if [ "$1" = -s ]; then echo Darwin; else echo arm64; fi'),
+                           ('python3', 'echo UNEXPECTED_PYTHON >&2; exit 98'),
+                           ('curl', 'echo UNEXPECTED_DOWNLOAD >&2; exit 99')]:
+            path = tools/name; path.write_text('#!/bin/sh\n'+body+'\n'); path.chmod(0o755)
+        env = dict(os.environ, PATH=str(tools)+os.pathsep+os.environ['PATH'])
+        for script in ('install.sh', 'install-en.sh'):
+            result = subprocess.run(['bash', str(ROOT/script), '--dir', str(self.root/'new'),
+                                     '--export-config', '-'], capture_output=True, text=True, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('http_port: 8034', result.stdout)
+            self.assertIn('web_host: 127.0.0.1', result.stdout)
+            path = self.root/'overlap.yaml'; path.write_text('schema_version: 1\nhttp_port: 18101\n')
+            result = subprocess.run(['bash', str(ROOT/script), '--dir', str(self.root/'new'), '-f', str(path)],
+                                    capture_output=True, text=True, env=env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('overlaps the Ability range', result.stderr)
+            self.assertNotIn('UNEXPECTED_', result.stderr)
+
     def test_reconfigure_updates_all_connections_and_retains_credentials(self):
         self.fixture()
         robot = self.root/'robots/r1/instance/robot-deployment.yaml'

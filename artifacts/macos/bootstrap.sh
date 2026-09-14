@@ -25,6 +25,8 @@ web_port=3000
 web_port_explicit=0
 runtime_port=8036
 runtime_port_explicit=0
+ability_port_first=18100
+ability_port_last=18199
 options=()
 while (($#)); do
   case "$1" in
@@ -45,20 +47,22 @@ while (($#)); do
     --uninstall|uninstall) action=uninstall; shift ;;
     --no-start) no_start=1; options+=("$1"); shift ;;
     --lan) web_host=0.0.0.0; options+=("$1"); shift ;;
-    --http-port|--ws-port|--web-port|--runtime-port|--web-host)
+    --http-port|--ws-port|--web-port|--runtime-port|--web-host|--ability-port-first|--ability-port-last)
       flag="$1"; value="${2:?Missing option value}"
       case "$flag" in
         --http-port) http_port="$value"; http_port_explicit=1 ;; --ws-port) ws_port="$value"; ws_port_explicit=1 ;;
         --web-port) web_port="$value"; web_port_explicit=1 ;; --runtime-port) runtime_port="$value"; runtime_port_explicit=1 ;;
         --web-host) web_host="$value" ;;
+        --ability-port-first) ability_port_first="$value" ;; --ability-port-last) ability_port_last="$value" ;;
       esac
       options+=("$flag" "$value"); shift 2 ;;
-    --http-port=*|--ws-port=*|--web-port=*|--runtime-port=*|--web-host=*)
+    --http-port=*|--ws-port=*|--web-port=*|--runtime-port=*|--web-host=*|--ability-port-first=*|--ability-port-last=*)
       flag="${1%%=*}"; value="${1#*=}"
       case "$flag" in
         --http-port) http_port="$value"; http_port_explicit=1 ;; --ws-port) ws_port="$value"; ws_port_explicit=1 ;;
         --web-port) web_port="$value"; web_port_explicit=1 ;; --runtime-port) runtime_port="$value"; runtime_port_explicit=1 ;;
         --web-host) web_host="$value" ;;
+        --ability-port-first) ability_port_first="$value" ;; --ability-port-last) ability_port_last="$value" ;;
       esac
       options+=("$flag" "$value"); shift ;;
     --help|-h)
@@ -117,6 +121,14 @@ fi
 options+=(--http-port "$http_port" --ws-port "$ws_port" --web-port "$web_port" --runtime-port "$runtime_port")
 for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
   [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Ports must be numbers between 1024 and 65535' >&2; exit 2; }
+done
+for port in "$ability_port_first" "$ability_port_last"; do
+  [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Invalid Ability port range' >&2; exit 2; }
+done
+ability_port_first=$((10#$ability_port_first)); ability_port_last=$((10#$ability_port_last))
+((ability_port_first <= ability_port_last)) || { echo 'Invalid Ability port range' >&2; exit 2; }
+for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
+  ((10#$port < ability_port_first || 10#$port > ability_port_last)) || { echo 'Component port overlaps the Ability range' >&2; exit 2; }
 done
 http_port=$((10#$http_port)); ws_port=$((10#$ws_port)); web_port=$((10#$web_port)); runtime_port=$((10#$runtime_port))
 [[ "$http_port" != "$ws_port" && "$http_port" != "$web_port" && "$http_port" != "$runtime_port" && "$ws_port" != "$web_port" && "$ws_port" != "$runtime_port" && "$web_port" != "$runtime_port" ]] || { echo 'Ports must be distinct' >&2; exit 2; }
