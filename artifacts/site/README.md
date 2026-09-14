@@ -12,7 +12,7 @@ The language selector supports `?lang=zh|en`, a saved preference, and browser la
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --install-system-deps
 ```
 
-On Linux, the English script defaults to the verified GitHub `v0.1.0` installer Release; on macOS it selects the native preview. `--version 0.1.0` (or `v0.1.0`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
+On Linux, the English script defaults to the verified GitHub `v0.1.1` installer Release; on macOS it selects the native preview. `--version 0.1.0` (or `v0.1.1`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
 
 Complete Releases already contain the Git LFS model objects. If an asset is missing or is a pointer, the English bootstrap uses the asset repository commit in `release-lock.json`, reads its GitHub pointer and downloads the object through the [Git LFS Batch API](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md). Both object size and SHA-256 must match the original `files.json`; the archive and integrity inventory are never rewritten. No Git or Git LFS executable is needed on the installation target.
 
@@ -22,7 +22,9 @@ The corresponding Chinese entry is `/install.sh`. Both pages describe Linux x86_
 
 The bilingual FAQ links the separate Windows x64 ZIP preview and describes native
 application/uninstall entries for all platforms. The shell platform selector still
-selects Linux glibc/musl or macOS; Windows users extract the ZIP and run `install.cmd`.
+selects Linux glibc/musl or macOS; Windows users follow the visible Windows download
+link, verify SHA256SUMS, extract the ZIP and run `install.cmd`. Chinese Windows
+links use OSS; English links use GitHub. Both serve the same release bytes.
 Existing Linux/macOS instances can refresh their management tools and entries with
 `--configure-existing --dir "<actual-install-directory>" --desktop-shortcut`, without
 downloading the full archive. The example follows the selected platform and language.
@@ -42,24 +44,25 @@ remain available without JavaScript.
 
 | Platform | Verified tag | Source | Target requirements |
 |---|---|---|---|
-| Linux glibc x86_64 | `v0.1.0` | Identical GitHub/OSS archive; OSS stable selects v0.1.0 | Python 3.10+, glibc >=2.28 |
-| Linux musl x86_64 | `musl-v0.1.0-2` | Identical GitHub/OSS mirror | Bundled musl by default; host mode requires a musl loader |
-| macOS arm64 | `macos-v0.1.0-rc.4` | Identical GitHub/OSS mirror | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
+| Linux glibc x86_64 | `v0.1.1` | Identical GitHub/OSS archive; OSS stable selects v0.1.1 | Python 3.10+, glibc >=2.28 |
+| Linux musl x86_64 | `musl-v0.1.0-3` | Identical GitHub/OSS mirror | Bundled musl by default; host mode requires a musl loader |
+| macOS arm64 | `macos-v0.1.0-rc.5` | Identical GitHub/OSS mirror | Apple Silicon, macOS 15.5+; bundled Python, no Homebrew |
+| Windows x64 | `windows-v0.1.0-rc.2` | Identical GitHub/OSS ZIP | Extract the full ZIP and run `install.cmd`; no Bash or host Python |
 
 ```bash
 # English; replace install-en.sh with install.sh for the Chinese entry.
-curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag v0.1.0 --install-system-deps
-curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
-curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag v0.1.1 --install-system-deps
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag musl-v0.1.0-3 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source github --tag macos-v0.1.0-rc.5 --dir "$HOME/semantic-macos"
 # The existing Linux OSS channel is available from either language entry.
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --source oss --version stable --install-system-deps
 ```
 
 `--tag` infers the target platform and cannot be combined with `--version`.
 `--source auto|github|oss` selects the download route. Chinese defaults to OSS;
-English defaults to GitHub for all platforms. Mirrored tags are `v0.1.0`,
-`musl-v0.1.0-2` and `macos-v0.1.0-rc.4`; use GitHub for older unmirrored tags.
-OSS glibc stable now selects the original GitHub v0.1.0 archive. Release assets
+English defaults to GitHub for all platforms. Mirrored tags are `v0.1.1`,
+`musl-v0.1.0-3` and `macos-v0.1.0-rc.5`; use GitHub for older unmirrored tags.
+OSS glibc stable now selects the original GitHub v0.1.1 archive. Release assets
 and SHA256SUMS are copied byte-for-byte; only mutable channel manifests use a
 base-relative archive path. Linux private tickets remain supported. macOS accepts
 public HTTPS `--base-url` mirrors and routes before host Python detection.
@@ -136,10 +139,11 @@ musl channel is promoted only after every object verifies. Existing objects with
 different content are refused; replacing a managed channel preserves a backup.
 
 ```bash
-python artifacts/mirror_release_to_oss.py stage --tag v0.1.0 --output /absolute/release-cache
-python artifacts/mirror_release_to_oss.py publish --tag v0.1.0 --output /absolute/release-cache
-python artifacts/mirror_release_to_oss.py publish --tag musl-v0.1.0-2 --output /absolute/release-cache
-python artifacts/mirror_release_to_oss.py publish --tag macos-v0.1.0-rc.4 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py stage --tag v0.1.1 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag v0.1.1 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag musl-v0.1.0-3 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag macos-v0.1.0-rc.5 --output /absolute/release-cache
+python artifacts/mirror_release_to_oss.py publish --tag windows-v0.1.0-rc.2 --output /absolute/release-cache
 ```
 
 `stage` only downloads and verifies; `publish` also writes the configured OSS

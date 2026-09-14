@@ -35,10 +35,10 @@ semantic_macos_dispatch() (
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github|oss] [--base-url HTTPS_URL] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.5] [--source auto|github|oss] [--base-url HTTPS_URL] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
-    echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
+    echo 'Linux tags: v0.1.1 (glibc), musl-v0.1.0-3 (musl); run those on Linux x86_64.'
     exit 0
   fi
   if [[ -n "$selected_tag" && "$selected_tag" != stable && ! "$selected_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then

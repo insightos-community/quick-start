@@ -21,11 +21,12 @@ class MirrorTests(unittest.TestCase):
     def test_verified_original_assets_and_separate_channels(self):
         with tempfile.TemporaryDirectory() as temporary:
             output=Path(temporary)
-            for tag in ('v0.1.0','musl-v0.1.0-2','macos-v0.1.0-rc.4'):
+            for tag in ('v0.1.0','musl-v0.1.0-2','macos-v0.1.0-rc.4','windows-v0.1.0-rc.2'):
                 version,platform=mirror.identity(tag)
                 folder=output/tag;folder.mkdir()
                 prefix=f'releases/{version}/{platform}'
-                archive=f'semantic-{version}-{platform}.tar.gz'; content=b'verified fixture'
+                extension='zip' if platform=='windows-amd64' else 'tar.gz'
+                archive=f'semantic-{version}-{platform}.{extension}'; content=b'verified fixture'
                 manifest=dict(version=version,platform=platform,
                     archive=archive if platform=='macos-arm64' else prefix+'/'+archive,
                     sha256=hashlib.sha256(content).hexdigest(),size=len(content))
@@ -47,7 +48,7 @@ class MirrorTests(unittest.TestCase):
                 self.assertEqual(immutable[-1][0],prefix+'/manifest.json')
                 for key,body,_ in immutable:self.assertEqual(body,data[key.rsplit('/',1)[1]])
                 channel=[w for w in writes if w[2].get('mutable')]
-                if platform=='macos-arm64':self.assertFalse(channel)
+                if platform in ('macos-arm64','windows-amd64'):self.assertFalse(channel)
                 else:
                     expected='musl-stable.json' if platform=='linux-musl-x86_64' else 'stable.json'
                     self.assertEqual(channel[0][0],'channels/'+expected)

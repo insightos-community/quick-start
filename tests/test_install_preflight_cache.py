@@ -116,7 +116,7 @@ class RetryTests(unittest.TestCase):
 import pathlib,sys
 args=sys.argv[1:]; url=next(a for a in args if a.startswith('https://')); out=pathlib.Path(args[args.index('-o')+1])
 if url.endswith('SHA256SUMS'):
- out.write_text({(digest+'  semantic-0.1.0-rc.4-macos-arm64.tar.gz'+chr(10))!r})
+ out.write_text({(digest+'  semantic-0.1.0-rc.5-macos-arm64.tar.gz'+chr(10))!r})
 else:
  out.write_bytes(pathlib.Path({str(archive)!r}).read_bytes())
  with pathlib.Path({str(count)!r}).open('a') as log:log.write('download\\n')

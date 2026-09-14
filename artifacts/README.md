@@ -7,7 +7,7 @@ Go/xmake/npm 构建；从构建机提取产物，在目标机初始化独立实�
 
 ```bash
 bash ./install.sh --install-system-deps     # 阿里云 OSS stable，中文提示
-bash ./install-en.sh --install-system-deps  # GitHub Releases v0.1.0，英文提示
+bash ./install-en.sh --install-system-deps  # GitHub Releases v0.1.1，英文提示
 ```
 
 两者均校验下载文件，默认 glibc 安装需要下载独立 Python 环境。OSS 与 GitHub 的版本号各自独立；
@@ -19,7 +19,7 @@ bash ./install-en.sh --install-system-deps  # GitHub Releases v0.1.0，英文提
 python3 semantic_installer.py --release --install-system-deps
 ```
 
-默认 `v0.1.0`，支持 `--tag`、`--dir`、`--yes` 等参数。下载组件用于组装时使用 `fetch_releases.py`；CI 使用 `build_from_releases.py`，无需重新编译子仓库。版本、校验与组装说明见 [Release CI](../docs/release-ci.md)。
+默认 `v0.1.1`，支持 `--tag`、`--dir`、`--yes` 等参数。下载组件用于组装时使用 `fetch_releases.py`；CI 使用 `build_from_releases.py`，无需重新编译子仓库。版本、校验与组装说明见 [Release CI](../docs/release-ci.md)。
 
 公开 OSS 与 GitHub Release 安装均无需 OSS 凭据；私有 OSS 对象可使用限时票据。
 向 OSS 发布制品的维护操作见 [OSS.md](OSS.md)。

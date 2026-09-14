@@ -69,7 +69,7 @@ const englishCopy = {
   macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. English downloads use GitHub Releases; Chinese commands use the identical OSS mirror. Both verify SHA-256.",
   macosRuntime: "Bundles Python 3.13.15, NumPy 2.3.5, MuJoCo and robot dependencies. No Homebrew or host Python is required. Web requests auto and the Runtime uses configured CGL. This preview is not notarized; physical GPU rendering still needs testing.",
   macosUpgrade: "Stop the old instance before installing another tag into a new <code>--dir</code>, then reload the browser. The installer neither overwrites other versions nor migrates databases automatically; old configuration and data remain in the original directory.",
-  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4\">macos-v0.1.0-rc.4 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
+  macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.5\">macos-v0.1.0-rc.5 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
   terminal: "<span class=\"terminal-dot\"></span> Run on the target machine",
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
@@ -81,10 +81,10 @@ const englishCopy = {
   preview: "Developer preview",
   downloadSize: "Download size varies by platform and version",
   muslTitle: "musl runtime: bundled or system (optional)",
-  muslIntro: "On Linux x86_64, <code>--tag musl-v0.1.0-2</code> selects the musl package automatically; the existing <code>--musl</code> option remains available. Bundled musl works on glibc hosts too; use a separate directory.",
+  muslIntro: "On Linux x86_64, <code>--tag musl-v0.1.0-3</code> selects the musl package automatically; the existing <code>--musl</code> option remains available. Bundled musl works on glibc hosts too; use a separate directory.",
   muslRuntime: "<code>--musl-runtime bundled</code> uses the included musl 1.2.5; <code>--musl-runtime system</code> uses the host musl 1.2+ loader. Includes CPython 3.13.15, NumPy 2.3.5, robot libraries and Mesa, without source compilation. System /lib and package repositories are unchanged; use a new directory to switch runtimes.",
   muslRender: "By default, a working Mesa GPU is selected, with software rendering as a fallback. Add <code>--render-backend software</code> to force software rendering, or <code>--render-backend mesa-gpu</code> to require hardware rendering. AMD has been tested; Intel / Nouveau still need hardware validation. Use the default glibc installer for proprietary NVIDIA drivers.",
-  muslRelease: 'Optional prerelease <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-2">musl-v0.1.0-2 ↗</a> · Approx. 626 MiB · Offline installation and software rendering verified on Ubuntu 22.04 / Alpine 3.23.',
+  muslRelease: 'Optional prerelease <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-3">musl-v0.1.0-3 ↗</a> · Approx. 626 MiB · Offline installation and software rendering verified on Ubuntu 22.04 / Alpine 3.23.',
   demoTitle: "See the installation in action",
   demoLength: "35 seconds · 1080p · Silent",
   videoLabel: "Semantic installation demonstration",
@@ -135,14 +135,16 @@ const englishCopy = {
     "glibc baseline ≥ 2.28; musl is bundled by default, while system mode needs host musl 1.2+. macOS uses system CGL; physical GPU rendering still needs validation. Intel Mac and Linux ARM64 are not supported. Windows x64 has a separate ZIP preview; see below.",
   updatesTitle: "Downloads and updates",
   updates:
-    "Chinese installation uses Aliyun OSS mirrors; English uses GitHub Releases. All three platforms use identical release archives and checksums. The OSS glibc stable channel now selects GitHub v0.1.0. Install other versions/platforms into a new directory and migrate data explicitly.",
+    "Chinese installation uses Aliyun OSS mirrors; English uses GitHub Releases. All four platforms have identical GitHub/OSS archives and checksums; Windows uses a separate ZIP installer. The OSS glibc stable channel now selects GitHub v0.1.0. Install other versions/platforms into a new directory and migrate data explicitly.",
   faqTitle: "Frequently asked questions",
   faqAppsTitle: "Where are the app icons and system uninstall entries?",
   faqApps: "New installers include the InsightOS icon and app entries. Linux adds application-menu entries and desktop shortcuts on graphical desktops. macOS creates Semantic and Uninstall Semantic apps in your user <code>~/Applications</code> folder and registers them with the system app launcher. Windows adds Start menu and desktop shortcuts, plus an entry in Settings → Apps → Installed apps. Opening Semantic starts services and opens the Web console using its current configuration.",
   faqAppsUninstall: "Stop scenes and Robot Runtime before opening Uninstall Semantic. Windows also supports removal from Installed apps. Configuration, data and logs are kept by default; no installer archive download is needed. On macOS, moving only the Semantic launcher to Trash does not remove the runtime; use the uninstall app.",
   faqAppsRefresh: "Existing Linux / macOS installations can refresh management tools and create app entries with the command below, without upgrading application components or downloading the full archive. Stop scenes first and replace the directory with your actual installation path; the example follows the platform selected above. Use <code>--no-desktop-shortcut</code> during installation to skip app entries.",
+  windowsDownload: 'Windows x64: <a href="#windows-install">ZIP download and installation guide ↓</a> (separate native installer)',
+  faqWindowsChecksum: 'In PowerShell, run <code>Get-FileHash .\\semantic-0.1.0-rc.2-windows-amd64.zip -Algorithm SHA256</code> and compare the ZIP entry in SHA256SUMS above. The <a href="https://github.com/insightos-community/quick-start/releases/tag/windows-v0.1.0-rc.2">GitHub Release</a> includes all validation reports.',
   faqWindowsTitle: "How do I install on Windows?",
-  faqWindows: 'Download the <a href="https://github.com/insightos-community/quick-start/releases/tag/windows-v0.1.0-rc.2">native Windows x64 preview</a>, verify the release SHA-256, extract the complete ZIP and run <code>install.cmd</code>. Windows has its own installer entry point; the Bash commands above do not apply. This version includes the Skill environment fix, app icons and uninstall entries.',
+  faqWindows: 'Download the <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/semantic-0.1.0-rc.2-windows-amd64.zip">Windows x64 ZIP (v0.1.0-rc.2 · GitHub)</a>, verify it against <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/SHA256SUMS">SHA256SUMS</a>, extract the complete ZIP and run <code>install.cmd</code>. Windows has its own installer entry point; the Bash commands above do not apply. This version includes the Skill environment fix, app icons and uninstall entries.',
   faqWindowsUpgrade: "To switch from an older version, stop scenes and old services, install into a new dedicated directory, retain old data and migrate it explicitly. Native Windows CI verifies installation, Abilities / Skills, physics simulation and uninstall. Physical GPU rendering still needs validation.",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",
@@ -193,7 +195,7 @@ const videoError = document.getElementById("video-error");
 let toastTimer;
 const installPlatform = document.getElementById("install-platform");
 const installTag = document.getElementById("install-tag");
-const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-2", macos: "macos-v0.1.0-rc.4" };
+const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-3", macos: "macos-v0.1.0-rc.5" };
 function updateInstallCommand() {
   const target = installPlatform.value;
   for (const button of document.querySelectorAll('[data-platform]')) {
@@ -204,6 +206,7 @@ function updateInstallCommand() {
   document.getElementById('uninstall-bootstrap-command').textContent = `curl -fsSL https://semantic.insightos.cn/install${currentLanguage === 'en' ? '-en' : ''}.sh | bash -s -- --uninstall --dir "${directory}"`;
 
   const tag = installTag.value.trim();
+  document.getElementById("release-version").textContent = tag === "stable" ? "v0.1.1" : tag;
   const en = currentLanguage === "en";
   const patterns = {
     glibc: /^(stable|v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._+-]*)$/,
@@ -221,7 +224,7 @@ function updateInstallCommand() {
     const command = document.getElementById(lang === "en" ? "install-command-en" : "install-command");
     if (!valid) { command.textContent = ""; continue; }
     const oss = lang === "zh";
-    const release = tag === "stable" ? "v0.1.0" : tag;
+    const release = tag === "stable" ? "v0.1.1" : tag;
     const source = oss ? (tag === "stable" ? "--source oss --version stable" : `--source oss --tag ${release}`) : `--source github --tag ${release}`;
     const options = target === "macos" ? ' --dir "$HOME/semantic-macos"'
       : target === "musl" ? ' --install-system-deps --dir "$HOME/semantic-musl"'

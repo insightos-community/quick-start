@@ -163,7 +163,7 @@ class Store:
             if not mutable or meta.get('semantic-managed') != '1':
                 raise RuntimeError('拒绝覆盖已有不同内容/非本客户端管理的对象: '+key)
         kind = ('application/gzip' if path.name.endswith('.tar.gz') else
-                {'.json': 'application/json', '.mp4': 'video/mp4'}.get(path.suffix, 'text/plain; charset=utf-8'))
+                {'.json': 'application/json', '.mp4': 'video/mp4', '.zip': 'application/zip'}.get(path.suffix, 'text/plain; charset=utf-8'))
         request = self.oss.PutObjectRequest(bucket=self.bucket, key=key, acl=self.acl,
             metadata={'sha256': checksum, 'semantic-managed': '1'},
             content_type=kind, cache_control='no-cache' if mutable else 'max-age=31536000, immutable',

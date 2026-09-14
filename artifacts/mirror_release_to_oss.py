@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 InsightOS
 # SPDX-License-Identifier: Apache-2.0
-"""Mirror verified glibc/musl/macOS GitHub release assets to OSS without rebuilding."""
+"""Mirror verified glibc/musl/macOS/Windows GitHub release assets to OSS without rebuilding."""
 import argparse
 import fcntl
 import json
@@ -24,10 +24,13 @@ def identity(tag):
     match = re.fullmatch(r'macos-v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)', tag)
     if match:
         return match[1], 'macos-arm64'
+    match = re.fullmatch(r'windows-v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)', tag)
+    if match:
+        return match[1], 'windows-amd64'
     match = re.fullmatch(r'v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)', tag)
     if match:
         return match[1], 'linux-x86_64'
-    raise ValueError('Use an explicit vVERSION, musl-vVERSION-REVISION or macos-vVERSION tag')
+    raise ValueError('Use an explicit vVERSION, musl-vVERSION-REVISION macos-vVERSION or windows-vVERSION tag')
 
 
 def metadata(tag):
@@ -81,7 +84,8 @@ def stage(tag, output, release):
                 temporary.unlink(missing_ok=True)
         assets[name] = asset
     manifest = json.loads((folder/'manifest.json').read_text())
-    archive = f'semantic-{version}-{platform}.tar.gz'
+    extension = 'zip' if platform == 'windows-amd64' else 'tar.gz'
+    archive = f'semantic-{version}-{platform}.{extension}'
     if (manifest['version'], manifest['platform']) != (version, platform) or manifest['archive'] not in (archive, f'releases/{version}/{platform}/{archive}'):
         raise ValueError('Manifest identity differs from selected release')
     if assets[archive]['digest'] != 'sha256:'+manifest['sha256'] or assets[archive]['size'] != manifest['size']:
