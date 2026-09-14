@@ -214,6 +214,8 @@ jobs:
         path: |
           ${{ runner.temp }}/语义 Windows test/logs/**
           .output/windows/*.json
+          ${{ runner.temp }}/语义 Windows test/robots/**/logs/**
+          ${{ runner.temp }}/语义 Windows test/robots/**/run/state.json
         include-hidden-files: true
         if-no-files-found: ignore
   release:

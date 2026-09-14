@@ -110,10 +110,17 @@ def main():
         assert not (root/'releases').exists() and (root/'data/semantic.db').is_file()
         report['offline_uninstall_preserves_data']=True
     finally:
+        # Keep the originating project error if conservative cleanup refuses an
+        # unconfirmed Robot; never replace it with a secondary stop exception.
+        failed = sys.exc_info()[0] is not None
         # The manager preserves any scene whose normal release was not confirmed.
         try:
             if not report.get('offline_uninstall_preserves_data'):
                 control('stop')
+        except Exception as error:
+            report['cleanup_error'] = str(error)
+            if not failed:
+                raise
         finally:
             args.report.parent.mkdir(parents=True,exist_ok=True)
             args.report.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')

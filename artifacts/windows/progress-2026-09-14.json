@@ -19,7 +19,17 @@
       "native_ci": 34809540094,
       "result": "passed Windows real Server initialize/restart/stop, PowerShell, process and MuPDF contracts; Linux/macOS regression passed",
       "merged": true,
-      "merge_commit": "c966d90b859644c0da1880c1c05fbbdcc1e557bc"
+      "merge_commit": "c966d90b859644c0da1880c1c05fbbdcc1e557bc",
+      "runtime_pack_fix": {
+        "pr": 8,
+        "head": "a855056",
+        "windows_ci": 34817811763,
+        "macos_ci": 34817811754,
+        "linux_ci": 34817811791,
+        "result": "Windows and macOS passed; actual installed Runtime and real scene smoke passed in installer CI 34817798751",
+        "merged": true,
+        "merge_commit": "eef5a9864b9ffd3e6fd889d10a5cf027d412dd02"
+      }
     },
     "pinocchio": {
       "branch": "feat/windows-release",
@@ -61,13 +71,13 @@
     },
     "quick-start": {
       "branch": "feat/windows-installer-payload",
-      "head": "1d55020",
-      "result": "PR 24 draft: manager, offline uninstall/junction preservation and real bundled Python UTF-8/native filename checks passed. Full offline installation and project integration now consumes three durable native component releases.",
+      "head": "461f6d0a9b2e977d1ec2f57a6b9cc23d0558ecea",
+      "result": "Offline install/retry, one bundled Python base, native math in Unicode paths and Runtime scene smoke passed. Full project exposes AbilityFramework exit during navigation Ability startup; collecting component logs.",
       "pr": 24,
       "merged": false,
       "native_ci": 34816034789,
       "merge_commit": "65c3a26c32ddf79edb4acae26dce6b253e1ec7b2",
-      "installer_ci": 34814685272
+      "installer_ci": 34818314900
     },
     "Ability-SDK-Python": {
       "branch": "feat/windows-lifecycle",
@@ -90,7 +100,7 @@
     }
   },
   "remaining": [
-    "Full Windows offline installer and project/Ability/Skill integration",
+    "Complete Windows offline installer retry and project/Ability/Skill integration",
     "Windows 11 desktop GPU rendering qualification"
   ]
 }
