@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import struct
 import time
 
 if os.name != 'nt':
@@ -34,6 +35,40 @@ _set_event = _api('SetEvent', wt.BOOL, wt.HANDLE)
 _create_file = _api('CreateFileW', wt.HANDLE, wt.LPCWSTR, wt.DWORD, wt.DWORD,
                     wt.LPVOID, wt.DWORD, wt.DWORD, wt.HANDLE)
 _attributes = _api('GetFileAttributesW', wt.DWORD, wt.LPCWSTR)
+_tcp_table = ctypes.WinDLL('iphlpapi', use_last_error=True).GetExtendedTcpTable
+_tcp_table.restype = wt.DWORD
+_tcp_table.argtypes = [wt.LPVOID, ctypes.POINTER(wt.DWORD), wt.BOOL, wt.ULONG, ctypes.c_int, wt.ULONG]
+
+
+def _listeners(family):
+    size = wt.DWORD()
+    # OWNER_PID_LISTENER returns only active listeners, never TIME_WAIT sockets.
+    result = _tcp_table(None, ctypes.byref(size), False, family, 3, 0)
+    if result not in (0, 122):
+        raise ctypes.WinError(result)
+    for attempt in range(5):
+        buffer = ctypes.create_string_buffer(size.value)
+        result = _tcp_table(buffer, ctypes.byref(size), False, family, 3, 0)
+        if result == 122:  # Table changed while allocating the buffer.
+            continue
+        if result:
+            raise ctypes.WinError(result)
+        data = buffer.raw
+        count = struct.unpack_from('<I', data)[0]
+        width = 24 if family == socket.AF_INET else 56
+        if 4 + count * width > len(data):
+            raise RuntimeError('Invalid Windows TCP table size')
+        for index in range(count):
+            row = data[4 + index*width:4 + (index+1)*width]
+            if family == socket.AF_INET:
+                address = socket.inet_ntop(family, row[4:8])
+                port = struct.unpack_from('!H', row, 8)[0]
+            else:
+                address = socket.inet_ntop(family, row[:16])
+                port = struct.unpack_from('!H', row, 20)[0]
+            yield address, port
+        return
+    raise RuntimeError('Windows TCP listener table kept changing; retry preflight')
 
 
 def _error():
@@ -67,6 +102,12 @@ def directory_lock(root):
 
 def check_port(port, host='127.0.0.1'):
     """Reject an active Windows listener, including one using SO_REUSEADDR."""
+    # Windows permits a specific-address listener alongside an existing reusable
+    # wildcard listener. Exclusive bind alone does not detect that conflict.
+    for family in (socket.AF_INET, socket.AF_INET6):
+        for address, active_port in _listeners(family):
+            if active_port == port and (host == '0.0.0.0' or address in ('0.0.0.0', '::', host, '::ffff:'+host)):
+                raise RuntimeError(f'Port {host}:{port} already has an active listener')
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         try:
