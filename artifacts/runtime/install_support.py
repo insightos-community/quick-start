@@ -327,7 +327,7 @@ def macos_shortcuts(root, state):
             info_path = app/'Contents/Info.plist'
             info = plistlib.loads(info_path.read_bytes())
             info.update(CFBundleName=title, CFBundleDisplayName=title, CFBundleIdentifier=f'cn.insightos.semantic.{identity}.{action}',
-                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'],
+                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'].split('-')[0],
                         LSApplicationCategoryType='public.app-category.developer-tools')
             info_path.write_bytes(plistlib.dumps(info))
             subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)
@@ -441,7 +441,9 @@ def welcome(root, state, started, desktop_message='', stream=None, clear=True):
             ('', 'export PATH="$SEMANTIC_HOME/bin:$PATH"', 'command'),
             ('持久化', '将上面两行加入 ~/.bashrc 或 ~/.zshrc', 'label')])
         notes = [('日志', 'semanticctl logs', 'command')]
-        if desktop_message.startswith('快捷入口:') or (not desktop_message and state.get('desktop_shortcuts')):
+        if state.get('application_bundles'):
+            notes.append(('Apps', '~/Applications: Semantic / Uninstall Semantic', 'ok'))
+        elif desktop_message.startswith('快捷入口:') or (not desktop_message and state.get('desktop_shortcuts')):
             notes.append(('桌面', '已创建 · 首次可能需右键“允许启动”', 'ok'))
         elif desktop_message:
             notes.append(('桌面', '已跳过' if '跳过' in desktop_message else '未创建；检查 xdg-open / 目录权限', 'label'))

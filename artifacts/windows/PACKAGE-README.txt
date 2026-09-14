@@ -20,3 +20,8 @@ Release active scenes in the Web UI before stopping or reconfiguring.
 Default Web port: 3000. API: 8034. WebSocket: 8035. Runtime: 8036.
 Application-local native DLLs are bundled. A working OpenGL GPU driver is needed for rendering.
 Physical desktop GPU qualification is still pending.
+
+Native application entries
+Open Semantic from your application launcher to start services and open the current Web URL.
+Use Uninstall Semantic to remove programs locally while preserving configuration and data.
+Release simulation scenes first. --no-desktop-shortcut skips entry creation.

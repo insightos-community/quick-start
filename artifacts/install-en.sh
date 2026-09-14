@@ -1805,7 +1805,7 @@ def macos_shortcuts(root, state):
             info_path = app/'Contents/Info.plist'
             info = plistlib.loads(info_path.read_bytes())
             info.update(CFBundleName=title, CFBundleDisplayName=title, CFBundleIdentifier=f'cn.insightos.semantic.{identity}.{action}',
-                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'],
+                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'].split('-')[0],
                         LSApplicationCategoryType='public.app-category.developer-tools')
             info_path.write_bytes(plistlib.dumps(info))
             subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)
@@ -1919,7 +1919,9 @@ def welcome(root, state, started, desktop_message='', stream=None, clear=True):
             ('', 'export PATH="$SEMANTIC_HOME/bin:$PATH"', 'command'),
             ('Persist', 'Add the two lines above to ~/.bashrc or ~/.zshrc', 'label')])
         notes = [('Log', 'semanticctl logs', 'command')]
-        if desktop_message.startswith('Shortcuts:') or (not desktop_message and state.get('desktop_shortcuts')):
+        if state.get('application_bundles'):
+            notes.append(('Apps', '~/Applications: Semantic / Uninstall Semantic', 'ok'))
+        elif desktop_message.startswith('Shortcuts:') or (not desktop_message and state.get('desktop_shortcuts')):
             notes.append(('Desktop', 'Created; you may need to right-click and Allow Launching', 'ok'))
         elif desktop_message:
             notes.append(('Desktop', 'Skipped' if 'skipped' in desktop_message else 'Not created; check xdg-open and directory permissions', 'label'))
@@ -4744,7 +4746,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            info_path = app/'Contents/Info.plist'\n"
             '            info = plistlib.loads(info_path.read_bytes())\n'
             "            info.update(CFBundleName=title, CFBundleDisplayName=title, CFBundleIdentifier=f'cn.insightos.semantic.{identity}.{action}',\n"
-            "                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'],\n"
+            "                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'].split('-')[0],\n"
             "                        LSApplicationCategoryType='public.app-category.developer-tools')\n"
             '            info_path.write_bytes(plistlib.dumps(info))\n'
             "            subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)\n"
@@ -4858,7 +4860,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '            (\'\', \'export PATH="$SEMANTIC_HOME/bin:$PATH"\', \'command\'),\n'
             "            ('Persist', 'Add the two lines above to ~/.bashrc or ~/.zshrc', 'label')])\n"
             "        notes = [('Log', 'semanticctl logs', 'command')]\n"
-            "        if desktop_message.startswith('Shortcuts:') or (not desktop_message and state.get('desktop_shortcuts')):\n"
+            "        if state.get('application_bundles'):\n"
+            "            notes.append(('Apps', '~/Applications: Semantic / Uninstall Semantic', 'ok'))\n"
+            "        elif desktop_message.startswith('Shortcuts:') or (not desktop_message and state.get('desktop_shortcuts')):\n"
             "            notes.append(('Desktop', 'Created; you may need to right-click and Allow Launching', 'ok'))\n"
             '        elif desktop_message:\n'
             "            notes.append(('Desktop', 'Skipped' if 'skipped' in desktop_message else 'Not created; check xdg-open and directory permissions', 'label'))\n"

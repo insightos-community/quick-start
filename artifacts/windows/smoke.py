@@ -117,6 +117,7 @@ def main():
         evidence=json.loads(result.read_text(encoding='utf-8'))
         assert evidence['success'],evidence
         assert not (root/'releases').exists() and (root/'data/semantic.db').is_file()
+        assert all(not Path(p).exists() for p in native_shortcuts)
         report['offline_uninstall_preserves_data']=True
     finally:
         # Keep the originating project error if conservative cleanup refuses an

@@ -8,6 +8,22 @@
 
 A native **macOS Apple Silicon / macOS 15.5+** installer preview is also available. See [installation and validation scope](#native-macos-installer-apple-silicon-preview); physical Mac graphics qualification is pending.
 
+### Application icons and local uninstall
+
+Installers built from this revision create native application entries using the Semantic icon:
+
+| Platform | Application entry | Uninstall entry |
+| --- | --- | --- |
+| Linux glibc / musl | Applications menu and desktop (when a desktop is detected) | Uninstall Semantic, or `bin/semanticctl uninstall` |
+| macOS | `~/Applications/Semantic (<instance-id>).app`, registered with LaunchServices for Finder and the system app launcher | `~/Applications/Uninstall Semantic (<instance-id>).app` |
+| Windows | Start menu and desktop shortcuts | Uninstall Semantic, or Settings → Apps → Installed apps → Semantic |
+
+Opening Semantic starts its managed services and opens the Web address from the current configuration. Shortcuts continue to work after port reconfiguration. macOS entries are installed for the current user without administrator access; use Finder → Go → Home → Applications to locate them. On macOS versions with Launchpad, look for Semantic there; newer versions use the system Applications launcher. Entries have an instance ID so multiple installations do not overwrite one another.
+
+Uninstall runs entirely from local files and preserves configuration, data and logs. Release active simulation scenes before uninstalling. On macOS, deleting the launcher App alone does not remove the runtime: use **Uninstall Semantic** for program removal. Explicit CLI `uninstall --purge` additionally deletes instance data. Modified shortcuts or App bundles are preserved. Use `--no-desktop-shortcut` during installation to skip application entries; on headless Linux, use `--desktop-shortcut` to request them explicitly. Linux desktop icons may require “Allow Launching”.
+
+Previously published archives keep their original contents; these entries require an installer built from this revision or a subsequent release. The App uses a local ad-hoc signature, not Apple notarization.
+
 ## Start here
 
 Install prebuilt Semantic on **Linux x86_64** (verified on **Ubuntu 24.04**). You need Bash, curl and Python 3.10+. Choose a download source:
