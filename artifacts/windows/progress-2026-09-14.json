@@ -1,6 +1,6 @@
 {
   "updated": "2026-09-14",
-  "target": "Windows x64, CPython 3.13.15, NumPy 2.3.5",
+  "target": "Native Windows installer, CPython 3.13.15 / NumPy 2.3.5",
   "installer_published": false,
   "desktop_gpu_verified": false,
   "components": {
@@ -15,6 +15,7 @@
     "Semantic-Framework": {
       "branch": "feat/windows-process-ports",
       "pr": 7,
+      "head": "2ec60f8",
       "native_ci": 34809540094,
       "result": "passed Windows real Server initialize/restart/stop, PowerShell, process and MuPDF contracts; Linux/macOS regression passed",
       "merged": true,
@@ -22,52 +23,74 @@
     },
     "pinocchio": {
       "branch": "feat/windows-release",
-      "native_ci": 34811461571,
-      "result": "Core DLLs compiled in prior run; EigenPy MSVC pragma repair applied, native rebuild and standalone wheel validation in progress"
+      "head": "635953fa9fd83c289e1af984944cf55885b2b53c",
+      "native_ci": 34816658038,
+      "result": "Native source compilation completed; standalone CPython FK/RNEA/URDF/mesh/collision and DLL checks passed after correcting NumPy bundled CRT policy. Component prerelease published with separate compilation/verification revisions.",
+      "pr": 2,
+      "merged": false,
+      "full_rebuild_ci": 34816626307,
+      "release": "https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1"
     },
     "AbilityFramework": {
       "branch": "feat/windows-native",
-      "native_ci": 34811811362,
-      "result": "Linux 23 cases / 128 assertions passed; MSVC application compiled and linked; native unit/HTTP validation in progress",
+      "head": "acabeb6d6e62ebec98968b3da730ecc615541876",
+      "native_ci": 34812148701,
+      "result": "Windows 23 cases/109 assertions, HTTP/Unicode/SQLite and application-local CRT validation passed; Linux/macOS regression passed; PR 5 merged.",
       "pr": 5,
-      "source_commit": "7306bb410c6d14120b67b4e09968cd0664ec96fe"
+      "merged": true,
+      "merge_commit": "8a26d221298ab5d31f54a07009f3cfcf129af2cf",
+      "release": "https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1"
     },
     "ability-scaffold": {
-      "branch": "feat/windows-launcher",
-      "native_ci": 34808814899,
-      "result": "passed native launcher Unicode/JSON arguments and child cleanup",
-      "pr": 4,
+      "branch": "fix/windows-package-paths",
+      "head": "90917ecb0953605fa7bc47ea54e17a7e8273c1af",
+      "native_ci": 34812636638,
+      "result": "Native launcher lifecycle plus installed-wheel ZIP pack/extract/execute passed after slash and UTF-8 CLI repairs; Linux build passed.",
+      "pr": 5,
       "merged": true,
-      "merge_commit": "48f7b9f6f01e5657cfba3613952b6578cb1d08d0"
+      "merge_commit": "3bcd63a2fce84bf762beb6a42c12bd9dd3fdea06"
     },
     "mujoco-runtime": {
       "branch": "feat/windows-native",
+      "head": "4e56e89",
       "result": "Windows 72 tests and MuJoCo physics passed; Linux/macOS regression passed; GPU untested",
       "pr": 10,
       "merged": true,
       "merge_commit": "bbb75005f84c329026d333ca428658f444e681d6",
       "native_ci": 34809477674
     },
+    "quick-start": {
+      "branch": "feat/windows-installer-payload",
+      "head": "1d55020",
+      "result": "PR 24 draft: manager, offline uninstall/junction preservation and real bundled Python UTF-8/native filename checks passed. Full offline installation and project integration now consumes three durable native component releases.",
+      "pr": 24,
+      "merged": false,
+      "native_ci": 34816034789,
+      "merge_commit": "65c3a26c32ddf79edb4acae26dce6b253e1ec7b2",
+      "installer_ci": 34814685272
+    },
     "Ability-SDK-Python": {
       "branch": "feat/windows-lifecycle",
+      "head": "6c5521d93f6f9e6ad6aea61cb122b61e8542bc0b",
       "pr": 3,
       "merged": true,
-      "result": "Windows installed-wheel/native-launcher lifecycle and IPC cleanup passed; Linux installed-wheel lifecycle passed",
       "merge_commit": "064c36d0510b387318027213b39aaa2ffb7ea35e",
-      "native_ci": 34810296542
+      "native_ci": 34810296542,
+      "result": "Windows and Linux installed-wheel lifecycle integration passed"
     },
-    "quick-start": {
-      "pr": 23,
-      "merged": false,
-      "native_ci": 34811878607,
-      "result": "Passed native Python manager against real Server/Web gateway: restart/graceful stop, SQLite unlock, stale identity, exclusive lock/crash recovery, wildcard TCP listener checks; 38 public Windows wheels downloaded with hashes. Full installer pending."
+    "r1pro-ability": {
+      "branch": "feat/windows-native",
+      "head": "29d0540c8d516407b036a27082483fb83192dc33",
+      "pr": 4,
+      "merged": true,
+      "result": "78 native tests passed, one live-scene test explicitly skipped; all seven native Ability packages passed validation; Linux regression passed; PR 4 merged.",
+      "merge_commit": "728f64220f05161dcf1a1366c8779d83aa7274cb",
+      "native_ci": 34812933585,
+      "release": "https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1"
     }
   },
   "remaining": [
-    "Pinocchio standalone wheel/DLL verification",
-    "AbilityFramework native build, HTTP startup and DLL packaging",
-    "Windows Robot/7 Ability/3 Skill integration",
-    "Offline installer/configuration/reconfigure/uninstall",
+    "Full Windows offline installer and project/Ability/Skill integration",
     "Windows 11 desktop GPU rendering qualification"
   ]
 }

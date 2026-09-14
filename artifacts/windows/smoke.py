@@ -69,9 +69,11 @@ def main():
     report['shared_base_python'] = str(python.parent)
     manifest = shared.load(manager.release/'release.json')
     robot_python = manager.release/'robot-bundles'/manifest['bundle_name']/'python/venv/Scripts/python.exe'
+    pin_source = json.loads((HERE/'sources.json').read_text())['pinocchio']
     math_env = manager.environment()
     math_env.update(PATH=os.pathsep.join([str(python.parent),str(manager.release/'bin'),env['PATH']]),
-        SEMANTIC_PINOCCHIO_SOURCE_COMMIT=json.loads((HERE/'sources.json').read_text())['pinocchio']['commit'])
+        SEMANTIC_PINOCCHIO_SOURCE_COMMIT=pin_source.get('build_commit',pin_source['commit']),
+        SEMANTIC_PINOCCHIO_VERIFICATION_COMMIT=pin_source['commit'])
     subprocess.run([str(robot_python),'-I','-B',str(HERE.parents[1]/'sources/pinocchio/ci/windows/verify.py'),
                     str(args.report.with_name('windows-installed-math.json'))],env=math_env,check=True)
     report['installed_math_unicode_paths']=True

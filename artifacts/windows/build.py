@@ -127,7 +127,7 @@ def verify_native_abilities(bundle, entries):
 def import_native_wheels(source, destination):
     pins = json.loads((HERE/'sources.json').read_text(encoding='utf-8'))
     report = json.loads((source/'windows-validation.json').read_text(encoding='utf-8'))
-    if report['source_commit'] != pins['pinocchio']['commit']:
+    if report['source_commit'] != pins['pinocchio'].get('build_commit', pins['pinocchio']['commit']) or report['verification_commit'] != pins['pinocchio']['commit']:
         raise ValueError('Unpinned Pinocchio native artifacts')
     hashes = {}
     for line in (source/'SHA256SUMS').read_text(encoding='utf-8').splitlines():
@@ -242,6 +242,9 @@ def build(a):
         'python', '-m', 'pip', 'download', '--only-binary=:all:', '--require-hashes',
         '-r', HERE/'public-requirements.lock', '-d', wheelhouse)
     import_native_wheels(a.pin_wheels.resolve(), wheelhouse)
+    for name in ('windows-validation.json', 'revalidation.json', 'conda-lock.json', 'SHA256SUMS'):
+        if (a.pin_wheels/name).is_file():
+            copy(a.pin_wheels/name, payload/'native-inputs/pinocchio'/name)
     runtime = sources/'mujoco-runtime'
     for project in (runtime, runtime/'packages/mujoco-visuals', sources/'ability-scaffold',
                     sources/'Ability-SDK-Python', sources/'r1pro-ability'):

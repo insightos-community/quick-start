@@ -1,7 +1,7 @@
 # Windows 原生适配清单
 
 依赖审计日期：2026-09-13；实施进度更新：2026-09-14。审计基线为 `macos-v0.1.0-rc.3` 及其锁定的组件提交。
-下方依赖审计以该基线为准；实施进度单独记录。当前没有 Windows installer，
+下方依赖审计以该基线为准；实施进度单独记录。当前尚未发布通过完整验证的 Windows installer，
 也没有 Windows 整套产品实机运行通过的结论。
 编译诊断、源码版本及 PyPI 文件检查见 [审计记录](artifacts/windows/audit-2026-09-13.json)。
 
@@ -18,13 +18,14 @@
 | 组件 | 已完成的 Windows 工作 | 验证与待办 |
 | --- | --- | --- |
 | semantic-deployment | 实例锁、Job Object 进程树、带创建时间身份的正常停止 IPC、临时路径 | [PR #6](https://github.com/insightos-community/semantic-deployment/pull/6) 已合并；Windows/Linux/macOS 原生契约测试通过。完整 Robot 闭环仍待验证 |
-| ability-scaffold | 原生 `ability.exe`，直接调用包内 Python；Windows 打包入口 | [PR #4](https://github.com/insightos-community/ability-scaffold/pull/4) 已合并；中文/空格路径、JSON 参数、退出码、子进程清理测试通过 |
+| ability-scaffold | 原生 `ability.exe`，直接调用包内 Python；Windows 打包入口 | [PR #4](https://github.com/insightos-community/ability-scaffold/pull/4) 与 [PR #5](https://github.com/insightos-community/ability-scaffold/pull/5) 已合并；原生入口及安装后 wheel 的打包/解包/执行、UTF-8 输出测试通过 |
 | mujoco-runtime | Pydantic 版本对齐、跨平台资产路径检查、Windows 正常退出事件、原生 CI | [PR #10](https://github.com/insightos-community/mujoco-runtime/pull/10) 已合并；Windows 72 项 API/生命周期测试、MuJoCo 3.4.0 物理步进及 wheel 构建通过，Linux/macOS 回归通过 |
 | Semantic-Framework | CLI/Server/Pilot 的进程、路径和 PowerShell ports；Windows `glfw` 默认后端 | [PR #7](https://github.com/insightos-community/Semantic-Framework/pull/7) 已合并；Windows 原生构建、真实 Server 初始化/重启/正常停止、PowerShell 和 PDF 错误恢复测试通过，Linux/macOS 回归通过 |
-| AbilityFramework | MSVC/xmake、Windows 网卡/MAC/HostInfo、`.exe` 入口和路径支持 | [PR #5](https://github.com/insightos-community/AbilityFramework/pull/5) 原生 CI 验证中；Linux 23 项测试、128 项断言通过，Windows 整体运行尚未通过 |
-| Pinocchio 3.9.0 | Windows 构建锁、EigenPy/Coal/HPP-FCL 兼容依赖、wheel/DLL 打包和脱离 Conda 验证脚本 | `feat/windows-release` 原生 CI 验证中，尚未产出通过验证的 Windows Release |
+| AbilityFramework | MSVC/xmake、Windows 网卡/MAC/HostInfo、`.exe` 入口和路径支持 | [PR #5](https://github.com/insightos-community/AbilityFramework/pull/5) 已合并；Windows 23 项测试、109 项断言、中文路径 HTTP/SQLite 重启和随包 CRT 验证通过；[Windows 组件预发布](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1) 已提供 |
+| r1pro-ability | 7 个原生 Windows Ability 包、入口与依赖版本记录 | [PR #4](https://github.com/insightos-community/r1pro-ability/pull/4) 已合并；78 项测试通过、1 项真实场景测试跳过；[组件预发布](https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1) 已提供，完整场景链路待验证 |
+| Pinocchio 3.9.0 | Windows 构建锁、EigenPy/Coal/HPP-FCL 兼容依赖、wheel/DLL 打包和脱离 Conda 验证脚本 | [PR #2](https://github.com/insightos-community/pinocchio/pull/2) 集成中；原生编译及独立 CPython 的 FK/RNEA、URDF/网格/碰撞和 DLL 检查通过，[Windows 组件预发布](https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1) 已提供 |
 | Ability-SDK-Python | 原生入口下的已安装 wheel、IPC 与生命周期心跳集成测试 | [PR #3](https://github.com/insightos-community/Ability-SDK-Python/pull/3) 已合并；Windows/Linux 安装后 wheel 的生命周期、IPC 与入口回收测试通过 |
-| quick-start | Windows 目录锁、进程身份与正常停止接口、监听端口检查、Web 网关适配；38 个公共 wheel 的哈希锁 | [PR #23](https://github.com/insightos-community/quick-start/pull/23) 的真实 Server/网关启停与 SQLite 解锁、目录锁崩溃恢复、端口冲突测试已通过；完整安装包和项目闭环待完成 |
+| quick-start | 原生管理器、端口配置/事务回滚、本地卸载、离线 ZIP 组装和完整场景验证流程 | [PR #23](https://github.com/insightos-community/quick-start/pull/23) 已合并；[PR #24](https://github.com/insightos-community/quick-start/pull/24) 集成中。7 项管理器契约及本地卸载通过；包内 Python/UTF-8 文件访问与卸载 junction 拒绝测试通过；整包闭环仍待验证 |
 
 机器可读的提交/CI 记录见 [实施记录](artifacts/windows/progress-2026-09-14.json)。
 
@@ -46,7 +47,7 @@ Windows 安装管理接口与公共 wheel 的复现方式见 [开发说明](arti
 - Framework：[Windows 构建与原生验证](https://github.com/insightos-community/Semantic-Framework/blob/feat/windows-process-ports/docs/platforms/windows.md)。
 - Ability 入口：[MSVC 构建说明](https://github.com/insightos-community/ability-scaffold/blob/main/README.build.md#windows-native-launcher)。
 - MuJoCo：[Windows 构建和物理验证](https://github.com/insightos-community/mujoco-runtime/blob/main/README.build.md#windows-x64-native-validation)。
-- Pinocchio：[`ci/windows/build.ps1`](https://github.com/insightos-community/pinocchio/blob/feat/windows-release/ci/windows/build.ps1)，当前为待验证构建配方。
+- Pinocchio：[`ci/windows/build.ps1`](https://github.com/insightos-community/pinocchio/blob/feat/windows-release/ci/windows/build.ps1)，已提供独立运行验证与组件预发布。
 
 ## 实施路线与 ports 边界
 

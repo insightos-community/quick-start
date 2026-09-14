@@ -48,8 +48,12 @@ builds the Framework, Pilot, Gateway and supervisor, then consumes successful
 [AbilityFramework](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1)
 and [R1 Pro Ability](https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1)
 component releases. `native-releases.json` pins each checksum manifest; source
-identities and asset hashes are checked on download. Pinocchio is still a pinned
-CI input until its standalone validation and component release succeed.
+identities and asset hashes are checked on download.
+[Pinocchio](https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1)
+is also a fixed component release. Its original `build_commit` is recorded
+separately from the verification/recipe `commit`; CI rejected changes to compiled
+inputs before revalidating the original wheels. Both revisions and verification
+evidence are included in the installer.
 
 The assembler removes pip's unused ARM/32-bit launcher templates and records their
 hashes. It preserves the x64 launchers. The bundled Python executable manifests
@@ -66,7 +70,7 @@ uv python install 3.13.15
 uv run --no-project --python 3.13.15 python artifacts/windows/fetch_native.py native
 # Put semantic.exe, semantic-server.exe, semantic-pilot.exe,
 # semantic-robot-instance.exe and semantic-web-gateway.exe in native/bin.
-uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/build.py --version 0.1.0-windows-preview.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin --abilities native/abilities/windows --pin-wheels native/pin
+uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/build.py --version 0.1.0-rc.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin --abilities native/abilities/windows --pin-wheels native/pin
 uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:LOCALAPPDATA/Semantic Windows verification" --report .output/windows/windows-installation.json
 ```
 

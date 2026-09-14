@@ -151,7 +151,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/pinocchio
-        ref: 5849355887d18ee67ee5b9831cb5dc9e850ec33c
+        ref: 635953fa9fd83c289e1af984944cf55885b2b53c
         path: sources/pinocchio
         persist-credentials: false
     - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
@@ -181,7 +181,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
       run: 'uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/build.py --version
-        0.1.0-windows-preview.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin
+        0.1.0-rc.1 --output .output/windows --work .work/windows --sources sources --binaries native/bin
         --abilities native/abilities/windows --pin-wheels native/pin
 
         if ($LASTEXITCODE -ne 0) { throw ''Windows assembly failed'' }
