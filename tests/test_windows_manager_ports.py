@@ -258,6 +258,10 @@ class WindowsManagerContracts(unittest.TestCase):
                     service.configure(previous)
             self.assertEqual(service.values, changed)
             healthy(changed)
+        except Exception:
+            for log in (self.root/'logs').glob('*.log'):
+                print(log.name+':\n'+log.read_text(encoding='utf-8', errors='replace')[-16000:])
+            raise
         finally:
             service.stop()
             self.assertEqual(service.status(), {'server':False,'web':False})
