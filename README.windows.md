@@ -21,9 +21,9 @@
 | ability-scaffold | 原生 `ability.exe`，直接调用包内 Python；Windows 打包入口 | [PR #4](https://github.com/insightos-community/ability-scaffold/pull/4) 已合并；中文/空格路径、JSON 参数、退出码、子进程清理测试通过 |
 | mujoco-runtime | Pydantic 版本对齐、跨平台资产路径检查、Windows 正常退出事件、原生 CI | [PR #10](https://github.com/insightos-community/mujoco-runtime/pull/10) 已合并；Windows 72 项 API/生命周期测试、MuJoCo 3.4.0 物理步进及 wheel 构建通过，Linux/macOS 回归通过 |
 | Semantic-Framework | CLI/Server/Pilot 的进程、路径和 PowerShell ports；Windows `glfw` 默认后端 | [PR #7](https://github.com/insightos-community/Semantic-Framework/pull/7) 已合并；Windows 原生构建、真实 Server 初始化/重启/正常停止、PowerShell 和 PDF 错误恢复测试通过，Linux/macOS 回归通过 |
-| AbilityFramework | MSVC/xmake、Windows 网卡/MAC/HostInfo、`.exe` 入口和路径支持 | `feat/windows-native` 原生 CI 修订中；Linux 22 项测试、125 项断言通过，Windows 整体运行尚未通过 |
+| AbilityFramework | MSVC/xmake、Windows 网卡/MAC/HostInfo、`.exe` 入口和路径支持 | [PR #5](https://github.com/insightos-community/AbilityFramework/pull/5) 原生 CI 验证中；Linux 22 项测试、125 项断言通过，Windows 整体运行尚未通过 |
 | Pinocchio 3.9.0 | Windows 构建锁、EigenPy/Coal/HPP-FCL 兼容依赖、wheel/DLL 打包和脱离 Conda 验证脚本 | `feat/windows-release` 原生 CI 验证中，尚未产出通过验证的 Windows Release |
-| Ability-SDK-Python | 原生入口下的已安装 wheel、IPC 与生命周期心跳集成测试 | [PR #3](https://github.com/insightos-community/Ability-SDK-Python/pull/3) 验证中；Linux 测试通过 |
+| Ability-SDK-Python | 原生入口下的已安装 wheel、IPC 与生命周期心跳集成测试 | [PR #3](https://github.com/insightos-community/Ability-SDK-Python/pull/3) 已合并；Windows/Linux 安装后 wheel 的生命周期、IPC 与入口回收测试通过 |
 | quick-start | Windows 安装包集成边界与待办已记录 | 尚无 Windows 安装包；配置、离线安装/卸载和整套项目闭环仍待实现与验证 |
 
 机器可读的提交/CI 记录见 [实施记录](artifacts/windows/progress-2026-09-14.json)。

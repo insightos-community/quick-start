@@ -23,12 +23,14 @@
     "pinocchio": {
       "branch": "feat/windows-release",
       "native_ci": 34810008059,
-      "result": "pending native compilation after WIN32 macro fixes; no wheel verified yet"
+      "result": "Native source compilation in progress after MSVC macro fixes; standalone wheels and DLL closure remain unverified"
     },
     "AbilityFramework": {
       "branch": "feat/windows-native",
-      "native_ci": 34810087278,
-      "result": "pending native build/22 unit tests/HTTP Unicode workspace smoke; Linux 22 tests 125 assertions passed before final path/date fixes"
+      "native_ci": 34810397357,
+      "result": "Linux 22 cases / 125 assertions passed; native Windows build, unit tests and HTTP/Unicode workspace smoke pending",
+      "pr": 5,
+      "source_commit": "30fc3a05ee05dbbacd36736f2433cede1d76a4aa"
     },
     "ability-scaffold": {
       "branch": "feat/windows-launcher",
@@ -49,8 +51,10 @@
     "Ability-SDK-Python": {
       "branch": "feat/windows-lifecycle",
       "pr": 3,
-      "merged": false,
-      "result": "Linux installed-wheel lifecycle passed; native Windows launcher integration CI pending"
+      "merged": true,
+      "result": "Windows installed-wheel/native-launcher lifecycle and IPC cleanup passed; Linux installed-wheel lifecycle passed",
+      "merge_commit": "064c36d0510b387318027213b39aaa2ffb7ea35e",
+      "native_ci": 34810296542
     }
   },
   "remaining": [
