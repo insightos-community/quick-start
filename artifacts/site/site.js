@@ -132,11 +132,18 @@ const englishCopy = {
   validated: "Ubuntu 24.04 (glibc); Ubuntu 22.04 / Alpine 3.23 (musl); macOS 15.5+ Apple Silicon (installation, API and physics checks)",
   compatibilityTitle: "Compatibility limits",
   compatibility:
-    "glibc baseline ≥ 2.28; musl is bundled by default, while system mode needs host musl 1.2+. macOS uses system CGL; physical GPU rendering still needs validation. Intel Mac, Windows and Linux ARM64 are not supported.",
+    "glibc baseline ≥ 2.28; musl is bundled by default, while system mode needs host musl 1.2+. macOS uses system CGL; physical GPU rendering still needs validation. Intel Mac and Linux ARM64 are not supported. Windows x64 has a separate ZIP preview; see below.",
   updatesTitle: "Downloads and updates",
   updates:
     "Chinese installation uses Aliyun OSS mirrors; English uses GitHub Releases. All three platforms use identical release archives and checksums. The OSS glibc stable channel now selects GitHub v0.1.0. Install other versions/platforms into a new directory and migrate data explicitly.",
   faqTitle: "Frequently asked questions",
+  faqAppsTitle: "Where are the app icons and system uninstall entries?",
+  faqApps: "New installers include the InsightOS icon and app entries. Linux adds application-menu entries and desktop shortcuts on graphical desktops. macOS creates Semantic and Uninstall Semantic apps in your user <code>~/Applications</code> folder and registers them with the system app launcher. Windows adds Start menu and desktop shortcuts, plus an entry in Settings → Apps → Installed apps. Opening Semantic starts services and opens the Web console using its current configuration.",
+  faqAppsUninstall: "Stop scenes and Robot Runtime before opening Uninstall Semantic. Windows also supports removal from Installed apps. Configuration, data and logs are kept by default; no installer archive download is needed. On macOS, moving only the Semantic launcher to Trash does not remove the runtime; use the uninstall app.",
+  faqAppsRefresh: "Existing Linux / macOS installations can refresh management tools and create app entries with the command below, without upgrading application components or downloading the full archive. Stop scenes first and replace the directory with your actual installation path; the example follows the platform selected above. Use <code>--no-desktop-shortcut</code> during installation to skip app entries.",
+  faqWindowsTitle: "How do I install on Windows?",
+  faqWindows: 'Download the <a href="https://github.com/insightos-community/quick-start/releases/tag/windows-v0.1.0-rc.2">native Windows x64 preview</a>, verify the release SHA-256, extract the complete ZIP and run <code>install.cmd</code>. Windows has its own installer entry point; the Bash commands above do not apply. This version includes the Skill environment fix, app icons and uninstall entries.',
+  faqWindowsUpgrade: "To switch from an older version, stop scenes and old services, install into a new dedicated directory, retain old data and migrate it explicitly. Native Windows CI verifies installation, Abilities / Skills, physics simulation and uninstall. Physical GPU rendering still needs validation.",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",
   faqLan:
@@ -223,6 +230,7 @@ function updateInstallCommand() {
   }
   const bootstrap = `curl -fsSL https://semantic.insightos.cn/install${en ? '-en' : ''}.sh | bash -s --`;
   const platformOption = target === 'musl' ? ' --musl' : '';
+  document.getElementById('app-shortcuts-command').textContent = `${bootstrap} --configure-existing --dir \"${directory}\" --desktop-shortcut`;
   document.getElementById('config-export-command').textContent = `${bootstrap}${platformOption} --dir "${directory}" --export-config components.yaml`;
   document.getElementById('config-reconfigure-command').textContent = `${bootstrap} reconfigure --dir "${directory}" -f components.yaml`;
   const installCommand = document.getElementById(en ? 'install-command-en' : 'install-command').textContent;
