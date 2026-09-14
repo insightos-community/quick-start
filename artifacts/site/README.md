@@ -20,6 +20,16 @@ System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper 
 
 The corresponding Chinese entry is `/install.sh`. Both pages describe Linux x86_64 (glibc/musl) and native macOS 15.5+ Apple Silicon arm64, with the qualification boundaries below. Other package-manager support does not imply full validation of every distribution.
 
+The bilingual FAQ links the separate Windows x64 ZIP preview and describes native
+application/uninstall entries for all platforms. The shell platform selector still
+selects Linux glibc/musl or macOS; Windows users extract the ZIP and run `install.cmd`.
+Existing Linux/macOS instances can refresh their management tools and entries with
+`--configure-existing --dir "<actual-install-directory>" --desktop-shortcut`, without
+downloading the full archive. The example follows the selected platform and language.
+macOS apps live in the current user's `~/Applications`; deleting a launcher alone
+does not uninstall the runtime. Use the uninstall entry after releasing active scenes.
+
+
 Both languages also state that more Linux distributions will be tested soon and compatibility results will be updated. This is a validation plan, not an expansion of the currently verified platform list.
 
 ## Platform and tag selection
