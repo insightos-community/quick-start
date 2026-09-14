@@ -71,6 +71,19 @@ def main(a):
         from project_smoke import check_project
         check_project(root, 'http://127.0.0.1:28080', response['token'], a.report.parent/'project-startup.json')
         report['checks'].append('Project scene startup: all scene robots, native AbilityFramework, seven healthy abilities per robot, installed Skills, online Pilots and ready Robot Runtime; safe project release')
+        # Apply all four port changes with the local manager, then prove that
+        # the same-origin gateway and native scene/Robot discovery still work.
+        component_file = a.report.parent/'reconfigure.yaml'
+        run(ctl, 'export-config', '--output', component_file)
+        text = component_file.read_text()
+        for old, new in [('28080','28180'), ('28081','28181'), ('28082','28182'), ('28083','28183')]:
+            text = text.replace(old, new)
+            options = [new if value == old else value for value in options]
+        component_file.write_text(text)
+        run(ctl, 'reconfigure', '-f', component_file, '--yes')
+        response = request('http://127.0.0.1:28182/api/v1/auth/login', {'username':'admin','password':password})
+        check_project(root, 'http://127.0.0.1:28180', response['token'], a.report.parent/'project-reconfigured.json')
+        report['checks'].append('Offline YAML reconfigure: all four ports, Web proxy login, scene discovery and healthy native Robots after restart')
         run(ctl,'status')
         run(ctl,'stop')
         run(ctl,'start')

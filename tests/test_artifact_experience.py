@@ -73,12 +73,15 @@ class ExperienceTests(unittest.TestCase):
         server = self.root/'releases'/state['version']/'bin/semantic-server'
         server.parent.mkdir(parents=True)
         server.touch()
+        (self.root/'run').mkdir()
+        (self.root/'install.json').write_text(json.dumps(state))
+        (self.root/'configs/semantic-server.yaml').write_text(json.dumps(dict(server={}, robot_runtime={})))
         for port in (8080, 80, 65536, 3011):
             args = SimpleNamespace(dir=str(self.root), payload=self.home, web_host='0.0.0.0', web_port=port)
             with self.subTest(port=port), patch.object(uninstall, 'uninstall_root', return_value=(self.root, state)), \
                  patch.object(installer, 'verify_payload'), patch.object(installer, 'stop_owned') as stop, \
                  patch.object(installer, 'check_port', side_effect=RuntimeError('已占用')):
-                with self.assertRaisesRegex((ValueError, RuntimeError), 'Web 端口|已占用'):
+                with self.assertRaisesRegex((ValueError, RuntimeError), 'Component ports|已占用'):
                     installer.configure_existing(args)
                 stop.assert_not_called()
 
@@ -200,7 +203,7 @@ class ExperienceTests(unittest.TestCase):
         (payload/'files.json').write_text(json.dumps(records))
         result = subprocess.run([sys.executable, str(payload/'installer.py'), 'install', '--payload', str(payload),
                                  '--dir', str(self.home/'new-instance'), '--yes', '--web-port', '1'], capture_output=True, text=True)
-        self.assertIn('端口必须', result.stderr)
+        self.assertIn('ports must be distinct', result.stderr)
         self.assertNotIn('未列入', result.stderr)
         self.assertFalse((payload/'__pycache__').exists())
 

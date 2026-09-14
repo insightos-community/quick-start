@@ -87,7 +87,7 @@ const englishCopy = {
   stepWeb:
     "Open <code>http://127.0.0.1:3000</code> and sign in as <code>admin</code>. The random password appears in the interactive terminal and is saved to <code>configs/secrets.json</code> in the instance directory, never to installation logs.",
   stepNetwork:
-    "Linux Web defaults to <code>0.0.0.0:3000</code>; macOS defaults to <code>127.0.0.1:3000</code>. Customize with <code>--web-host</code> / <code>--web-port</code>. API/WS stay local; expose Web only to trusted networks.",
+    "Linux Web defaults to <code>0.0.0.0:3000</code>; macOS defaults to <code>127.0.0.1:3000</code>. Customize with <code>--web-host</code> / <code>--web-port</code>. API/WS stay local. New HTTP / WS / Runtime ports are <code>8034 / 8035 / 8036</code>; Web remains on <code>3000</code>. Export with <code>--export-config file.yaml</code>, install with <code>-f file.yaml</code>, and update with <code>semanticctl reconfigure -f file.yaml</code>. Expose Web only to trusted networks.",
   stepManageTitle: "Check services and configure tasks",
   stepManage:
     "Replace these paths if you chose a custom directory. The default model is a mock; configure a real model separately. Installation does not create application tasks or start physical robots.",

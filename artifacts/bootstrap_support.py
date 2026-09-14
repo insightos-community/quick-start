@@ -30,15 +30,34 @@ def macos_listener_conflict(port, host):
     return False
 
 
+def installation_arguments(arguments):
+    # Forward all resolved ports to immutable release installers.
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    defaults = dict(http_port=8034, ws_port=8035, web_port=3000, runtime_port=8036)
+    for key in defaults:
+        parser.add_argument('--'+key.replace('_', '-'), type=int)
+    args, _ = parser.parse_known_args(arguments)
+    root = Path(args.dir).expanduser()
+    state = json.loads((root/'install.json').read_text()) if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}
+    result = list(arguments)
+    for key, default in defaults.items():
+        if getattr(args, key) is None:
+            result += ['--'+key.replace('_', '-'), str(state.get(key, default))]
+    return result
+
+
 def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--web-host')
     parser.add_argument('--lan', action='store_true')
-    for name, port in [('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)]:
+    parser.add_argument('--ability-port-first', type=int, default=18100)
+    parser.add_argument('--ability-port-last', type=int, default=18199)
+    for name, port in [('http', 8034), ('ws', 8035), ('web', 3000), ('runtime', 8036)]:
         parser.add_argument('--'+name+'-port', type=int, default=port)
-    args, _ = parser.parse_known_args(arguments)
+    args, _ = parser.parse_known_args(installation_arguments(arguments))
     root = Path(args.dir).expanduser()
     if not root.is_absolute() or root.is_symlink() or root.resolve() in (Path('/'), Path.home().resolve()):
         raise ValueError('--dir must be an absolute instance path, not a symlink or home directory')
@@ -50,6 +69,8 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
     if state and any(state.get(name+'_port') != port for name, port in ports.items()):
         raise ValueError('Existing instance ports differ; use its original options or a new --dir')
+    if not 1024 <= args.ability_port_first <= args.ability_port_last <= 65535 or any(args.ability_port_first <= port <= args.ability_port_last for port in ports.values()):
+        raise ValueError('Invalid or overlapping Ability port range')
     host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
     ipaddress.IPv4Address(host)
     owned = managed(root) if managed and state else {}

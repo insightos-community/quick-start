@@ -5,7 +5,7 @@
 import argparse
 from pathlib import Path
 
-from build_english_installer import render
+from build_english_installer import render, manager_shell
 
 HERE = Path(__file__).resolve().parent
 
@@ -33,6 +33,9 @@ def main():
     native = (HERE/'macos/bootstrap.sh').read_text().removeprefix('#!/bin/bash\n')
     router = (HERE/'platform_bootstrap.sh').read_text() + '\nsemantic_native_macos() (\n' + native + '\n)\n'
     expected = before+'# BEGIN GENERATED PLATFORM ROUTER\n'+router+'# END GENERATED PLATFORM ROUTER\n'+after
+    before, remaining = expected.split('# BEGIN GENERATED COMPONENT CONFIG\n', 1)
+    _, after = remaining.split('# END GENERATED COMPONENT CONFIG\n', 1)
+    expected = before+'# BEGIN GENERATED COMPONENT CONFIG\n'+manager_shell()+(HERE/'component_config.sh').read_text()+'# END GENERATED COMPONENT CONFIG\n'+after
     before, remaining = expected.split('# BEGIN EMBEDDED UNINSTALLER\n', 1)
     _, after = remaining.split('# END EMBEDDED UNINSTALLER', 1)
     expected = before+'# BEGIN EMBEDDED UNINSTALLER\n'+(HERE/'runtime/uninstall.py').read_text()+'# END EMBEDDED UNINSTALLER'+after

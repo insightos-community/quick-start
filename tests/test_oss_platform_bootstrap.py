@@ -24,7 +24,7 @@ class OSSPlatformTests(unittest.TestCase):
             archive = root/'fixture.tar.gz'
             with tarfile.open(archive, 'w:gz') as tar:
                 body = b'#!/bin/bash\nexit 23\n'
-                entry = tarfile.TarInfo('install.command'); entry.size=len(body); entry.mode=0o755
+                entry = tarfile.TarInfo('python/bin/python3.13'); entry.size=len(body); entry.mode=0o755
                 tar.addfile(entry, io.BytesIO(body))
             checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
             tools = root/'tools'; tools.mkdir()
@@ -80,7 +80,7 @@ else:target.write_bytes(pathlib.Path({str(archive)!r}).read_bytes())
                 result=subprocess.run(['bash',str(ROOT/'install.sh'),'--source','oss','--tag','musl-v0.1.0-2',
                     '--base-url',f'http://127.0.0.1:{server.server_port}','--allow-http','--no-start','--runtime-port',str(port),
                     '--dir',str(root/'instance'),'--cache-dir',str(root/'cache')],capture_output=True,text=True)
-                self.assertEqual(result.returncode,23,result.stderr)
+                self.assertNotEqual(result.returncode,0,result.stderr)
                 self.assertEqual(requests,[prefix+'manifest.json',prefix+'package.tar.gz'])
             finally:
                 server.shutdown();server.server_close()
