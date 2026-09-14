@@ -61,7 +61,7 @@ limitations under the License.
           </div>
           <label><span data-i18n="tagLabel">版本标签 / 默认渠道</span><input id="install-tag" value="stable" spellcheck="false" autocomplete="off" aria-describedby="tag-help"></label>
         </div>
-        <p id="tag-help" class="tag-help" data-i18n="tagHelp">stable 保留默认 Linux 渠道；填写 Release 标签可锁定版本。musl / macOS 使用 GitHub Release。</p>
+        <p id="tag-help" class="tag-help" data-i18n="tagHelp">stable 保留默认 Linux 渠道；填写 Release 标签可锁定版本。中文安装使用阿里云 OSS 镜像，英文使用 GitHub Release。</p>
         <p id="tag-error" class="tag-help" role="status" hidden></p>
         <div class="terminal-head"><span data-i18n="terminal"><span class="terminal-dot"></span> 在目标机器的终端中运行</span><span class="platform" id="install-architecture">x86_64</span></div>
         <div class="command-row" data-language-panel="zh"><span class="prompt" aria-hidden="true">$</span><code id="install-command">curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --install-system-deps</code><button id="copy-command" type="button" aria-label="复制安装命令">复制</button></div>
@@ -76,16 +76,16 @@ limitations under the License.
         <summary data-i18n="muslTitle">musl 运行时：包内或宿主（可选）</summary>
         <p data-i18n="muslIntro">Linux x86_64 使用 <code>--tag musl-v0.1.0-2</code> 自动选择 musl 包，旧参数 <code>--musl</code> 仍可用。默认使用包内 musl，也支持 glibc 宿主；请使用独立目录。</p>
         <pre><code id="musl-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"</code></pre>
+  --source oss --tag musl-v0.1.0-2 --musl-runtime bundled --install-system-deps --dir "$HOME/semantic-musl"</code></pre>
         <p data-i18n="muslRuntime"><code>--musl-runtime bundled</code> 使用包内 musl 1.2.5；<code>--musl-runtime system</code> 使用宿主已安装的 musl 1.2+ 加载器。随包提供 CPython 3.13.15、NumPy 2.3.5、机器人依赖和 Mesa，无需编译源码。不会修改系统 /lib 或软件源；切换运行时请使用新目录。</p>
         <p data-i18n="muslRender">默认自动选择可用的 Mesa GPU，失败时回退到软件渲染。增加 <code>--render-backend software</code> 可强制软件渲染；<code>--render-backend mesa-gpu</code> 要求硬件渲染成功。AMD 已实测；Intel / Nouveau 尚未实机验证。NVIDIA 专有驱动请使用默认 glibc 安装。</p>
         <p class="musl-release" data-i18n="muslRelease">可选预发布版 <a href="https://github.com/insightos-community/quick-start/releases/tag/musl-v0.1.0-2">musl-v0.1.0-2 ↗</a> · 约 626 MiB · 已验证 Ubuntu 22.04 / Alpine 3.23 离线安装与软件渲染。</p>
       </details>
       <details class="musl-install" id="macos-install">
         <summary data-i18n="macosTitle">macOS 原生安装（Apple Silicon）</summary>
-        <p data-i18n="macosIntro">macOS 15.5+，支持 Apple Silicon arm64。使用同一个安装入口，按 <code>--tag</code> 选择 macOS Release；当前没有 OSS 镜像，直接从 GitHub 下载并校验。</p>
+        <p data-i18n="macosIntro">macOS 15.5+，支持 Apple Silicon arm64。使用同一个安装入口，按 <code>--tag</code> 选择 macOS Release；中文入口从阿里云 OSS 镜像下载，与 GitHub Release 使用相同 SHA-256 校验。</p>
         <pre><code id="macos-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
-  --source github --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"</code></pre>
+  --source oss --tag macos-v0.1.0-rc.4 --dir "$HOME/semantic-macos"</code></pre>
         <p data-i18n="macosRuntime">随包提供 Python 3.13.15、NumPy 2.3.5、MuJoCo 和机器人依赖，无需 Homebrew 或预装 Python。Web 请求 auto，由 Runtime 使用配置的 CGL。预览版未公证；真机 GPU 渲染仍需复测。</p>
         <p data-i18n="macosUpgrade">更换标签时先停止旧实例，使用新的 <code>--dir</code> 安装并刷新浏览器。安装器不会覆盖其他版本或自动迁移数据库；旧配置和数据保留在原目录。</p>
         <p data-i18n="macosRelease"><a href="https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4">macos-v0.1.0-rc.4 ↗</a> · 约 412 MiB · 安装、API、物理仿真与启停检查已通过。</p>
@@ -126,7 +126,7 @@ limitations under the License.
     </section>
     <section class="section wrap compatibility" id="requirements">
       <div><span class="eyebrow">BEFORE YOU INSTALL</span><h2 data-i18n="requirementsTitle">先确认，后部署。</h2><p data-i18n="requirementsIntro">支持 Linux x86_64 的 glibc / musl 安装包，以及 macOS Apple Silicon arm64 原生预览包。各平台使用独立运行时和依赖，不能混用。</p></div>
-      <div class="compat-list"><div><strong data-i18n="validatedTitle">已验证系统</strong><span data-i18n="validated">Ubuntu 24.04（glibc）；Ubuntu 22.04 / Alpine 3.23（musl）；macOS 15.5+ Apple Silicon（安装、API、物理仿真检查）</span></div><div><strong data-i18n="compatibilityTitle">兼容性边界</strong><span data-i18n="compatibility">glibc 基线 ≥ 2.28；musl 默认随包提供，system 模式需要宿主 musl 1.2+；macOS 使用系统 CGL，真机 GPU 渲染仍需验证。暂不支持 Intel Mac、Windows 或 Linux ARM64。</span></div><div><strong data-i18n="updatesTitle">下载与更新</strong><span data-i18n="updates">中文默认 Linux 渠道使用阿里云 OSS；英文默认使用 GitHub Releases。显式 --tag 默认从 GitHub 选择对应版本。musl / macOS 当前没有 OSS 产物，使用 GitHub Release。跨版本或平台切换需要新目录，保留旧数据并显式迁移。</span></div></div>
+      <div class="compat-list"><div><strong data-i18n="validatedTitle">已验证系统</strong><span data-i18n="validated">Ubuntu 24.04（glibc）；Ubuntu 22.04 / Alpine 3.23（musl）；macOS 15.5+ Apple Silicon（安装、API、物理仿真检查）</span></div><div><strong data-i18n="compatibilityTitle">兼容性边界</strong><span data-i18n="compatibility">glibc 基线 ≥ 2.28；musl 默认随包提供，system 模式需要宿主 musl 1.2+；macOS 使用系统 CGL，真机 GPU 渲染仍需验证。暂不支持 Intel Mac、Windows 或 Linux ARM64。</span></div><div><strong data-i18n="updatesTitle">下载与更新</strong><span data-i18n="updates">中文三个平台均使用阿里云 OSS，英文使用 GitHub Releases。OSS 的 glibc stable 已统一为 GitHub v0.1.0。可用 --tag 选择已发布标签，或 --source github 切换下载源。三个平台的 OSS 镜像与 GitHub Release 安装包及校验和完全一致。跨版本或平台切换需要新目录，保留旧数据并显式迁移。</span></div></div>
     </section>
     <section class="section wrap faq">
       <span class="eyebrow">GOOD TO KNOW</span><h2 data-i18n="faqTitle">常见问题</h2>

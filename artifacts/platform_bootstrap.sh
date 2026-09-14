@@ -3,7 +3,7 @@
 # Darwin routes before Python detection: the verified archive supplies Python.
 semantic_macos_dispatch() (
   local selected_tag='' selected_source=auto instance_dir="$HOME/Library/Application Support/Semantic"
-  local action=install show_help=0
+  local action=install show_help=0 explicit_base=0
   local forwarded=()
   while (($#)); do
     case "$1" in
@@ -19,20 +19,23 @@ semantic_macos_dispatch() (
       --dir) instance_dir="${2:?Missing --dir}"; shift 2 ;;
       --dir=*) instance_dir="${1#*=}"; shift ;;
       --musl|--musl-runtime|--musl-runtime=*) echo 'musl requires Linux x86_64; macOS uses its native arm64 Release.' >&2; exit 2 ;;
-      --base-url|--base-url=*|--ticket|--ticket=*) echo 'macOS OSS artifacts are not published. Use --source github or an offline --package with --sha256.' >&2; exit 2 ;;
+      --base-url) forwarded+=("$1" "${2:?Missing --base-url}"); explicit_base=1; shift 2 ;;
+      --base-url=*) forwarded+=("$1"); explicit_base=1; shift ;;
+      --ticket|--ticket=*) echo 'macOS supports public HTTPS mirrors or an offline --package with --sha256; private tickets require a local package.' >&2; exit 2 ;;
       --uninstall|uninstall) [[ "$action" == install ]] || exit 2; action=uninstall; shift ;;
       --configure-existing) [[ "$action" == install ]] || exit 2; action=configure; shift ;;
       --help|-h) show_help=1; shift ;;
       *) forwarded+=("$1"); shift ;;
     esac
   done
+  [[ "$selected_source" != auto || "$explicit_base" != 1 ]] || selected_source=oss
   case "$selected_source" in
-    auto|github) ;;
-    oss) echo 'macOS OSS artifacts are not published; use --source github.' >&2; exit 2 ;;
+    auto) selected_source=oss ;; # Language default, generated for English.
+    github|oss) ;;
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github|oss] [--base-url HTTPS_URL] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
     echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
@@ -50,6 +53,6 @@ semantic_macos_dispatch() (
     [[ "$selected_tag" != stable ]] || selected_tag=''
     local version_args=()
     [[ -z "$selected_tag" ]] || version_args=(--tag "$selected_tag")
-    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
+    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --source "$selected_source" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   fi
 )

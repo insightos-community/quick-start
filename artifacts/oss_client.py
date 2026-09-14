@@ -150,7 +150,7 @@ class Store:
 
     def upload(self, path, relative, mutable=False):
         path = Path(path)
-        if mutable and relative not in ('install.sh', 'channels/stable.json'):
+        if mutable and relative not in ('install.sh', 'channels/stable.json', 'channels/musl-stable.json'):
             raise ValueError('只允许更新安装入口和默认版本清单')
         key, checksum = self.key(relative), digest(path)
         head = self.head(key)

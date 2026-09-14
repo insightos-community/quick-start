@@ -28,9 +28,9 @@ const englishCopy = {
   platformLabel: "Installation platform",
   uninstallFallback: "For older or incomplete installations, fetch the small entry script to uninstall. It does not download the full archive:",
   tagLabel: "Release tag / default channel",
-  tagHelp: "stable keeps the default Linux channel; enter a Release tag to pin a version. musl/macOS use GitHub Releases.",
+  tagHelp: "stable keeps the default Linux channel; enter a Release tag to pin a version. Chinese commands use OSS mirrors; English uses GitHub Releases.",
   macosTitle: "Native macOS installation (Apple Silicon)",
-  macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. No OSS mirror is available yet; downloads come from GitHub with checksum verification.",
+  macosIntro: "Requires macOS 15.5+ on Apple Silicon arm64. Use the same entry script and select a macOS Release with <code>--tag</code>. English downloads use GitHub Releases; Chinese commands use the identical OSS mirror. Both verify SHA-256.",
   macosRuntime: "Bundles Python 3.13.15, NumPy 2.3.5, MuJoCo and robot dependencies. No Homebrew or host Python is required. Web requests auto and the Runtime uses configured CGL. This preview is not notarized; physical GPU rendering still needs testing.",
   macosUpgrade: "Stop the old instance before installing another tag into a new <code>--dir</code>, then reload the browser. The installer neither overwrites other versions nor migrates databases automatically; old configuration and data remain in the original directory.",
   macosRelease: "<a href=\"https://github.com/insightos-community/quick-start/releases/tag/macos-v0.1.0-rc.4\">macos-v0.1.0-rc.4 ↗</a> · Approx. 412 MiB · Installation, API, physics and lifecycle checks passed.",
@@ -101,7 +101,7 @@ const englishCopy = {
     "glibc baseline ≥ 2.28; musl is bundled by default, while system mode needs host musl 1.2+. macOS uses system CGL; physical GPU rendering still needs validation. Intel Mac, Windows and Linux ARM64 are not supported.",
   updatesTitle: "Downloads and updates",
   updates:
-    "The Chinese default Linux channel uses Aliyun OSS; English defaults to GitHub Releases. An explicit --tag selects its GitHub Release by default. musl/macOS have no OSS artifacts yet and use GitHub Releases. Install other versions/platforms into a new directory and migrate data explicitly.",
+    "Chinese installation uses Aliyun OSS mirrors; English uses GitHub Releases. All three platforms use identical release archives and checksums. The OSS glibc stable channel now selects GitHub v0.1.0. Install other versions/platforms into a new directory and migrate data explicitly.",
   faqTitle: "Frequently asked questions",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",
@@ -179,17 +179,17 @@ function updateInstallCommand() {
     button.disabled = !valid;
     const command = document.getElementById(lang === "en" ? "install-command-en" : "install-command");
     if (!valid) { command.textContent = ""; continue; }
-    const oss = target === "glibc" && tag === "stable" && lang === "zh";
+    const oss = lang === "zh";
     const release = tag === "stable" ? "v0.1.0" : tag;
-    const source = oss ? "--source oss --version stable" : `--source github --tag ${release}`;
+    const source = oss ? (tag === "stable" ? "--source oss --version stable" : `--source oss --tag ${release}`) : `--source github --tag ${release}`;
     const options = target === "macos" ? ' --dir "$HOME/semantic-macos"'
       : target === "musl" ? ' --install-system-deps --dir "$HOME/semantic-musl"'
       : " --install-system-deps";
     command.textContent = `curl -fsSL https://semantic.insightos.cn/install${lang === "en" ? "-en" : ""}.sh | bash -s -- ${source}${options}`;
   }
   document.getElementById("install-architecture").textContent = target === "macos" ? "arm64" : "x86_64";
-  document.querySelector('[data-i18n="downloadRegion"]').textContent = target === "glibc" && tag === "stable" && !en
-    ? "默认 Linux 渠道 · 阿里云 OSS" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
+  document.querySelector('[data-i18n="downloadRegion"]').textContent = !en
+    ? "中国大陆 · 阿里云 OSS 镜像" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
 }
 for (const button of document.querySelectorAll('[data-platform]')) {
   button.addEventListener('click', () => {
@@ -217,7 +217,7 @@ function setLanguage(language, persist = false) {
       ? original.replaceAll(
           "https://semantic.insightos.cn/install.sh",
           "https://semantic.insightos.cn/install-en.sh",
-        )
+        ).replaceAll("--source oss", "--source github")
       : original;
   for (const panel of document.querySelectorAll("[data-language-panel]"))
     panel.hidden = panel.dataset.languagePanel !== currentLanguage;

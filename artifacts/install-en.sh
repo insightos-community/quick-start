@@ -25,7 +25,7 @@ set -euo pipefail
 # Darwin routes before Python detection: the verified archive supplies Python.
 semantic_macos_dispatch() (
   local selected_tag='' selected_source=auto instance_dir="$HOME/Library/Application Support/Semantic"
-  local action=install show_help=0
+  local action=install show_help=0 explicit_base=0
   local forwarded=()
   while (($#)); do
     case "$1" in
@@ -41,20 +41,23 @@ semantic_macos_dispatch() (
       --dir) instance_dir="${2:?Missing --dir}"; shift 2 ;;
       --dir=*) instance_dir="${1#*=}"; shift ;;
       --musl|--musl-runtime|--musl-runtime=*) echo 'musl requires Linux x86_64; macOS uses its native arm64 Release.' >&2; exit 2 ;;
-      --base-url|--base-url=*|--ticket|--ticket=*) echo 'macOS OSS artifacts are not published. Use --source github or an offline --package with --sha256.' >&2; exit 2 ;;
+      --base-url) forwarded+=("$1" "${2:?Missing --base-url}"); explicit_base=1; shift 2 ;;
+      --base-url=*) forwarded+=("$1"); explicit_base=1; shift ;;
+      --ticket|--ticket=*) echo 'macOS supports public HTTPS mirrors or an offline --package with --sha256; private tickets require a local package.' >&2; exit 2 ;;
       --uninstall|uninstall) [[ "$action" == install ]] || exit 2; action=uninstall; shift ;;
       --configure-existing) [[ "$action" == install ]] || exit 2; action=configure; shift ;;
       --help|-h) show_help=1; shift ;;
       *) forwarded+=("$1"); shift ;;
     esac
   done
+  [[ "$selected_source" != auto || "$explicit_base" != 1 ]] || selected_source=oss
   case "$selected_source" in
-    auto|github) ;;
-    oss) echo 'macOS OSS artifacts are not published; use --source github.' >&2; exit 2 ;;
+    auto) selected_source=github ;; # Language default, generated for English.
+    github|oss) ;;
     *) echo 'Use --source auto|github|oss.' >&2; exit 2 ;;
   esac
   if ((show_help)); then
-    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github] [--dir PATH] [--yes]'
+    echo 'Semantic macOS: [--tag macos-v0.1.0-rc.4] [--source auto|github|oss] [--base-url HTTPS_URL] [--dir PATH] [--yes]'
     echo 'Native Apple Silicon, macOS 15.5+. Uses bundled Python; no Homebrew/Python setup required.'
     echo 'Offline: --package ARCHIVE --sha256 HASH. Management: --uninstall / --configure-existing --dir PATH.'
     echo 'Linux tags: v0.1.0 (glibc), musl-v0.1.0-2 (musl); run those on Linux x86_64.'
@@ -72,7 +75,7 @@ semantic_macos_dispatch() (
     [[ "$selected_tag" != stable ]] || selected_tag=''
     local version_args=()
     [[ -z "$selected_tag" ]] || version_args=(--tag "$selected_tag")
-    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
+    semantic_native_macos ${version_args[@]+"${version_args[@]}"} --source "$selected_source" --dir "$instance_dir" ${forwarded[@]+"${forwarded[@]}"}
   fi
 )
 
@@ -86,6 +89,9 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
 fi
 release_tag='macos-v0.1.0-rc.4'
 archive_path=''
+download_source=auto
+download_base='https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
+explicit_base=0
 expected_sha=''
 instance_dir="$HOME/Library/Application Support/Semantic"
 cache_dir="${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers"
@@ -99,6 +105,10 @@ runtime_port=8090
 options=()
 while (($#)); do
   case "$1" in
+    --source) download_source="${2:?Missing source}"; shift 2 ;;
+    --source=*) download_source="${1#*=}"; shift ;;
+    --base-url) download_base="${2:?Missing base URL}"; explicit_base=1; shift 2 ;;
+    --base-url=*) download_base="${1#*=}"; explicit_base=1; shift ;;
     --tag) release_tag="${2:?Missing tag}"; shift 2 ;;
     --tag=*) release_tag="${1#*=}"; shift ;;
     --package) archive_path="${2:?Missing package path}"; shift 2 ;;
@@ -130,6 +140,7 @@ while (($#)); do
       options+=("$flag" "$value"); shift ;;
     --help|-h)
       echo 'Usage: bash install-macos.sh [--tag macos-vVERSION] [--dir PATH] [--yes] [--no-start]'
+      echo 'Sources: --source auto|github|oss; auto uses GitHub, or an explicit --base-url HTTPS mirror.'
       echo 'Offline: --package ARCHIVE --sha256 SHA256. Cache: --cache-dir PATH (verified archives survive failed installs).'
       echo 'Uninstall: --uninstall --dir PATH [--yes] [--purge] [--dry-run]; uses installed files, no archive download.'
       exit 0 ;;
@@ -155,6 +166,13 @@ if [[ "$action" == uninstall ]]; then
   fi
   exit 0
 fi
+case "$download_source" in
+  auto) if ((explicit_base)); then download_source=oss; else download_source=github; fi ;;
+  github) ((explicit_base == 0)) || { echo '--source github cannot be combined with --base-url' >&2; exit 2; } ;;
+  oss) ;;
+  *) echo 'Use --source auto|github|oss' >&2; exit 2 ;;
+esac
+[[ "$download_base" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]] || { echo 'Use an HTTPS mirror URL without credentials, query or fragment' >&2; exit 2; }
 [[ "$release_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag' >&2; exit 1; }
 for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
   [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Ports must be numbers between 1024 and 65535' >&2; exit 2; }
@@ -318,7 +336,12 @@ staged=''
 trap 'rm -rf -- "$task_tmp"; [[ -z "$staged" ]] || rm -f -- "$staged"' EXIT
 if [[ -z "$archive_path" ]]; then
   archive_name="semantic-${release_tag#macos-v}-macos-arm64.tar.gz"
-  release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
+  if [[ "$download_source" == oss ]]; then
+    release_url="${download_base%/}/releases/${release_tag#macos-v}/macos-arm64"
+  else
+    release_url="https://github.com/insightos-community/quick-start/releases/download/$release_tag"
+  fi
+  echo "[>] Download source: $download_source ($release_tag)" >&2
   curl --fail --location --proto '=https' --tlsv1.2 --retry 3 "$release_url/SHA256SUMS" -o "$task_tmp/SHA256SUMS"
   expected_sha="$(awk -v name="$archive_name" '$2 == name {print $1}' "$task_tmp/SHA256SUMS")"
   [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'A valid SHA256 is required' >&2; exit 1; }
@@ -745,7 +768,7 @@ if a.source == 'oss' and not a.base_url:
     a.base_url = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
 if a.source == 'github' and (explicit_base or a.ticket):
     p.error('--source github cannot be combined with --base-url or --ticket')
-use_github = a.source == 'github' or (a.source == 'auto' and not a.ticket and not explicit_base and (a.tag or (a.musl and not os.environ.get('SEMANTIC_DOWNLOAD_BASE')) or not a.base_url))
+use_github = a.source == 'github' or (a.source == 'auto' and not a.ticket and not explicit_base and not a.base_url)
 if a.musl_runtime and not a.musl:
     raise SystemExit('--musl-runtime requires --musl')
 if a.musl_runtime and not a.configure_existing:
@@ -755,7 +778,7 @@ if a.musl and not a.configure_existing:
 if a.help:
     print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')
     print('Tags: --tag v0.1.0 | --tag musl-v0.1.0-2 | --tag macos-v0.1.0-rc.4')
-    print('Sources: --source auto|github|oss; explicit tags use GitHub by default. musl/macOS currently use GitHub Releases.')
+    print('Sources: --source auto|github|oss; Chinese defaults to OSS; English defaults to GitHub. Both support explicit source selection for all platforms.')
     print('musl: --musl [--musl-runtime bundled|system] [--render-backend auto|mesa-gpu|software]; Linux x86_64; bundled works on glibc hosts')
     print('Install: --dir ABS_PATH --yes --no-start --install-system-deps')
     print('Network: new installs use Web 0.0.0.0:3000 (localhost and LAN); API/WS stay local')
@@ -1140,12 +1163,11 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             selected_platform = 'linux-musl-x86_64' if a.musl else 'linux-x86_64'
             channel = 'musl-stable' if a.musl else 'stable'
             oss_version = a.version
-            if a.tag:
-                if a.musl:
-                    version, revision = a.tag.removeprefix('musl-v').rsplit('-', 1)
-                    oss_version = version + '-musl.' + revision
-                else:
-                    oss_version = a.tag.removeprefix('v')
+            if a.version.startswith('musl-v'):
+                version, revision = a.version.removeprefix('musl-v').rsplit('-', 1)
+                oss_version = version + '-musl.' + revision
+            elif a.version.startswith('v'):
+                oss_version = a.version.removeprefix('v')
             suffix = f'channels/{channel}.json' if oss_version == 'stable' else f'releases/{oss_version}/{selected_platform}/manifest.json'
             download(a.base_url.rstrip('/') + '/' + suffix, work/'manifest.json', 1024*1024)
             m = json.loads((work/'manifest.json').read_text())
