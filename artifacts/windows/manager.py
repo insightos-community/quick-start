@@ -126,8 +126,13 @@ class Manager:
             command.append('-Purge')
         try:
             with (temporary/'cleanup.log').open('wb') as log:
-                subprocess.Popen(command, cwd=temporary, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
+                child = subprocess.Popen(command, cwd=temporary, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+            deadline = time.monotonic()+20
+            while not (temporary/'result.json.started').exists():
+                if child.poll() is not None or time.monotonic() >= deadline:
+                    raise RuntimeError('Cleanup helper did not start; inspect '+str(temporary/'cleanup.log'))
+                time.sleep(0.1)
         except Exception:
             self.state = original
             shared.write_json(self.root/'install.json', self.state)

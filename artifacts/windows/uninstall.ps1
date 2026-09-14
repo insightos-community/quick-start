@@ -37,6 +37,7 @@ function RemoveTree([string]$Path) {
     }
 }
 try {
+    [IO.File]::WriteAllText($Result+'.started', 'started', $utf8)
     [Console]::WriteLine('Cleanup helper started')
     $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
     if ($Root -eq [IO.Path]::GetPathRoot($Root).TrimEnd('\') -or $Root -eq [Environment]::GetFolderPath('UserProfile')) { throw 'Dedicated installation directory required' }
