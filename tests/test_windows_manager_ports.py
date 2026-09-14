@@ -157,7 +157,7 @@ class WindowsManagerContracts(unittest.TestCase):
                     parent.wait(timeout=10)
                 helper.wait(timeout=30)
                 self.assertEqual(helper.returncode, 0, log.read_text(errors='replace'))
-                self.assertTrue(json.loads(result.read_text())['success'])
+                self.assertTrue(json.loads(result.read_text(encoding='utf-8'))['success'])
                 self.assertFalse(root.exists())
                 if not matched:
                     self.assertIsNone(parent.poll(), 'Cleanup touched a reused PID')
