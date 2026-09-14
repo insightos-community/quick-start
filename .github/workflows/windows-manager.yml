@@ -82,6 +82,25 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw ''Offline cleanup failed'' }
 
         '
+  python_payload:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+      with:
+        arch: x64
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        version: 0.12.12
+    - name: Verify bundled Python and native filenames
+      run: 'uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python tests/test_windows_python_payload.py
+
+        if ($LASTEXITCODE -ne 0) { throw ''Python payload verification failed'' }
+
+        '
 'on':
   workflow_dispatch: null
   push:
@@ -95,6 +114,7 @@ jobs:
     - artifacts/runtime/**
     - tests/test_windows_manager_ports.py
     - .github/workflows/windows-manager.yml
+    - tests/test_windows_python_payload.py
 concurrency:
   group: windows-manager-${{ github.ref }}
   cancel-in-progress: true

@@ -40,15 +40,23 @@ No administrator privileges or Unix tools are required by the installer.
 
 ## Reproduce the assembly
 
-Use native Windows x64, Git, Go 1.25.8, uv 0.12.12 and the compiler recipes in the
+Use native Windows 10 1903+ x64, Git, Go 1.25.8, uv 0.12.12, Visual Studio 2022
+with its Windows SDK (`mt.exe`), and the compiler recipes in the
 pinned component repositories. [sources.json](sources.json) records exact source
 commits. The [preview workflow](../../.github/workflows/windows-installer.yml)
 builds the Framework, Pilot, Gateway and supervisor, then consumes successful
-native AbilityFramework, Ability and Pinocchio CI outputs at their pinned revisions.
-`fetch_native.py` checks the producing run's revision and success; native package
-manifests and wheel hashes are checked again during assembly. CI artifact retention
-is finite: these inputs must become durable component releases before this recipe
-is used as a long-term release channel.
+[AbilityFramework](https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1)
+and [R1 Pro Ability](https://github.com/insightos-community/r1pro-ability/releases/tag/windows-v0.4.0-preview.1)
+component releases. `native-releases.json` pins each checksum manifest; source
+identities and asset hashes are checked on download. Pinocchio is still a pinned
+CI input until its standalone validation and component release succeed.
+
+The assembler removes pip's unused ARM/32-bit launcher templates and records their
+hashes. It preserves the x64 launchers. The bundled Python executable manifests
+enable the [UTF-8 process code page](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page)
+so native libraries can open UTF-8 filenames in Chinese installation directories.
+Original and modified executable hashes and manifests are included in the payload.
+A native test checks the relocated interpreter and an actual CRT `fopen` call.
 
 With those sources checked out under `sources/` and the native outputs available:
 

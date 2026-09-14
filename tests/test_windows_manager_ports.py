@@ -76,7 +76,6 @@ class WindowsManagerContracts(unittest.TestCase):
             child.wait(timeout=10)
 
     def test_offline_uninstall_preserves_data_and_explicit_purge_removes_instance(self):
-        import manager as managed
         from install_support import component_values
         for purge in (False, True):
             root = self.root/('purge' if purge else 'preserve')
@@ -92,13 +91,30 @@ class WindowsManagerContracts(unittest.TestCase):
                        '--dir', str(root), 'uninstall', '--yes']
             if purge:
                 command.append('--purge')
-            result = subprocess.run(command, check=True, capture_output=True, timeout=15)
-            report = Path(result.stdout.decode('utf-8').strip().split('Result: ',1)[1])
-            deadline = time.monotonic()+20
-            while not report.exists() and time.monotonic() < deadline:
-                time.sleep(0.1)
-            self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
-            evidence = json.loads(report.read_text(encoding='utf-8'))
+            def cleanup():
+                result = subprocess.run(command, check=True, capture_output=True, timeout=30)
+                report = Path(result.stdout.decode('utf-8').strip().split('Result: ',1)[1])
+                deadline = time.monotonic()+30
+                while not report.exists() and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
+                return json.loads(report.read_text(encoding='utf-8'))
+            if not purge:
+                outside = self.root/'outside'
+                outside.mkdir()
+                (outside/'user.txt').write_text('external data',encoding='utf-8')
+                junction = root/'releases/0.1.0-test.1/bin/external'
+                subprocess.run(['cmd.exe','/d','/c','mklink','/J',str(junction),str(outside)],
+                               check=True,capture_output=True)
+                try:
+                    rejected = cleanup()
+                    self.assertFalse(rejected['success'], rejected)
+                    self.assertIn('Reparse point', rejected['error'])
+                    self.assertEqual((outside/'user.txt').read_text(), 'external data')
+                    self.assertTrue((root/'releases/0.1.0-test.1/bin/program.exe').is_file())
+                finally:
+                    os.rmdir(junction)
+            evidence = cleanup()
             self.assertTrue(evidence['success'], evidence)
             if purge:
                 self.assertFalse(root.exists())

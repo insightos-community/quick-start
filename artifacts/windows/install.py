@@ -51,6 +51,8 @@ def verify(payload):
 def install(args):
     if sys.platform != 'win32' or platform.machine().lower() not in ('amd64', 'x86_64'):
         raise ValueError('This payload requires native Windows x64')
+    if sys.getwindowsversion().build < 18362:
+        raise ValueError('This payload requires Windows 10 version 1903 or newer')
     payload = plain(args.payload.resolve())
     root = plain(args.dir.expanduser().absolute())
     if root in (Path(root.anchor), Path.home().resolve(), payload) or root in payload.parents or payload in root.parents:

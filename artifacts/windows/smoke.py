@@ -59,6 +59,22 @@ def main():
     report['offline_install_and_retry']=True
     manager=Manager(root)
     python=manager.release/'python/python.exe'
+    venvs = list(root.rglob('pyvenv.cfg'))
+    assert len(venvs) >= 2, 'Expected Robot and Runtime environments'
+    for config_path in venvs:
+        interpreter = config_path.parent/'Scripts/python.exe'
+        actual = json.loads(subprocess.check_output([str(interpreter),'-I','-B','-c',
+            'import json,sys; print(json.dumps(sys.base_prefix))'],env=env))
+        assert Path(actual).resolve() == python.parent.resolve(), actual
+    report['shared_base_python'] = str(python.parent)
+    manifest = shared.load(manager.release/'release.json')
+    robot_python = manager.release/'robot-bundles'/manifest['bundle_name']/'python/venv/Scripts/python.exe'
+    math_env = manager.environment()
+    math_env.update(PATH=os.pathsep.join([str(python.parent),str(manager.release/'bin'),env['PATH']]),
+        SEMANTIC_PINOCCHIO_SOURCE_COMMIT=json.loads((HERE/'sources.json').read_text())['pinocchio']['commit'])
+    subprocess.run([str(robot_python),'-I','-B',str(HERE.parents[1]/'sources/pinocchio/ci/windows/verify.py'),
+                    str(args.report.with_name('windows-installed-math.json'))],env=math_env,check=True)
+    report['installed_math_unicode_paths']=True
     ctl=[str(python),'-I','-B',str(manager.release/'manager.py'),'--dir',str(root)]
     def control(*arguments):
         subprocess.run(ctl+list(arguments),env=env,check=True)

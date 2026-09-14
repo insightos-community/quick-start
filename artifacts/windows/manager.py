@@ -19,7 +19,8 @@ import urllib.request
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parent/'runtime'))  # Source checkout; payload keeps helpers beside this file.
+if not (HERE/'installer.py').is_file():
+    sys.path.insert(0, str(HERE.parent/'runtime'))  # Source checkout only.
 import installer as shared
 from install_support import component_values, read_component_config, validate_components, component_yaml, export_components
 import windows_ports as ports

@@ -11,12 +11,14 @@ import shutil
 import struct
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 import yaml
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parent/'macos'))  # Shared archive helpers import their local wheel helper.
 from fetch_releases import digest, download, extract, fetch
 from macos.build import run, copy, archive, validate_skill_wheels
 
@@ -53,6 +55,48 @@ def zip_payload(source, target):
                 raise ValueError('Reparse point in payload: '+str(path))
             if path.is_file():
                 out.write(path, path.relative_to(source).as_posix())
+
+
+def prune_python_templates(python):
+    # Standalone CPython ships pip's cross-architecture launcher templates.
+    # This installer targets x64 only; keep pip's x64 launchers intact.
+    removed = {}
+    for name in ('w32.exe', 't32.exe', 'w64-arm.exe', 't64-arm.exe'):
+        path = python/'Lib/site-packages/pip/_vendor/distlib'/name
+        if path.is_file():
+            removed[path.relative_to(python).as_posix()] = digest(path)
+            path.unlink()
+    return removed
+
+
+def configure_python_utf8(python, metadata):
+    """Enable UTF-8 narrow Win32/CRT filenames used by native math libraries."""
+    metadata.mkdir(parents=True, exist_ok=True)
+    records = {}
+    for name in ('python.exe', 'pythonw.exe'):
+        path = python/name
+        content = path.read_bytes()
+        offset = struct.unpack_from('<I', content, 60)[0]
+        if struct.unpack_from('<II', content, offset+24+112+4*8) != (0, 0):
+            raise ValueError('Expected the pinned unsigned standalone Python executable: '+name)
+        original = digest(path)
+        manifest = metadata/(name+'.manifest')
+        run('mt.exe', '-nologo', '-inputresource:'+str(path)+';#1', '-out:'+str(manifest))
+        tree = ET.parse(manifest)
+        settings = tree.find('.//{urn:schemas-microsoft-com:asm.v3}windowsSettings')
+        if settings is None:
+            raise ValueError('Python Windows settings manifest is missing')
+        tag = '{http://schemas.microsoft.com/SMI/2019/WindowsSettings}activeCodePage'
+        node = settings.find(tag)
+        if node is None:
+            node = ET.SubElement(settings, tag)
+        node.text = 'UTF-8'
+        tree.write(manifest, encoding='utf-8', xml_declaration=True)
+        run('mt.exe', '-nologo', '-manifest', manifest, '-outputresource:'+str(path)+';#1')
+        records[name] = {'original_sha256':original, 'sha256':digest(path), 'active_code_page':'UTF-8'}
+    run(python/'python.exe', '-I', '-B', '-c',
+        'import ctypes; assert ctypes.windll.kernel32.GetACP()==65001')
+    return records
 
 
 def copy_native_abilities(source, bundle):
@@ -189,6 +233,8 @@ def build(a):
     python = Path(subprocess.check_output(['uv', 'python', 'find', '--managed-python', '3.13.15'], text=True).strip())
     prefix = Path(subprocess.check_output([str(python), '-c', 'import sys; print(sys.base_prefix)'], text=True).strip())
     copy(prefix, payload/'python')
+    write(payload/'python-pruning.json', prune_python_templates(payload/'python'))
+    write(payload/'python-manifests.json', configure_python_utf8(payload/'python', payload/'python-manifests'))
     run(payload/'python/python.exe', '-I', '-B', '-c',
         'import sys,ssl,sqlite3; from pathlib import Path; assert Path(sys.base_prefix).resolve()==Path(sys.argv[1]).resolve()', payload/'python')
     # Only installer dependencies are resolved here; the target installs offline.
@@ -293,7 +339,7 @@ def build(a):
     write(payload/'native-images.json', native_images(payload))
     write(payload/'repo-versions.json', {'native_sources':pins, 'component_releases':{k:{f:v for f,v in r.items() if f != 'directory'} for k,r in records.items()}})
     write(payload/'release.json', dict(schema_version=1, component='semantic-installer', version=a.version,
-        platform='windows-amd64', minimum_windows='Windows 10 1809 x64', robot_python='3.13.15', runtime_python='3.13.15',
+        platform='windows-amd64', minimum_windows='Windows 10 1903 x64', robot_python='3.13.15', runtime_python='3.13.15',
         bundle_name=bundle_name, runtime_pack=pack_name, robot_skills=skills,
         source_commit=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip(),
         validation_scope='Native offline installation, API, robot math and physics. Physical Windows GLFW/OpenGL graphics qualification pending.',
