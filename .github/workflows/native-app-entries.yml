@@ -7,8 +7,6 @@ on:
     - artifacts/windows/**
     - tests/test_native_app_entries.py
     - .github/workflows/native-app-entries.yml
-  push:
-    branches: [feat/native-app-entries]
 permissions:
   contents: read
 jobs:

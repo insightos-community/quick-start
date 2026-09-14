@@ -105,7 +105,7 @@ public static class SemanticCleanupParent {
             $parent = [IO.Path]::GetDirectoryName($path)
             $name = [IO.Path]::GetFileName($path)
             if ($parent -notin @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('DesktopDirectory')) -or $name -notin @("Semantic ($id).lnk", "Uninstall Semantic ($id).lnk")) { continue }
-            Plain $path
+            try { Plain $path } catch { continue }
             if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -eq $record.Value) { [IO.File]::Delete($path) }
         }
     }

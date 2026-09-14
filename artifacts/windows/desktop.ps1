@@ -41,18 +41,19 @@ $programs = [Environment]::GetFolderPath('Programs')
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
 foreach ($directory in @($programs, $desktop)) {
     if (!$directory) { continue }
-    Plain $directory
+    try { Plain $directory } catch { continue }
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     foreach ($action in @('open', 'uninstall')) {
         $title = if ($action -eq 'open') { 'Semantic' } else { 'Uninstall Semantic' }
         $path = Join-Path $directory "$title ($id).lnk"
-        Plain $path
+        try { Plain $path } catch { continue }
         if (Test-Path -LiteralPath $path) {
             $old = if ($state.PSObject.Properties['native_shortcuts']) { $state.native_shortcuts.PSObject.Properties[$path] } else { $null }
             if (!$old -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -ne $old.Value) { continue }
         }
         $link = $shell.CreateShortcut($path)
-        $link.TargetPath = Join-Path $release 'python\python.exe'
+        $targetPath = [IO.Path]::Combine($release, 'python', 'python.exe')
+        $link.TargetPath = [string]$targetPath
         $link.Arguments = '-I -B "'+(Join-Path $release 'manager.py')+'" --dir "'+$Root+'" '+$action+' --interactive'
         $link.WorkingDirectory = [IO.Path]::GetTempPath()
         $link.IconLocation = "$icon,0"
