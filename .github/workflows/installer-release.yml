@@ -81,6 +81,8 @@ jobs:
 
         python3 -m unittest discover -s tests -p test_install_preflight_cache.py
 
+        python3 -m unittest discover -s tests -p test_component_config.py
+
         python3 -m unittest discover -s tests -p test_oss_platform_bootstrap.py
 
         python3 -m unittest discover -s tests -p test_platform_bootstrap.py

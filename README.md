@@ -241,6 +241,8 @@ is refreshed; cached archives are verified again. A failed or corrupt download i
 never accepted as a valid cache entry. Offline archives supplied with `--package`
 are checked by the installer before it changes the instance.
 
+New installations use HTTP API port `8034` (override with `--http-port PORT`); Web remains on `3000`. Existing instances keep their configured HTTP port when retrying.
+
 Resolve port conflicts or choose `--http-port`, `--ws-port`, `--web-port` and
 `--runtime-port`, then retry the same command. Existing instances retain their
 configured ports. The scripts do not stop unrelated services.
@@ -263,3 +265,38 @@ curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
 This does not download the installer archive. The website's uninstall examples
 follow the selected platform. Configuration, data and logs are kept unless you
 explicitly select `--purge` and confirm.
+
+## Component YAML and reconfiguration
+
+New installations default to HTTP API **8034**, WebSocket **8035**, MuJoCo Runtime **8036**, Web **3000**, and Ability ports **18100–18199**. Existing instances retain their configured ports.
+
+```bash
+# Export defaults, or pass an existing --dir to export that instance's settings.
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --export-config semantic-components.yaml
+# Edit the file, then install. Existing --tag/--musl/--source options still apply.
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  -f semantic-components.yaml --dir "$HOME/semantic"
+# Export and reconfigure locally, without downloading the archive.
+"$HOME/semantic/bin/semanticctl" export-config --output semantic-current.yaml
+"$HOME/semantic/bin/semanticctl" reconfigure -f semantic-current.yaml
+# Upgrade an older manager and reconfigure using the small website bootstrap.
+curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- \
+  reconfigure --dir "$HOME/semantic" -f semantic-current.yaml
+```
+
+```yaml
+schema_version: 1
+http_port: 8034
+ws_port: 8035
+web_port: 3000
+runtime_port: 8036
+ability_port_first: 18100
+ability_port_last: 18199
+web_host: 0.0.0.0  # macOS defaults to 127.0.0.1
+```
+
+This is a flat scalar YAML mapping: comments and quoted values are supported; nested structures, anchors, tags, unknown/duplicate keys and conflicting ports are rejected. CLI options override YAML, which overrides existing settings or new-install defaults. Export never overwrites a file; use `--export-config -` for stdout.
+
+Stop scenes and Robot Runtime before reconfiguration. The manager checks ports, backs up configuration, updates Server listeners, Web proxy targets, rendered Robot/Pilot connections and MuJoCo discovery, then restarts affected services. A restart failure restores configuration. Web-only changes preserve the Server process. Releases, databases and credentials remain intact; no passwords are exported. The applied YAML is saved as `configs/components.yaml`; backups are in `configs/reconfigure-backup-*`.
+
+Remove existing Robot instances in Studio before changing their allocated Ability port range; incompatible changes are rejected. A new Mac can export the default template without system Python; existing Macs use bundled Python for export and reconfiguration.

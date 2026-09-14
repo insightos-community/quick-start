@@ -215,7 +215,7 @@ Arch 请先由管理员保持系统更新；脚本使用 `pacman -S --needed`，
 未知发行版允许管理员手动满足依赖，但拒绝猜测包管理器后自动修改系统。
 
 可以用 `--http-port`、`--ws-port`、`--web-port`、`--runtime-port` 避开现有服务。
-默认依次为 8080、8081、3000、8090。安装器不自动停止其他进程来腾出端口。
+新安装默认依次为 8034、8035、3000、8036；已有实例保留配置的 HTTP 端口。安装器不自动停止其他进程来腾出端口。
 `--no-start` 只初始化而不启动 Server/Web；Runtime 安装仍执行隔离场景 smoke。
 
 ## HTTPS 一键入口
@@ -379,3 +379,5 @@ Translations live in `artifacts/installer.en.json`; do not edit generated
 ## 构建复现总入口
 
 [三平台构建指南](../README.build.md)列出 glibc、musl、macOS 的实际脚本、完整指令、固定版本和所有组件/依赖仓库入口。
+
+组件 YAML 导出、`-f` 安装和本地 reconfigure 见 [中文说明](../README.zh-CN.md#组件端口-yaml-与重新配置)。

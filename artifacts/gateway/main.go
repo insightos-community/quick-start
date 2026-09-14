@@ -74,7 +74,7 @@ func handler(root, api, ws string) http.Handler {
 func main() {
 	addr := flag.String("listen", "127.0.0.1:3000", "Web listen address")
 	root := flag.String("root", "web", "Production static directory")
-	api := flag.String("api", "http://127.0.0.1:8080", "Server HTTP URL")
+	api := flag.String("api", "http://127.0.0.1:8034", "Server HTTP URL")
 	ws := flag.String("ws", "http://127.0.0.1:8081", "Server WebSocket URL")
 	flag.Parse()
 	s := &http.Server{Addr: *addr, Handler: handler(*root, *api, *ws), ReadHeaderTimeout: 10 * time.Second}

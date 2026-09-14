@@ -251,3 +251,41 @@ curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
 
 该操作不会下载完整安装包。官网卸载示例会随平台选择更新目录。
 默认保留配置、数据和日志；只有显式 `--purge` 并确认后才删除整个实例。
+
+## 组件端口 YAML 与重新配置
+
+新安装默认端口：HTTP API **8034**、WebSocket **8035**、MuJoCo Runtime **8036**、Web **3000**；Ability 使用 **18100–18199**。已有实例导出其实际端口，不会因默认值更新而自动迁移。
+
+```bash
+# 导出默认配置；指定已有 --dir 时导出该实例的实际配置
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --export-config semantic-components.yaml
+
+# 编辑 YAML 后安装（可同时使用 --musl、--tag、--source 等原有选项）
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  -f semantic-components.yaml --dir "$HOME/semantic"
+
+# 安装后无需下载完整安装包即可重新配置
+"$HOME/semantic/bin/semanticctl" export-config --output semantic-current.yaml
+"$HOME/semantic/bin/semanticctl" reconfigure -f semantic-current.yaml
+
+# 老版本管理工具也可通过官网脚本升级并重新配置
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  reconfigure --dir "$HOME/semantic" -f semantic-current.yaml
+```
+
+配置是简单的平面 YAML 标量映射，支持注释及引号，不支持锚点、对象标签或嵌套结构；未知项、重复项、端口重叠和非法值会被拒绝。命令行端口参数优先于 YAML；未指定的配置保留已有值，新实例使用默认值。导出不会覆盖已有文件；使用 `--export-config -` 输出到终端。
+
+```yaml
+schema_version: 1
+http_port: 8034
+ws_port: 8035
+web_port: 3000
+runtime_port: 8036
+ability_port_first: 18100
+ability_port_last: 18199
+web_host: 0.0.0.0  # macOS 默认 127.0.0.1
+```
+
+重新配置前请停止场景和 Robot Runtime。安装器检查端口，备份配置，同步 Server、Web 代理、Robot/Pilot 连接地址及 MuJoCo 发现端点，然后重启受影响的托管服务；启动失败时恢复原配置。仅修改 Web 时保留 Server 进程。配置不含密码；数据库、业务发布包和凭据保留。安装后配置写入实例的 `configs/components.yaml`，备份位于 `configs/reconfigure-backup-*`。
+
+已有 Robot 实例分配的 Ability 端口范围需要先在 Studio 中移除对应实例才能更改；安装器会拒绝使现有端口分配失效的范围变更。新 Mac 无需预装 Python 即可导出默认模板；已有 Mac 使用随包 Python 导出和重新配置。

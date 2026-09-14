@@ -70,7 +70,7 @@ class PlatformBootstrapTests(unittest.TestCase):
             archive = root / 'package.tar.gz'
             content = b'#!/bin/bash\nprintf "%s\\n" "$@"\n'
             with tarfile.open(archive, 'w:gz') as tar:
-                member = tarfile.TarInfo('install.command'); member.mode = 0o755; member.size = len(content)
+                member = tarfile.TarInfo('python/bin/python3.13'); member.mode = 0o755; member.size = len(content)
                 tar.addfile(member, io.BytesIO(content))
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             env = {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH']}

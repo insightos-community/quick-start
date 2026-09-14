@@ -378,3 +378,72 @@ def welcome(root, state, started, desktop_message='', stream=None, clear=True):
     finally:
         if tty:
             tty.close()
+
+
+# The component file is deliberately a flat, scalar-only YAML mapping. Keeping
+# this grammar small lets the macOS bootstrap read it before Python is installed.
+COMPONENT_DEFAULTS = dict(http_port=8034, ws_port=8035, web_port=3000,
+                          runtime_port=8036, ability_port_first=18100,
+                          ability_port_last=18199, web_host='0.0.0.0')
+
+
+def component_values(state=None):
+    values = dict(COMPONENT_DEFAULTS)
+    if sys.platform == 'darwin':
+        values['web_host'] = '127.0.0.1'
+    values.update({k: v for k, v in (state or {}).items() if k in values})
+    return values
+
+
+def read_component_config(path):
+    import re
+    values = {}
+    text = Path(path).read_text(encoding='utf-8')
+    if len(text) > 16384:
+        raise ValueError('Component YAML exceeds 16 KiB')
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.split('#', 1)[0].strip()
+        if not line or line in ('---', '...'):
+            continue
+        match = re.fullmatch(r'([a-z_]+):\s*(?:([0-9.]+)|"([0-9.]+)"|\'([0-9.]+)\')', line)
+        if not match:
+            raise ValueError(f'Invalid component YAML at line {number}; use flat scalar key: value entries')
+        key, *parts = match.groups()
+        if key not in {'schema_version', *COMPONENT_DEFAULTS} or key in values:
+            raise ValueError('Unknown or duplicate component key: '+key)
+        value = next(part for part in parts if part is not None)
+        values[key] = value if key == 'web_host' else int(value)
+    if values.pop('schema_version', None) != 1:
+        raise ValueError('Component YAML requires schema_version: 1')
+    return values
+
+
+def validate_components(values):
+    ports = [values[k] for k in ('http_port', 'ws_port', 'web_port', 'runtime_port')]
+    if any(type(p) is not int or not 1024 <= p <= 65535 for p in ports) or len(set(ports)) != 4:
+        raise ValueError('Component ports must be distinct integers between 1024 and 65535')
+    first, last = values['ability_port_first'], values['ability_port_last']
+    if type(first) is not int or type(last) is not int or not 1024 <= first <= last <= 65535:
+        raise ValueError('Invalid Ability port range')
+    if any(first <= port <= last for port in ports):
+        raise ValueError('Component ports overlap the Ability port range')
+    web_host(values['web_host'])
+    return values
+
+
+def component_yaml(values):
+    validate_components(values)
+    return ('# Semantic component ports. CLI options override this file. No secrets.\n'
+            '# Flat YAML scalars only; comments and quoted scalars are supported.\n'
+            'schema_version: 1\n'+''.join(f'{key}: {values[key]}\n' for key in COMPONENT_DEFAULTS))
+
+
+def export_components(path, values):
+    text = component_yaml(values)
+    if str(path) == '-':
+        print(text, end='')
+        return
+    # Never overwrite an edited configuration without an explicit new filename.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(text)

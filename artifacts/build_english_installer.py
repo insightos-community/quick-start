@@ -53,12 +53,9 @@ def replace_once(source, old, new):
 def manager_sources():
     result = {name: translate((HERE/'runtime'/name).read_text())
               for name in ('installer.py', 'install_support.py', 'uninstall.py')}
-    # English management code is independent of immutable business payloads.
+    # Management code is independent of immutable business payloads.
     # Assets still come from the verified archive, while future semanticctl calls
     # retain the English management modules that installed/configured the instance.
-    result['installer.py'] = replace_once(result['installer.py'],
-        'shutil.copyfile(payload/name, target)',
-        "shutil.copyfile((Path(__file__).resolve().parent if name.endswith('.py') else payload)/name, target)")
     # Honor the target user's uv configuration and index environment variables.
     # System package-manager commands already use the machine's configured sources.
     result['installer.py'] = replace_once(result['installer.py'],
@@ -67,6 +64,16 @@ def manager_sources():
     result['install_support.py'] = replace_once(result['install_support.py'],
         'label_size = 8', 'label_size = 12')
     return result
+
+
+def manager_shell(english=False):
+    sources = manager_sources() if english else {name: (HERE/'runtime'/name).read_text()
+              for name in ('installer.py', 'install_support.py', 'uninstall.py')}
+    rows = ['semantic_write_manager() {', '  mkdir -p "$1"']
+    for name, source in sources.items():
+        rows += ["  cat > \"$1/"+name+"\" <<'SEMANTIC_MANAGER_SOURCE'", source.rstrip(), 'SEMANTIC_MANAGER_SOURCE']
+    rows += ['}']
+    return '\n'.join(rows)+'\n'
 
 
 def render():
@@ -81,6 +88,7 @@ def render():
     shell = replace_once(shell, '# OSS base: https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic', '# Default downloads: verified GitHub Releases and pinned GitHub LFS assets.')
     shell = replace_once(shell, 'auto) selected_source=oss ;; # Language default, generated for English.',
                          'auto) selected_source=github ;; # Language default, generated for English.')
+    shell = shell.replace(manager_shell(), manager_shell(english=True))
     python = replace_once(python,
         "print('默认 OSS: https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic；私有制品请使用 --ticket。')",
         "print('Public snapshot: no default binary channel. Supply an approved --package or --base-url.')")
@@ -117,7 +125,7 @@ def render():
     block.extend(['    }', "    manager = work/'english-manager'", '    manager.mkdir()',
                   '    for name, content in manager_sources.items():',
                   "        (manager/name).write_text(content, encoding='utf-8')"])
-    original = "    result = subprocess.run([sys.executable, '-B', str(payload/'installer.py'),"
+    original = "    result = subprocess.run([sys.executable, '-B', str(pathlib.Path(os.environ.get('SEMANTIC_BOOTSTRAP_MANAGER', str(payload)))/'installer.py'),"
     python = replace_once(python, original,
         '\n'.join(block)+"\n    result = subprocess.run([sys.executable, '-B', str(manager/'installer.py'),")
     ast.parse(python)

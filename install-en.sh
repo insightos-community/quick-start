@@ -98,10 +98,14 @@ cache_dir="${XDG_CACHE_HOME:-$HOME/Library/Caches}/semantic/installers"
 action=install
 no_start=0
 web_host=127.0.0.1
-http_port=8080
-ws_port=8081
+http_port=8034
+http_port_explicit=0
+ws_port=8035
+ws_port_explicit=0
 web_port=3000
-runtime_port=8090
+web_port_explicit=0
+runtime_port=8036
+runtime_port_explicit=0
 options=()
 while (($#)); do
   case "$1" in
@@ -125,21 +129,22 @@ while (($#)); do
     --http-port|--ws-port|--web-port|--runtime-port|--web-host)
       flag="$1"; value="${2:?Missing option value}"
       case "$flag" in
-        --http-port) http_port="$value" ;; --ws-port) ws_port="$value" ;;
-        --web-port) web_port="$value" ;; --runtime-port) runtime_port="$value" ;;
+        --http-port) http_port="$value"; http_port_explicit=1 ;; --ws-port) ws_port="$value"; ws_port_explicit=1 ;;
+        --web-port) web_port="$value"; web_port_explicit=1 ;; --runtime-port) runtime_port="$value"; runtime_port_explicit=1 ;;
         --web-host) web_host="$value" ;;
       esac
       options+=("$flag" "$value"); shift 2 ;;
     --http-port=*|--ws-port=*|--web-port=*|--runtime-port=*|--web-host=*)
       flag="${1%%=*}"; value="${1#*=}"
       case "$flag" in
-        --http-port) http_port="$value" ;; --ws-port) ws_port="$value" ;;
-        --web-port) web_port="$value" ;; --runtime-port) runtime_port="$value" ;;
+        --http-port) http_port="$value"; http_port_explicit=1 ;; --ws-port) ws_port="$value"; ws_port_explicit=1 ;;
+        --web-port) web_port="$value"; web_port_explicit=1 ;; --runtime-port) runtime_port="$value"; runtime_port_explicit=1 ;;
         --web-host) web_host="$value" ;;
       esac
       options+=("$flag" "$value"); shift ;;
     --help|-h)
       echo 'Usage: bash install-macos.sh [--tag macos-vVERSION] [--dir PATH] [--yes] [--no-start]'
+      echo 'HTTP API default: 8034; override with --http-port PORT. Existing instances retain their configured port.'
       echo 'Sources: --source auto|github|oss; auto uses GitHub, or an explicit --base-url HTTPS mirror.'
       echo 'Offline: --package ARCHIVE --sha256 SHA256. Cache: --cache-dir PATH (verified archives survive failed installs).'
       echo 'Uninstall: --uninstall --dir PATH [--yes] [--purge] [--dry-run]; uses installed files, no archive download.'
@@ -174,6 +179,23 @@ case "$download_source" in
 esac
 [[ "$download_base" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]] || { echo 'Use an HTTPS mirror URL without credentials, query or fragment' >&2; exit 2; }
 [[ "$release_tag" =~ ^macos-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag' >&2; exit 1; }
+# Retain existing port assignments without requiring system Python on macOS.
+if [[ -f "$instance_dir/.semantic-install-root" && -f "$instance_dir/install.json" ]]; then
+  found=0
+  for python in "$instance_dir"/releases/*/python/bin/python3.13; do
+    if [[ -x "$python" ]]; then
+      saved=$("$python" -I -B -c 'import json,sys; s=json.load(open(sys.argv[1])); print(*(s[k+"_port"] for k in ("http","ws","web","runtime")))' "$instance_dir/install.json")
+      read -r saved_http saved_ws saved_web saved_runtime <<< "$saved"
+      ((http_port_explicit)) || http_port="$saved_http"
+      ((ws_port_explicit)) || ws_port="$saved_ws"
+      ((web_port_explicit)) || web_port="$saved_web"
+      ((runtime_port_explicit)) || runtime_port="$saved_runtime"
+      found=1; break
+    fi
+  done
+  [[ "$found" == 1 || "$http_port_explicit$ws_port_explicit$web_port_explicit$runtime_port_explicit" == 1111 ]] || { echo 'Installed Python is missing; specify the original ports to retry.' >&2; exit 2; }
+fi
+options+=(--http-port "$http_port" --ws-port "$ws_port" --web-port "$web_port" --runtime-port "$runtime_port")
 for port in "$http_port" "$ws_port" "$web_port" "$runtime_port"; do
   [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Ports must be numbers between 1024 and 65535' >&2; exit 2; }
 done
@@ -219,15 +241,34 @@ def macos_listener_conflict(port, host):
     return False
 
 
+def installation_arguments(arguments):
+    # Forward all resolved ports to immutable release installers.
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    defaults = dict(http_port=8034, ws_port=8035, web_port=3000, runtime_port=8036)
+    for key in defaults:
+        parser.add_argument('--'+key.replace('_', '-'), type=int)
+    args, _ = parser.parse_known_args(arguments)
+    root = Path(args.dir).expanduser()
+    state = json.loads((root/'install.json').read_text()) if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}
+    result = list(arguments)
+    for key, default in defaults.items():
+        if getattr(args, key) is None:
+            result += ['--'+key.replace('_', '-'), str(state.get(key, default))]
+    return result
+
+
 def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--web-host')
     parser.add_argument('--lan', action='store_true')
-    for name, port in [('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)]:
+    parser.add_argument('--ability-port-first', type=int, default=18100)
+    parser.add_argument('--ability-port-last', type=int, default=18199)
+    for name, port in [('http', 8034), ('ws', 8035), ('web', 3000), ('runtime', 8036)]:
         parser.add_argument('--'+name+'-port', type=int, default=port)
-    args, _ = parser.parse_known_args(arguments)
+    args, _ = parser.parse_known_args(installation_arguments(arguments))
     root = Path(args.dir).expanduser()
     if not root.is_absolute() or root.is_symlink() or root.resolve() in (Path('/'), Path.home().resolve()):
         raise ValueError('--dir must be an absolute instance path, not a symlink or home directory')
@@ -239,6 +280,8 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
     if state and any(state.get(name+'_port') != port for name, port in ports.items()):
         raise ValueError('Existing instance ports differ; use its original options or a new --dir')
+    if not 1024 <= args.ability_port_first <= args.ability_port_last <= 65535 or any(args.ability_port_first <= port <= args.ability_port_last for port in ports.values()):
+        raise ValueError('Invalid or overlapping Ability port range')
     host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
     ipaddress.IPv4Address(host)
     owned = managed(root) if managed and state else {}
@@ -377,10 +420,1932 @@ tar -tvzf "$archive_path" > "$task_tmp/types"
 awk 'substr($0,1,1) != "-" && substr($0,1,1) != "d" {exit 1}' "$task_tmp/types"
 mkdir "$task_tmp/payload"
 tar -xzf "$archive_path" -C "$task_tmp/payload"
-bash "$task_tmp/payload/install.command" --dir "$instance_dir" ${options[@]+"${options[@]}"}
+if [[ -n "${SEMANTIC_BOOTSTRAP_MANAGER:-}" ]]; then
+  "$task_tmp/payload/python/bin/python3.13" -B "$SEMANTIC_BOOTSTRAP_MANAGER/installer.py" install --payload "$task_tmp/payload" --dir "$instance_dir" ${options[@]+"${options[@]}"}
+else
+  bash "$task_tmp/payload/install.command" --dir "$instance_dir" ${options[@]+"${options[@]}"}
+fi
 
 )
 # END GENERATED PLATFORM ROUTER
+# BEGIN GENERATED COMPONENT CONFIG
+semantic_write_manager() {
+  mkdir -p "$1"
+  cat > "$1/installer.py" <<'SEMANTIC_MANAGER_SOURCE'
+#!/usr/bin/env python3
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Install verified prebuilt Semantic artifacts; no source checkout or target builds."""
+import argparse
+import ctypes
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import secrets
+import shlex
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import tempfile
+import traceback
+import urllib.error
+import urllib.request
+
+sys.dont_write_bytecode = True  # Imports must not mutate the hash-verified payload.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components
+from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form
+
+INSTALL_LOG = None
+PROGRESS = None
+
+
+def digest(path):
+    value = hashlib.sha256()
+    with Path(path).open('rb') as f:
+        while block := f.read(1024 * 1024):
+            value.update(block)
+    return value.hexdigest()
+
+
+def write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.tmp')
+    with temporary.open('w', encoding='utf-8') as f:
+        json.dump(value, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    temporary.chmod(0o600)
+    temporary.replace(path)
+
+
+def load(path):
+    return json.loads(Path(path).read_text())
+
+
+def verify_payload(payload):
+    records = load(payload/'files.json')
+    if not isinstance(records, dict) or not records:
+        raise ValueError('File checksum manifest is empty')
+    for name, checksum in records.items():
+        path = Path(name)
+        if path.is_absolute() or '..' in path.parts or not path.parts:
+            raise ValueError('Invalid checksum path')
+        target = payload/path
+        if any(p.is_symlink() for p in [target, *target.parents] if p != payload.parent):
+            raise ValueError('Release payload must not contain symlinks')
+        if not target.is_file() or digest(target) != checksum:
+            raise ValueError('File verification failed: ' + name)
+    # Finder may add view metadata after the verified archive is extracted.
+    actual = {p.relative_to(payload).as_posix() for p in payload.rglob('*') if p.is_file()
+              and not (platform.system() == 'Darwin' and p.name == '.DS_Store' and not p.is_symlink())}
+    if actual != set(records) | {'files.json'}:
+        raise ValueError('Release payload contains files missing from the checksum manifest')
+    return load(payload/'release.json')
+
+
+def confirm(message, yes=False):
+    if yes:
+        return
+    try:
+        # Text update mode (r+) requires seeking; terminals are not seekable.
+        # stdin may be a pipe/heredoc, so use the controlling terminal directly.
+        with open('/dev/tty', 'w', encoding='utf-8') as output, open('/dev/tty', 'r', encoding='utf-8') as source:
+            output.write(message + ' [y/N] ')
+            output.flush()
+            answer = source.readline().strip().lower()
+    except OSError as error:
+        raise RuntimeError('Cannot access interactive terminal /dev/tty; unattended installation requires explicit --yes') from error
+    if answer not in ('y', 'yes'):
+        raise RuntimeError('Cancelled by user')
+
+
+def run(command, log, env=None):
+    # Never echo environment variables or API credentials.
+    with Path(log).open('a') as f:
+        started = time.monotonic()
+        name = Path(str(command[0])).name
+        f.write(f'[{time.strftime("%H:%M:%S")}] START {name}\n')
+        f.flush()  # Visible even if a command produces no output or waits on a lock.
+        try:
+            result = subprocess.run(list(map(str, command)), stdin=subprocess.DEVNULL,
+                                    stdout=f, stderr=subprocess.STDOUT, env=env)
+        except BaseException as error:
+            f.write(f'ERROR {name}: {type(error).__name__}\n')
+            raise
+        f.write(f'[{time.strftime("%H:%M:%S")}] END {name} rc={result.returncode} elapsed={time.monotonic()-started:.1f}s\n')
+    if result.returncode:
+        hint = '; sudo will not wait for a password. If authorization expired, run sudo -v and retry' if name == 'sudo' else ''
+        raise RuntimeError(f'{name} failed ({result.returncode}); log: {log}{hint}')
+
+
+def musl_runtime_mode(root, release):
+    state = load(root/'install.json') if (root/'install.json').exists() else {}
+    default = 'bundled' if (release/'python/bin/python3.13.musl-template').exists() else 'system'
+    return state.get('musl_runtime', default)
+
+
+def musl_python(root, release):
+    name = 'python3.13-bundled' if musl_runtime_mode(root, release) == 'bundled' else 'python3.13'
+    return release/'python/bin'/name
+
+
+def relocated_musl_python(template, loader):
+    """Fill the reserved ELF interpreter slot without needing a host patchelf."""
+    import struct
+    data = bytearray(template.read_bytes())
+    if data[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', data, 18)[0] != 62:
+        raise ValueError('Invalid x86_64 musl Python template')
+    offset = struct.unpack_from('<Q', data, 32)[0]
+    size, count = struct.unpack_from('<HH', data, 54)
+    slots = []
+    for index in range(count):
+        entry = offset + index*size
+        if size < 56 or entry + size > len(data):
+            raise ValueError('Invalid ELF program headers')
+        if struct.unpack_from('<I', data, entry)[0] == 3:
+            start = struct.unpack_from('<Q', data, entry+8)[0]
+            length = struct.unpack_from('<Q', data, entry+32)[0]
+            slots.append((start, length))
+    if len(slots) != 1:
+        raise ValueError('Missing unique musl interpreter slot')
+    start, length = slots[0]
+    if start + length > len(data) or not data[start:start+length].startswith(b'/__SEMANTIC_BUNDLED_MUSL__/'):
+        raise ValueError('Unexpected musl interpreter template')
+    path = os.fsencode(loader)
+    if not loader.is_absolute() or b'\0' in path or len(path) >= length:
+        raise ValueError('Installation path exceeds the bundled musl interpreter capacity')
+    data[start:start+length] = path + bytes(length-len(path))
+    return bytes(data)
+
+
+def prepare_musl_runtime(root, release):
+    template = release/'python/bin/python3.13.musl-template'
+    if not template.exists():
+        return  # Releases predating the bundled loader keep the original behavior.
+    python = musl_python(root, release)
+    if musl_runtime_mode(root, release) == 'bundled':
+        loader = release/'musl/lib/ld-musl-x86_64.so.1'
+        expected = relocated_musl_python(template, loader)
+        if python.exists():
+            if python.is_symlink() or python.read_bytes() != expected:
+                raise RuntimeError('Prepared musl Python was modified; use a new installation directory')
+        else:
+            import tempfile
+            with tempfile.NamedTemporaryFile(dir=python.parent, prefix='.musl-python-', delete=False) as target:
+                target.write(expected)
+                temporary = Path(target.name)
+            temporary.chmod(0o755)
+            temporary.replace(python)
+    launchers = root/'python-launchers'/release.name/'bin'
+    launchers.mkdir(parents=True, exist_ok=True)
+    for name in ('python', 'python3', 'python3.13'):
+        alias = launchers/name
+        if alias.is_symlink():
+            if alias.readlink() != python:
+                raise RuntimeError('Existing Python launcher selects a different musl runtime')
+        elif alias.exists():
+            raise RuntimeError('Unexpected file at the managed Python launcher path')
+        else:
+            alias.symlink_to(python)
+
+
+def environment(root, release):
+    env = dict(os.environ)
+    for key in ('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'CONDA_PREFIX'):
+        env.pop(key, None)
+    env.update(PATH=str(release/'bin') + os.pathsep + env.get('PATH', ''),
+               UV_PYTHON_INSTALL_DIR=str(root/'python'),
+               TMPDIR=str(root/'tmp'), PYTHONUNBUFFERED='1',
+               SEMANTIC_MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl',
+               MUJOCO_GL='cgl' if platform.system() == 'Darwin' else 'egl')
+    if platform.system() == 'Darwin':
+        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],
+                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',
+                   UV_OFFLINE='1', PYTHONNOUSERSITE='1')
+    if (release/'musl').is_dir():
+        env.update(PATH=str(release/'python/bin') + os.pathsep + env['PATH'],
+                   UV_PYTHON_DOWNLOADS='never', UV_PYTHON_PREFERENCE='only-system',
+                   LD_LIBRARY_PATH=str(release/'musl/lib'),
+                   PYTHONPATH=str(release/'musl/lib/python3.13/site-packages'),
+                   PYOPENGL_PLATFORM='egl')
+        if (release/'python/bin/python3.13.musl-template').exists():
+            env['PATH'] = str(root/'python-launchers'/release.name/'bin') + os.pathsep + env['PATH']
+            # The prepared interpreter's RPATH scopes musl libraries to Python.
+            # In particular, host tar/zstd and shells must not load these libraries.
+            env.pop('LD_LIBRARY_PATH', None)
+            env.pop('LD_PRELOAD', None)
+        for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', 'MESA_LOADER_DRIVER_OVERRIDE',
+                    'LIBGL_DRIVERS_PATH', '__EGL_VENDOR_LIBRARY_FILENAMES',
+                    '__EGL_VENDOR_LIBRARY_DIRS', 'DRI_PRIME', 'EGL_PLATFORM', 'MUJOCO_EGL_DEVICE_ID'):
+            env.pop(key, None)
+        report = root/'configs/musl-render.json'
+        if report.exists():
+            selected = load(report)
+            env['MUJOCO_EGL_DEVICE_ID'] = str(selected['device'])
+            if selected['selected'] == 'software':
+                env.update(LIBGL_ALWAYS_SOFTWARE='1', GALLIUM_DRIVER='llvmpipe')
+    if (root/'configs/secrets.json').exists():
+        env.update(load(root/'configs/secrets.json'))
+    return env
+
+
+def probe_musl(root, release, backend='auto'):
+    if not (release/'musl').is_dir():
+        return
+    manifest = load(release/'release.json')
+    python = release/'robot-bundles'/manifest['bundle_name']/'python/venv/bin/python'
+    run([python, release/'musl/share/insightos-mesa/launch.py', '--profile', backend,
+         '--mesa-prefix', release/'musl', '--check', '--report', root/'configs/musl-render.json'],
+        root/'logs/musl-render.log', environment(root, release))
+
+
+def system_musl_available():
+    loader = Path('/lib/ld-musl-x86_64.so.1')
+    return loader.is_file() and os.access(loader, os.X_OK)
+
+
+def macos_listener_conflict(port, host):
+    # Darwin permits wildcard and specific-address listeners to coexist with
+    # SO_REUSEADDR. Inspect active listeners too, without rejecting TIME_WAIT.
+    result = subprocess.run(['/usr/sbin/lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-Fn'],
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode not in (0, 1):
+        raise RuntimeError('Cannot inspect listening ports: '+result.stderr.strip())
+    for line in result.stdout.splitlines():
+        if line.startswith('n'):
+            address = line[1:].rsplit(':', 1)[0].strip('[]')
+            if host == '0.0.0.0' or address in ('*', '0.0.0.0', '::', host):
+                return True
+    return False
+
+
+def check_port(port, host='127.0.0.1'):
+    with socket.socket() as s:
+        # Match the server's reuse behavior: TIME_WAIT is not an active listener.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            if platform.system() == 'Darwin' and macos_listener_conflict(port, host):
+                raise OSError('Active listener already exists')
+            s.bind((host, port))
+            s.listen(1)  # Also detect BSD wildcard/specific-address listener conflicts.
+        except OSError as e:
+            raise RuntimeError(f'Port {port} is in use; choose a different port. Existing services will not be stopped') from e
+
+
+def process_identity(pid):
+    if platform.system() == 'Darwin':
+        from uninstall import uninstall_identity
+        return uninstall_identity(pid)
+    try:
+        text = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()
+        return None if text[0] == 'Z' else text[19]
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def alive(record):
+    return bool(record.get('start_ticks')) and process_identity(record['pid']) == record['start_ticks']
+
+
+def services(root):
+    path = root/'run/services.json'
+    return load(path) if path.exists() else {}
+
+
+def preflight_install_ports(root, args, state, host):
+    """Check before dependency installation or payload deployment, preserving retries."""
+    from uninstall import uninstall_managed
+    owned = uninstall_managed(root) if state else {}
+    records = services(root)
+    for name in ('http', 'ws', 'web', 'runtime'):
+        if name == 'runtime' and state.get('ready'):
+            continue
+        if name != 'runtime' and getattr(args, 'no_start', False):
+            continue
+        service = 'web' if name == 'web' else 'server'
+        if name != 'runtime' and records.get(service, {}).get('pid') in owned:
+            continue
+        check_port(getattr(args, name+'_port'), host if name == 'web' else '127.0.0.1')
+
+
+def show_status(root):
+    from uninstall import uninstall_managed, uninstall_processes
+    records = services(root)
+    owned = uninstall_managed(root)
+    rows = [(name.title(), 'Running' if record.get('pid') in owned else 'Stopped',
+             'ok' if record.get('pid') in owned else 'label')
+            for name in ('server', 'web') for record in [records.get(name, {})]]
+    busy = uninstall_processes(root, owned)
+    rows.append(('Other users', str(len(busy))+' processes', 'warn' if busy else 'label'))
+    for item in busy:
+        rows.append((f"PID {item['pid']}", item['command']+' · '+', '.join(item['reasons']), 'warn'))
+    if busy:
+        rows.append(('Terminal', 'Run cd ~ in the relevant terminal or close it; terminals are not closed automatically', 'label'))
+    settings_form('Instance status', rows)
+
+
+def stop_owned(root, names=None):
+    records = services(root)
+    for name, item in list(records.items()):
+        if names is not None and name not in names:
+            continue
+        if alive(item):
+            os.killpg(item['pid'], signal.SIGTERM)
+            deadline = time.monotonic() + 20
+            while alive(item) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if alive(item):
+                raise RuntimeError(f'{name} did not exit before timeout; keeping its record and not forcibly killing it')
+        records.pop(name, None)
+    write_json(root/'run/services.json', records)
+
+
+def request(url, token=None, data=None, content_type='application/json'):
+    headers = {'Content-Type': content_type}
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.load(response)
+
+
+def publish(root, release, state, quiet=False):
+    base = f"http://127.0.0.1:{state['http_port']}/api/v1"
+    password = load(root/'configs/secrets.json')['SEMANTIC_ADMIN_PASSWORD']
+    token = request(base+'/auth/login', data=json.dumps({'username': 'admin', 'password': password}).encode())['token']
+    for skill in load(release/'release.json')['robot_skills']:
+        reply = request(base+'/robot-skills', token, (release/skill['path']).read_bytes(), 'application/zip')
+        actual = reply.get('skill', reply)
+        if (actual.get('name'), actual.get('version')) != (skill['name'], skill['version']):
+            raise RuntimeError('Published skill version does not match the manifest')
+    if not quiet:
+        print('Robot Skills published; versions match the Bundle.')
+
+
+def start(root, quiet=False):
+    state = load(root/'install.json')
+    if not state.get('ready'):
+        raise RuntimeError('Installation is incomplete; run the installer again first')
+    release = root/'releases'/state['version']
+    prepare_musl_runtime(root, release)
+    probe_musl(root, release, state.get('render_backend', 'auto'))
+    env = environment(root, release)
+    records = services(root)
+    host = web_host(state.get('web_host', '127.0.0.1'))
+    definitions = {
+        'server': ([release/'bin/semantic-server', '-c', root/'configs/semantic-server.yaml'], state['http_port'], '/api/v1/system/healthz'),
+        'web': ([release/'bin/semantic-web-gateway', '--root', release/'web', '--listen', f"{host}:{state['web_port']}",
+                 '--api', f"http://127.0.0.1:{state['http_port']}", '--ws', f"http://127.0.0.1:{state['ws_port']}"], state['web_port'], '/'),
+    }
+    created = []
+    try:
+        for name, (command, port, health) in definitions.items():
+            if name in records and alive(records[name]):
+                continue
+            check_port(port, host if name == 'web' else '127.0.0.1')
+            if name == 'server':
+                check_port(state['ws_port'])
+            with (root/f'logs/{name}.log').open('a') as log:
+                child = subprocess.Popen(list(map(str, command)), cwd=root, env=env, stdin=subprocess.DEVNULL,
+                                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            records[name] = {'pid': child.pid, 'start_ticks': process_identity(child.pid)}
+            write_json(root/'run/services.json', records)
+            created.append(name)
+            deadline = time.monotonic() + 45
+            while True:
+                if child.poll() is not None:
+                    raise RuntimeError(f'{name} exited early; check logs/{name}.log')
+                try:
+                    probe = web_probe(host) if name == 'web' else '127.0.0.1'
+                    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(f'http://{probe}:{port}{health}', timeout=2) as response:
+                        if response.status == 200:
+                            break
+                except (OSError, urllib.error.URLError):
+                    pass
+                if time.monotonic() > deadline:
+                    raise RuntimeError(f'{name} health check timed out')
+                time.sleep(0.2)
+        publish(root, release, state, quiet=quiet)
+    except Exception:
+        stop_owned(root, created)
+        raise
+    if not quiet:
+        settings_form('Services started', [('Web', '\n'.join(urls(state)), 'command'), ('Username', 'admin'),
+                       ('Password', 'Run semanticctl welcome', 'label')])
+
+
+# Native application binaries are static. These libraries serve Python Wheels and EGL.
+SYSTEM_PACKAGES = {
+    'apk': ['ca-certificates', 'tar', 'zstd'],
+    'apt-get': ['ca-certificates', 'zstd', 'libstdc++6', 'libgcc-s1', 'libgomp1',
+                'libegl1', 'libgl1', 'libgl1-mesa-dri'],
+    'dnf': ['ca-certificates', 'zstd', 'libstdc++', 'libgcc', 'libgomp',
+            'mesa-libEGL', 'mesa-libGL', 'mesa-dri-drivers'],
+    'yum': ['ca-certificates', 'zstd', 'libstdc++', 'libgcc', 'libgomp',
+            'mesa-libEGL', 'mesa-libGL', 'mesa-dri-drivers'],
+    'pacman': ['ca-certificates', 'zstd', 'gcc-libs', 'libglvnd', 'mesa'],
+    'zypper': ['ca-certificates', 'zstd', 'libstdc++6', 'libgcc_s1', 'libgomp1',
+               'libEGL1', 'libGL1', 'Mesa-dri'],
+}
+SYSTEM_LIBRARIES = ('libstdc++.so.6', 'libgcc_s.so.1', 'libgomp.so.1', 'libEGL.so.1', 'libGL.so.1')
+
+
+def package_manager(info=None):
+    info = platform.freedesktop_os_release() if info is None else info
+    distro = info.get('ID', '')
+    families = [distro, *info.get('ID_LIKE', '').split()]
+    for family in families:
+        candidates = {
+            'alpine': ('apk',),
+            'debian': ('apt-get',), 'ubuntu': ('apt-get',),
+            'fedora': ('dnf', 'yum'), 'rhel': ('dnf', 'yum'), 'centos': ('dnf', 'yum'),
+            'rocky': ('dnf', 'yum'), 'almalinux': ('dnf', 'yum'),
+            'arch': ('pacman',), 'manjaro': ('pacman',),
+            'suse': ('zypper',), 'opensuse': ('zypper',),
+            'opensuse-leap': ('zypper',), 'opensuse-tumbleweed': ('zypper',),
+        }.get(family, ())
+        for name in candidates:
+            if shutil.which(name):
+                return name
+    raise RuntimeError(f'Automatic dependency installation is unsupported on this distribution: {distro or "unknown"}; ask an administrator to install dependencies manually')
+
+
+def dependency_commands(manager, musl=False):
+    packages = ['ca-certificates', 'tar', 'zstd'] if musl else SYSTEM_PACKAGES[manager]
+    if manager == 'apk':
+        return [['apk', 'add', '--no-cache', *packages]]
+    if manager == 'apt-get':
+        return [['apt-get', 'update'], ['apt-get', 'install', '-y', '--no-install-recommends', *packages]]
+    if manager in ('dnf', 'yum'):
+        return [[manager, 'install', '-y', *packages]]
+    if manager == 'pacman':
+        # Never -Sy (partial upgrade), or -Syu (unrequested whole-system upgrade).
+        # The administrator must keep Arch synchronized before invoking this installer.
+        return [['pacman', '-S', '--needed', '--noconfirm', *packages]]
+    return [['zypper', '--non-interactive', 'install', '--no-recommends', *packages]]
+
+
+def authorize_dependencies(log):
+    """Complete sudo authentication before any animated screen is started."""
+    def note(message):
+        with Path(log).open('a') as output:
+            output.write(f'[{time.strftime("%H:%M:%S")}] sudo authorization: {message}\n')
+    note('Privileges')
+    if os.geteuid() == 0:
+        note('root; sudo not needed')
+        return
+    if not shutil.which('sudo'):
+        note('Failed: sudo is not installed')
+        raise RuntimeError('System dependencies require root or sudo; an administrator can also preinstall them')
+    try:
+        cached = subprocess.run(['sudo', '-n', '-v'], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+    except subprocess.TimeoutExpired:
+        note('Failed: non-interactive authorization check timed out')
+        raise RuntimeError('sudo authorization check timed out; run sudo -v in a terminal to diagnose') from None
+    if cached.returncode == 0:
+        note('Authorization cached or no password required')
+        return
+    note('Waiting for authorization (passwords are not read or recorded by the installer)')
+    try:
+        with open('/dev/tty', 'r', encoding='utf-8') as source, open('/dev/tty', 'w', encoding='utf-8') as output:
+            if not source.isatty() or not output.isatty():
+                raise OSError('not a terminal')
+            settings_form('sudo authorization', [('Purpose', 'Install system dependencies'), ('Password', 'Enter your Linux user password; input is hidden', 'warn'),
+                ('Details', 'Progress appears after authorization; passwords are never logged', 'label')], stream=output)
+            result = subprocess.run(['sudo', '-v', '-p', '[Semantic sudo] Password for %u: '],
+                                    stdin=source, stdout=output, stderr=output, timeout=180)
+    except OSError:
+        note('Failed: no interactive terminal available')
+        raise RuntimeError('sudo needs authorization but no interactive terminal is available. Run sudo -v in the same terminal first, or have an administrator preinstall dependencies and omit --install-system-deps. --yes does not authorize sudo') from None
+    except subprocess.TimeoutExpired:
+        note('Failed: interactive authorization timed out')
+        raise RuntimeError('sudo authorization exceeded 180 seconds; rerun the installer or run sudo -v first') from None
+    if result.returncode:
+        note(f'Failed: rc={result.returncode}')
+        raise RuntimeError('sudo authorization failed or was cancelled; dependency installation has not started')
+    note('Authorized')
+
+
+def install_dependencies(log, musl=False):
+    manager = package_manager()
+    sudo = [] if os.geteuid() == 0 else ['sudo', '-n']
+    if sudo and not shutil.which('sudo'):
+        raise RuntimeError('System dependencies require root or sudo; an administrator can also preinstall them')
+    if not PROGRESS:
+        print(f'System package manager: {manager}; details: {log}', flush=True)
+    if manager == 'pacman':
+        with Path(log).open('a') as output:
+            output.write('On Arch, ask an administrator to update the system first; this script does not refresh package databases or perform full system upgrades.\n')
+    for command in dependency_commands(manager, musl):
+        with Path(log).open('a') as output:
+            output.write(f'[{time.strftime("%H:%M:%S")}] Dependency command: {shlex.join([*sudo, *command])}\n')
+        if PROGRESS:
+            PROGRESS.detail = shlex.join(command)
+        run([*sudo, *command], log)
+    if PROGRESS:
+        PROGRESS.detail = ''
+
+
+def check_platform(manifest, musl=False, musl_runtime=None):
+    if manifest.get('platform') == 'macos-arm64':
+        if musl or platform.system() != 'Darwin' or platform.machine() != 'arm64':
+            raise RuntimeError('This package requires native Apple Silicon macOS (without --musl)')
+        minimum = tuple(map(int, manifest['minimum_macos'].split('.')))
+        if tuple(map(int, platform.mac_ver()[0].split('.'))) < minimum:
+            raise RuntimeError('This package requires macOS ' + manifest['minimum_macos'] + ' or newer')
+        return
+    if platform.system() != 'Linux' or platform.machine() != 'x86_64':
+        raise RuntimeError('This artifact supports Linux x86_64 only')
+    variant = manifest.get('libc') == 'musl'
+    if variant != musl:
+        raise RuntimeError('The musl package requires --musl; --musl cannot install a glibc package')
+    if variant:
+        mode = musl_runtime or ('bundled' if manifest.get('musl_runtime') else 'system')
+        if manifest.get('platform') != 'linux-musl-x86_64':
+            raise RuntimeError('Invalid musl package platform')
+        if mode == 'bundled' and not manifest.get('musl_runtime'):
+            raise RuntimeError('This release does not include musl; choose a newer release or --musl-runtime system')
+        if mode == 'system' and not system_musl_available():
+            raise RuntimeError('--musl-runtime system requires a musl host loader at /lib/ld-musl-x86_64.so.1; use --musl-runtime bundled otherwise')
+        if mode not in ('bundled', 'system'):
+            raise ValueError('Invalid musl runtime selection')
+        return
+    minimum = manifest.get('minimum_glibc', '2.39')
+    if not re.fullmatch(r'[0-9]+\.[0-9]+', minimum):
+        raise ValueError('Invalid artifact minimum_glibc')
+    libc = platform.libc_ver()
+    if libc[0] != 'glibc' or not libc[1] or tuple(map(int, libc[1].split('.'))) < tuple(map(int, minimum.split('.'))):
+        raise RuntimeError(f'Python/dynamic dependencies in this artifact require glibc >= {minimum}; use --musl explicitly on musl/Alpine')
+
+
+def install(a):
+    global INSTALL_LOG, PROGRESS
+    payload = a.payload.resolve()
+    manifest = verify_payload(payload)
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', manifest['version']):
+        raise ValueError('Invalid release version')
+    if getattr(a, 'musl_runtime', None) and not getattr(a, 'musl', False):
+        raise ValueError('--musl-runtime requires --musl')
+    if not getattr(a, 'musl', False) and getattr(a, 'render_backend', None) not in (None, 'auto'):
+        raise ValueError('--render-backend requires --musl')
+    raw = Path(a.dir).expanduser()
+    if not raw.is_absolute() or raw.is_symlink():
+        raise ValueError('--dir must be an absolute path, not a symlink')
+    root = raw.resolve()
+    if manifest.get('libc') == 'musl' and ':' in str(root):
+        raise ValueError('The musl install path must not contain a colon (library search separator)')
+    if payload in root.parents:
+        raise ValueError('The installation directory must be outside the extracted package')
+    if root in (Path('/'), Path.home(), payload) or any(ord(c) < 32 for c in str(root)):
+        raise ValueError('Refusing root, home or paths containing control characters as the installation directory')
+    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
+        raise ValueError('Target directory is non-empty and not managed by this installer; choose a new directory')
+    old = load(root/'install.json') if (root/'install.json').exists() else {}
+    values = apply_component_options(a, configured_components(root, old))
+    for key, value in values.items():
+        setattr(a, key, value)
+    ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]
+    if len(set(ports)) != len(ports) or any(p < 1024 or p > 65535 for p in ports):
+        raise ValueError('Ports must be distinct numbers between 1024 and 65535')
+    runtime_mode = getattr(a, 'musl_runtime', None) or old.get('musl_runtime') or ('bundled' if manifest.get('musl_runtime') else 'system')
+    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)
+    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:
+        raise ValueError('Changing musl runtime requires a new --dir')
+    default_host = '127.0.0.1' if manifest.get('platform') == 'macos-arm64' else '0.0.0.0'
+    host = web_host(a.web_host or (old.get('web_host', '127.0.0.1') if old else default_host))
+    if a.web_host and old:
+        if host != old.get('web_host', '127.0.0.1'):
+            raise ValueError('For existing instances, use --configure-existing --lan/--web-host to change the listen address')
+    preflight_install_ports(root, a, old, host)
+    settings_form('Installation settings', [('Version', manifest['version']), ('Directory', str(root)),
+        ('Web', f'{host}:{a.web_port}', 'command'), ('Desktop', {'auto': 'Auto-detect', 'always': 'Create', 'never': 'skipped'}[a.desktop]),
+        ('Network', 'Web on all IPv4 interfaces; allow trusted LAN traffic only' if host == '0.0.0.0' else 'Web listens on the specified address', 'warn'),
+        ('Backend', 'API/WS remain local; firewall settings are not modified', 'label'),
+        ('Customize', '--web-host IPv4 / --web-port PORT', 'command')])
+    confirm('  Install and create the required directories?', a.yes)
+    tasks = ['System dependencies', 'Deploy and verify artifacts', 'Robot Python environment', 'Configure Server', 'MuJoCo Runtime check', 'Management commands and shortcuts', 'Start services and check health']
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (root/'.semantic-install-root').touch(mode=0o600)
+    for directory in ('logs', 'run', 'tmp', 'configs', 'releases', 'bin'):
+        (root/directory).mkdir(exist_ok=True, mode=0o700)
+    with (root/'run/install.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        log = root/'logs'/f'install-{time.strftime("%Y%m%d-%H%M%S")}.log'
+        log.touch(mode=0o600)
+        INSTALL_LOG = log
+        if a.install_system_deps and platform.system() != 'Darwin':
+            package_manager()  # Reject unsupported systems before prompting for privilege.
+            authorize_dependencies(log)
+        progress = PROGRESS = Progress(tasks)
+        progress.log_path = str(log)
+        progress.next(tasks[0])
+        if a.install_system_deps and platform.system() != 'Darwin':
+            install_dependencies(log, musl=manifest.get('libc') == 'musl')
+        missing = []
+        if platform.system() != 'Darwin' and not shutil.which('zstd'):
+            missing.append('zstd')
+        if manifest.get('libc') == 'musl':
+            tar = shutil.which('tar')
+            if not tar or '--zstd' not in subprocess.run([tar, '--help'], capture_output=True, text=True).stdout:
+                missing.append('GNU tar (--zstd)')
+        for library in (() if manifest.get('libc') == 'musl' or platform.system() == 'Darwin' else SYSTEM_LIBRARIES):
+            try:
+                ctypes.CDLL(library)
+            except OSError:
+                missing.append(library)
+        if missing:
+            raise RuntimeError('Missing system dependencies: '+', '.join(missing)+'; rerun with --install-system-deps or ask an administrator to install them')
+        progress.next(tasks[1])
+        state_path = root/'install.json'
+        signature = digest(payload/'files.json')
+        state = load(state_path) if state_path.exists() else {}
+        if state and (state.get('version') != manifest['version'] or state.get('payload_sha256') != signature):
+            raise RuntimeError('Refusing to overwrite a different version; choose a new --dir and migrate your data. This installer does not upgrade databases automatically.')
+        if state and [state[k] for k in ('http_port', 'ws_port', 'web_port', 'runtime_port')] != ports:
+            raise RuntimeError('Reinstallation cannot implicitly change existing instance ports')
+        state = state or dict(version=manifest['version'], payload_sha256=signature, ready=False,
+                              http_port=a.http_port, ws_port=a.ws_port, web_port=a.web_port, runtime_port=a.runtime_port)
+        for key in ('ability_port_first', 'ability_port_last'):
+            if state.get('configured') and state.get(key, values[key]) != values[key]:
+                raise ValueError('Use reconfigure to change the Ability port range')
+            state[key] = values[key]
+        state.setdefault('web_host', host)
+        if manifest.get('libc') == 'musl':
+            state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')
+            state['musl_runtime'] = runtime_mode
+        write_json(state_path, state)
+        release = root/'releases'/manifest['version']
+        if not release.exists():
+            shutil.copytree(payload, release)
+        else:
+            # Preserve newly created venvs; verify every original immutable payload file.
+            for name, checksum in load(payload/'files.json').items():
+                if not (release/name).is_file() or digest(release/name) != checksum:
+                    raise RuntimeError('Installed artifact is incomplete or modified: '+name)
+        prepare_musl_runtime(root, release)
+        env = environment(root, release)
+        progress.next(tasks[2])
+        if not state['ready']:
+            bundle = release/'robot-bundles'/manifest['bundle_name']
+            venv = bundle/'python/venv'
+            uv = release/'bin/uv'
+            run([uv, 'venv', '--allow-existing', '--python',
+                 musl_python(root, release) if manifest.get('libc') == 'musl' else
+                 release/'python/bin/python3.13' if platform.system() == 'Darwin' else manifest['robot_python'], venv], log, env)
+            run([uv, 'pip', 'install', '--python', venv/'bin/python', '--no-index', '--no-deps',
+                 *sorted((bundle/'wheels').glob('*.whl'))], log, env)
+            if manifest.get('libc') == 'musl':
+                # Robot workers intentionally clear PYTHONPATH. Register the verified
+                # prefix in this managed venv, so that isolation still works.
+                site = venv/'lib/python3.13/site-packages'
+                (site/'semantic-musl.pth').write_text(str(release/'musl/lib/python3.13/site-packages')+'\n')
+            run([venv/'bin/python', '-c', 'import ability_py, pinocchio, ruckig, websockets'], log, {**env, 'PYTHONPATH': ''})
+            run([bundle/'bin/AbilityFramework', '--version'], log, env)
+            probe_musl(root, release, state.get('render_backend', 'auto'))
+            env = environment(root, release)
+            progress.next(tasks[3])
+            cli = release/'bin/semantic'
+            config = root/'configs/semantic-server.yaml'
+            run([cli, 'init', '-c', config], log, env)
+            if not (root/'configs/secrets.json').exists():
+                write_json(root/'configs/secrets.json', {'SEMANTIC_ADMIN_PASSWORD': secrets.token_urlsafe(24)})
+            # Only initialize our pristine configuration once; preserve subsequent user changes.
+            if not state.get('configured'):
+                cfg = load(release/'defaults/server.json')
+                cfg['server'].update(http_addr=f'127.0.0.1:{a.http_port}', ws_addr=f'127.0.0.1:{a.ws_port}')
+                cfg['store']['sqlite_path'] = str(root/'data/semantic.db')
+                cfg['agents'].update(profiles_dir=str(root/'configs/agents'), teams_dir=str(root/'configs/agents/teams'))
+                cfg['skills']['dir'] = str(root/'configs/skills')
+                cfg['simulation'].update(runtimes_dir=str(root/'runtimes.d'), catalog_dir=str(root/'content/scene-catalogs'))
+                cfg['robot_runtime'].update(enabled=True, bundles_dir=str(release/'robot-bundles'), data_root=str(root),
+                    server_http_url=f'http://127.0.0.1:{a.http_port}', server_websocket_url=f'ws://127.0.0.1:{a.ws_port}/ws/pilot',
+                    ability_port_first=a.ability_port_first, ability_port_last=a.ability_port_last)
+                write_json(config, cfg)  # JSON is valid YAML; no target-side YAML dependency.
+                state['configured'] = True
+                write_json(state_path, state)
+            progress.next(tasks[4])
+            pack = release/manifest['runtime_pack']
+            run([cli, 'runtime', 'install', '--pack', pack, '--sha256', digest(pack),
+                 '--installation-id', 'local-native-mujoco', '--asset-root', release/'assets/mujoco',
+                 '--endpoint', f'http://127.0.0.1:{a.runtime_port}', '--replace', '-c', config], log, env)
+            state['ready'] = True
+            write_json(state_path, state)
+        else:
+            progress.next(tasks[3]+' (already configured)')
+            progress.next(tasks[4]+' (already verified; skipped)')
+        progress.next(tasks[5])
+        current = root/'current'
+        if current.exists() and not current.is_symlink():
+            raise RuntimeError('current is not an installer-managed symlink')
+        if current.is_symlink():
+            current.unlink()
+        current.symlink_to(Path('releases')/manifest['version'])
+        install_manager(root, payload)
+        replace_config(root/'configs/components.yaml', component_yaml(values).encode())
+        desktop_message = desktop_shortcuts(root, state, a.desktop)
+        write_json(state_path, state)
+        progress.next(tasks[6]+(' (skipped as requested)' if a.no_start else ''))
+        if not a.no_start:
+            start(root, quiet=True)
+        progress.finish()
+        welcome(root, state, not a.no_start, desktop_message)
+
+
+def install_manager(root, payload):
+    """Update only management files; immutable app releases and data stay untouched."""
+    manager = root/'bin/semantic-manager'
+    for directory in (root/'bin', manager, manager/'assets'):
+        if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+            raise ValueError('Invalid management directory: '+str(directory))
+        directory.mkdir(exist_ok=True, mode=0o700)
+    for name in ('installer.py', 'install_support.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):
+        target = manager/name
+        if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
+            raise ValueError('Unsafe management file links: '+str(target))
+        source = (Path(__file__).resolve().parent if name.endswith('.py') else payload)/name
+        if source.resolve() != target.resolve():
+            shutil.copyfile(source, target)
+        target.chmod(0o600)
+    launcher = root/'bin/semanticctl'
+    if launcher.is_symlink() or (launcher.exists() and launcher.stat().st_nlink != 1):
+        raise ValueError('Unsafe management launcher links')
+    python_command = shlex.quote(str(root/'current/python/bin/python3.13')) if platform.system() == 'Darwin' else 'python3'
+    launcher.write_text('#!/bin/sh\nexec '+python_command+' -B '+shlex.quote(str(manager/'installer.py'))+
+                        ' control --root '+shlex.quote(str(root))+' "$@"\n')
+    launcher.chmod(0o755)
+
+
+def configured_components(root, state):
+    values = component_values(state)
+    path = root/'configs/semantic-server.yaml'
+    if path.is_file():
+        cfg = load(path)
+        values.update({k: cfg.get('robot_runtime', {}).get(k, values[k])
+                       for k in ('ability_port_first', 'ability_port_last')})
+    return values
+
+
+def apply_component_options(a, values):
+    values = dict(values)
+    if getattr(a, 'config', None):
+        values.update(read_component_config(a.config))
+    for key in COMPONENT_DEFAULTS:
+        if getattr(a, key, None) is not None:
+            values[key] = getattr(a, key)
+    return validate_components(values)
+
+
+def component_updates(root, old, values):
+    config = root/'configs/semantic-server.yaml'
+    cfg = load(config)
+    cfg['server'].update(http_addr=f"127.0.0.1:{values['http_port']}", ws_addr=f"127.0.0.1:{values['ws_port']}")
+    cfg['robot_runtime'].update(server_http_url=f"http://127.0.0.1:{values['http_port']}",
+        server_websocket_url=f"ws://127.0.0.1:{values['ws_port']}/ws/pilot",
+        ability_port_first=values['ability_port_first'], ability_port_last=values['ability_port_last'])
+    updates = {config: (json.dumps(cfg, ensure_ascii=False, indent=2)+'\n').encode()}
+    runtime = root/'runtimes.d/local-native-mujoco.yaml'
+    if old['runtime_port'] != values['runtime_port']:
+        text = runtime.read_text()
+        pattern = r'(?m)^endpoint:\s*[\'\"]?http://127\.0\.0\.1:'+str(old['runtime_port'])+r'[\'\"]?\s*$'
+        text, count = re.subn(pattern, 'endpoint: http://127.0.0.1:'+str(values['runtime_port']), text)
+        if count != 1:
+            raise ValueError('Managed MuJoCo endpoint differs from install state; reconcile it before reconfigure')
+        updates[runtime] = text.encode()
+    # The supervisor reuses rendered instances on restart. Update their actual
+    # connection configurations too; never edit credentials, logs or execution evidence.
+    paths = set((root/'robots').glob('*/.instance-configs/*.yaml'))
+    for name in ('instance.yaml', 'robot-deployment.yaml'):
+        paths.update((root/'robots').glob('*/*/'+name))
+    if paths and any(old[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
+        raise ValueError('Existing Robot instances have allocated Ability ports; remove those instances in Studio before changing the Ability range')
+    for path in paths:
+        text = original = path.read_text()
+        for key, protocols in (('http_port', ('http',)), ('ws_port', ('http', 'ws')), ('runtime_port', ('http', 'ws'))):
+            if old[key] == values[key]:
+                continue
+            for protocol in protocols:
+                pattern = re.escape(f'{protocol}://127.0.0.1:{old[key]}')+r'(?=[/\s\'\"\},]|$)'
+                text = re.sub(pattern, f'{protocol}://127.0.0.1:{values[key]}', text)
+        if text != original:
+            updates[path] = text.encode()
+    return updates
+
+
+def replace_config(path, data):
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+        raise ValueError('Configuration path contains a symlink: '+str(path))
+    if path.exists() and (not path.is_file() or path.stat().st_nlink != 1):
+        raise ValueError('Configuration must be a regular, unlinked file: '+str(path))
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.configure-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(data)
+    try:
+        temporary.chmod(0o600)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def configure_existing(a):
+    global INSTALL_LOG
+    from uninstall import uninstall_root, uninstall_managed, uninstall_processes
+    root, state = uninstall_root(a.dir)
+    release = root/'releases'/state['version']
+    if not state.get('ready') or not (release/'bin/semantic-server').is_file():
+        raise ValueError('Reconfigure requires a completed installation')
+    apply_component_options(a, configured_components(root, state))
+    with (root/'run/install.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state = load(root/'install.json')
+        old = configured_components(root, state)
+        values = apply_component_options(a, old)
+        owned = uninstall_managed(root)
+        busy = uninstall_processes(root, owned)
+        if busy:
+            raise ValueError('Stop all scenes and Robot Runtime before reconfigure; active instance processes: '+', '.join(str(row['pid']) for row in busy))
+        updates = component_updates(root, old, values)
+        records = services(root)
+        owned_ports = {old[k] for name, keys in [('server', ('http_port','ws_port')), ('web', ('web_port',))]
+                       if records.get(name, {}).get('pid') in owned for k in keys}
+        for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
+            if values[key] not in owned_ports:
+                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
+        settings_form('Reconfigure components', [(key, str(value)) for key, value in values.items()])
+        confirm('Apply component configuration and restart managed services?', a.yes)
+        state.update(values)
+        updates[root/'install.json'] = (json.dumps(state, ensure_ascii=False, indent=2)+'\n').encode()
+        updates[root/'configs/components.yaml'] = component_yaml(values).encode()
+        backup = root/'configs'/('reconfigure-backup-'+str(time.time_ns()))
+        backup.mkdir(mode=0o700)
+        originals = {}
+        for path in updates:
+            if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+                raise ValueError('Configuration contains a symlink: '+str(path))
+            originals[path] = path.read_bytes() if path.exists() else None
+            if originals[path] is not None:
+                target = backup/path.relative_to(root)
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                target.write_bytes(originals[path]); target.chmod(0o600)
+        # Upgrade only the manager shipped with this trusted bootstrap.
+        install_manager(root, release)
+        INSTALL_LOG = root/'logs'/f'configure-{time.time_ns()}.log'
+        INSTALL_LOG.touch(mode=0o600)
+        stop_names = ['web', 'server'] if any(old[k] != values[k] for k in COMPONENT_DEFAULTS if k not in ('web_host', 'web_port')) else ['web']
+        stopped = False
+        try:
+            stop_owned(root, stop_names)
+            stopped = True
+            if uninstall_processes(root, uninstall_managed(root)):
+                raise ValueError('Instance still has active processes; configuration was not changed')
+            for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
+                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
+            for path, data in updates.items():
+                replace_config(path, data)
+            if not a.no_start:
+                start(root, quiet=True)
+        except Exception:
+            if stopped:
+                stop_owned(root, stop_names)
+                for path, data in originals.items():
+                    if data is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        replace_config(path, data)
+                if owned:
+                    start(root, quiet=True)
+            raise
+        message = desktop_shortcuts(root, state, a.desktop)
+        write_json(root/'install.json', state)
+        print('Configuration backup: '+str(backup))
+        welcome(root, state, not a.no_start, message)
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    p = commands.add_parser('install')
+    p.add_argument('--payload', type=Path, required=True)
+    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    p.add_argument('--yes', action='store_true')
+    p.add_argument('--no-start', action='store_true')
+    p.add_argument('--install-system-deps', action='store_true')
+    p.add_argument('--musl', action='store_true', help='Use the optional musl release')
+    p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')
+    p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])
+    def presentation_options(p):
+        network = p.add_mutually_exclusive_group()
+        network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Listen on all IPv4 interfaces; allow only trusted LAN traffic through the firewall')
+        network.add_argument('--web-host', type=web_host, help='Web listen IPv4; new installs default to 0.0.0.0, existing settings are preserved; 127.0.0.1 restricts access to localhost')
+        desktop = p.add_mutually_exclusive_group()
+        desktop.add_argument('--desktop-shortcut', dest='desktop', action='store_const', const='always')
+        desktop.add_argument('--no-desktop-shortcut', dest='desktop', action='store_const', const='never')
+        p.set_defaults(desktop='auto')
+    presentation_options(p)
+    def component_options(p, web=True):
+        p.add_argument('-f', '--config', type=Path)
+        for key in COMPONENT_DEFAULTS:
+            if key == 'web_host':
+                if web: p.add_argument('--web-host', type=web_host)
+            else:
+                p.add_argument('--'+key.replace('_', '-'), type=int)
+    component_options(p, web=False)
+    p = commands.add_parser('configure')
+    p.add_argument('--payload', type=Path, required=True)
+    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    p.add_argument('--yes', action='store_true')
+    p.add_argument('--no-start', action='store_true')
+    presentation_options(p)
+    component_options(p, web=False)
+    p = commands.add_parser('export-config')
+    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    p.add_argument('--output', default='-')
+    component_options(p)
+    p = commands.add_parser('control')
+    p.add_argument('--root', type=Path, required=True)
+    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
+    p.add_argument('--output', default='-')
+    p.add_argument('--no-start', action='store_true')
+    p.set_defaults(desktop='auto')
+    component_options(p)
+    p.add_argument('--yes', action='store_true', help='uninstall: skip confirmation')
+    p.add_argument('--purge', action='store_true', help='uninstall: delete all instance data')
+    p.add_argument('--dry-run', action='store_true', help='uninstall: show the plan only')
+    a = parser.parse_args()
+    if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):
+        parser.error('--yes/--purge/--dry-run apply only to uninstall')
+    if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):
+        root = a.root if a.command == 'control' else Path(a.dir).expanduser()
+        state = load(root/'install.json') if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}
+        export_components(a.output, apply_component_options(a, configured_components(root, state)))
+    elif a.command == 'control' and a.action == 'reconfigure':
+        a.dir = str(a.root)
+        a.payload = a.root/'current'
+        configure_existing(a)
+    elif a.command == 'install':
+        install(a)
+    elif a.command == 'configure':
+        configure_existing(a)
+    elif a.action == 'welcome':
+        welcome(a.root, load(a.root/'install.json'), all(alive(r) for r in services(a.root).values()) and len(services(a.root)) == 2)
+    elif a.action == 'start':
+        start(a.root)
+    elif a.action == 'stop':
+        # Only these services; do not force-kill any Robot instance or unrelated user process.
+        stop_owned(a.root)
+        print('Stopped installer-managed Server/Web services.')
+        show_status(a.root)
+    elif a.action == 'status':
+        show_status(a.root)
+    elif a.action == 'uninstall':
+        from uninstall import uninstall_entry
+        uninstall_entry(['--dir', str(a.root), *(['--yes'] if a.yes else []),
+                         *(['--purge'] if a.purge else []), *(['--dry-run'] if a.dry_run else [])])
+    elif a.action == 'logs':
+        print(a.root/'logs')
+    elif a.action == 'doctor':
+        release = a.root/'current'
+        env = environment(a.root, release.resolve())
+        subprocess.run([str(release/'bin/semantic'), 'doctor', '-c', str(a.root/'configs/semantic-server.yaml')], env=env, check=True)
+
+
+if __name__ == '__main__':
+    try:
+        if len(sys.argv) > 1 and sys.argv[1] in ('install', 'configure'):
+            descriptor, filename = tempfile.mkstemp(prefix='semantic-management-', suffix='.log')
+            os.close(descriptor)
+            INSTALL_LOG = Path(filename)
+        main()
+    except Exception as error:
+        if PROGRESS:
+            PROGRESS.finish(error)
+        if INSTALL_LOG:
+            with INSTALL_LOG.open('a') as f:
+                traceback.print_exc(file=f)
+        print(f'Installation/management failed: {error}', file=sys.stderr)
+        if INSTALL_LOG:
+            print('Log: '+str(INSTALL_LOG), file=sys.stderr)
+        sys.exit(1)
+SEMANTIC_MANAGER_SOURCE
+  cat > "$1/install_support.py" <<'SEMANTIC_MANAGER_SOURCE'
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Dependency-free terminal presentation, networking and desktop integration."""
+from contextlib import contextmanager
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import unicodedata
+
+
+def width(text):
+    return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in 'WF' else 1 for c in text)
+
+
+def lines(text, columns):
+    """Wrap by terminal cells, including CJK; strip terminal control characters."""
+    for paragraph in str(text).split('\n'):
+        row = ''
+        for char in paragraph:
+            if unicodedata.category(char).startswith('C'):
+                continue
+            if row and width(row + char) > max(1, columns):
+                yield row
+                row = ''
+            row += char
+        yield row
+
+
+def columns(stream):
+    try:
+        return max(10, os.get_terminal_size(stream.fileno()).columns - 1)
+    except (OSError, ValueError, AttributeError):
+        return 79
+
+
+def colored(stream):
+    return terminal(stream) and 'NO_COLOR' not in os.environ
+
+
+def terminal(stream):
+    return stream.isatty() and os.environ.get('TERM', '') not in ('dumb', '')
+
+
+def height(stream):
+    try:
+        return max(6, os.get_terminal_size(stream.fileno()).lines)
+    except (OSError, ValueError, AttributeError):
+        return 24
+
+
+class Console:
+    """Small cell-aware forms. ANSI is added after wrapping, never measured as text."""
+    palette = {'title': '1;36', 'label': '2', 'value': '39', 'ok': '1;32',
+               'warn': '33', 'error': '1;31', 'command': '36', 'secret': '1;33', 'border': '2'}
+
+    def __init__(self, stream=None):
+        self.stream = stream if stream is not None else sys.stdout
+
+    @property
+    def size(self):
+        return min(82, columns(self.stream))
+
+    def paint(self, text, role='value'):
+        if colored(self.stream):
+            return '\033['+self.palette[role]+'m'+text+'\033[0m'
+        return text
+
+    def rule(self, title=''):
+        inner = self.size - 4
+        label = next(lines(' '+title+' ' if title else '', inner))
+        return '  '+self.paint(label, 'title')+self.paint('─' * max(0, inner-width(label)), 'border')
+
+    def row(self, label, value, role='value'):
+        available = self.size - 4
+        # Stacked labels keep very narrow terminals readable.
+        if available < 28:
+            result = ['  '+self.paint(row, 'label') for row in lines(label, available)]
+            result += ['    '+self.paint(row, role) for row in lines(str(value), max(1, available-2))]
+            return result
+        label_size = 12
+        result = []
+        label = next(lines(str(label), label_size))
+        prefix = label+' '*(label_size-width(label))+'  '
+        for index, row in enumerate(lines(str(value), available-label_size-2)):
+            result.append('  '+self.paint(prefix if index == 0 else ' '*(label_size+2), 'label')+self.paint(row, role))
+        return result
+
+    def form(self, title, rows):
+        result = [self.rule(title)]
+        for row in rows:
+            result.extend(self.row(*row))
+        return result
+
+    def write(self, rows, clear=False):
+        if clear and terminal(self.stream):
+            # Clear the viewport only; never erase shell scrollback (CSI 3J).
+            self.stream.write('\033[2J\033[H')
+        self.stream.write('\n'.join(rows)+'\n')
+        self.stream.flush()
+
+
+def settings_form(title, rows, stream=None):
+    console = Console(stream)
+    console.write(console.form(title, rows))
+
+
+class Progress:
+    def __init__(self, tasks, stream=None):
+        self.tasks, self.stream = tasks, stream or sys.stderr
+        self.done = 0
+        self.active = ''
+        self.started = time.monotonic()
+        self.event = threading.Event()
+        self.current = None
+        self.animated = terminal(self.stream)
+        self.console = Console(self.stream)
+        self.states = ['Pending'] * len(tasks)
+        self.durations = [''] * len(tasks)
+        self.index = -1
+        self.log_path = ''
+        self.detail = ''
+        self.error = False
+        if not self.animated:
+            self.console.write(self.console.form('Installation tasks', [(str(i), task) for i, task in enumerate(tasks, 1)]))
+
+    def next(self, task):
+        self.finish()
+        self.current = self.stage(task)
+        self.current.__enter__()
+
+    def finish(self, error=None):
+        if self.current:
+            current, self.current = self.current, None
+            current.__exit__(type(error) if error else None, error, error.__traceback__ if error else None)
+
+    def say(self, text):
+        for row in lines(text, columns(self.stream)):
+            print(row, file=self.stream, flush=True)
+
+    def frame(self):
+        while not self.event.wait(.4):
+            self.render()
+
+    def render(self):
+        rows = []
+        count = len(self.tasks)
+        for i, task in enumerate(self.tasks):
+            active = i == self.index and self.states[i] == 'Running'
+            elapsed = f'{time.monotonic()-self.started:.0f}s' if active else self.durations[i]
+            role = 'command' if active else 'ok' if self.states[i] == 'Done' else 'error' if self.states[i] == 'Failed' else 'label'
+            rows.append((f'{i+1:02d} {self.states[i]}', task + ('  '+elapsed if elapsed else ''), role))
+        bar_size = min(20, max(3, self.console.size//4))
+        done = bar_size*self.done//count
+        bar = '['+'#'*done+'-'*(bar_size-done)+f'] {self.done}/{count}  {self.done*100//count}%'
+        output = self.console.form('SEMANTIC / INSTALL', [('Progress', bar, 'ok' if self.done == count else 'command')])
+        output += self.console.form('Tasks', rows)
+        if self.detail:
+            output += self.console.row('Command', self.detail, 'command')
+        if self.log_path:
+            output += self.console.row('Log', self.log_path, 'label')
+        # Resize-safe compact view when the whole checklist does not fit vertically.
+        if len(output) >= height(self.stream)-1:
+            current = rows[max(0, self.index)]
+            output = self.console.form('SEMANTIC', [('Progress', f'{self.done}/{count} Done'), current])
+            if self.detail:
+                output += self.console.row('Command', self.detail, 'command')
+            if self.log_path:
+                output += self.console.row('Log', self.log_path, 'label')
+        self.console.write(output[:max(1, height(self.stream)-1)], clear=True)
+
+    @contextmanager
+    def stage(self, task):
+        self.active, self.started = task, time.monotonic()
+        self.index += 1
+        self.states[self.index] = 'Running'
+        if self.animated:
+            self.render()
+        else:
+            self.console.write(self.console.row(f'{self.index+1:02d} Running', task, 'command'))
+        self.event.clear()
+        thread = threading.Thread(target=self.frame, daemon=True) if self.animated else None
+        if thread:
+            thread.start()
+        failed = False
+        try:
+            yield
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            self.event.set()
+            if thread:
+                thread.join()
+            if not failed:
+                self.done += 1
+            self.states[self.index] = 'Failed' if failed else 'Done'
+            self.durations[self.index] = f'{time.monotonic()-self.started:.1f}s'
+            self.error = failed
+            if self.animated:
+                self.render()
+            else:
+                self.console.write(self.console.row('[FAIL]' if failed else '[OK]',
+                    f'{task} · {self.durations[self.index]} · {self.done*100//len(self.tasks)}%', 'error' if failed else 'ok'))
+
+
+def web_host(value):
+    try:
+        address = ipaddress.IPv4Address(value)
+    except ipaddress.AddressValueError:
+        raise ValueError('--web-host must be an IPv4 address; --lan means 0.0.0.0') from None
+    if address.is_multicast or int(address) == 0xffffffff:
+        raise ValueError('Cannot listen on multicast or broadcast addresses')
+    return str(address)
+
+
+def web_probe(host):
+    return '127.0.0.1' if host == '0.0.0.0' else host
+
+
+def lan_addresses():
+    addresses = set()
+    if shutil.which('ip'):
+        try:
+            reply = subprocess.check_output(['ip', '-j', '-4', 'addr', 'show', 'scope', 'global'], timeout=3, stderr=subprocess.DEVNULL)
+            for interface in json.loads(reply):
+                for item in interface.get('addr_info', []):
+                    addresses.add(item.get('local', ''))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    if not addresses:
+        try:
+            addresses.update(socket.gethostbyname_ex(socket.gethostname())[2])
+        except OSError:
+            pass
+    return sorted(a for a in addresses if a and not ipaddress.IPv4Address(a).is_loopback)
+
+
+def urls(state):
+    host, port = state.get('web_host', '127.0.0.1'), state['web_port']
+    if host != '0.0.0.0':
+        return [f'http://{host}:{port}']
+    return [f'http://127.0.0.1:{port}', *[f'http://{a}:{port}' for a in lan_addresses()]]
+
+
+def desktop_escape(value):
+    return str(value).replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
+
+def desktop_shortcuts(root, state, mode='auto'):
+    if sys.platform == 'darwin':
+        return 'macOS: use bin/semanticctl to manage services and open the URL above (desktop shortcut skipped)'
+    if mode == 'never':
+        return 'Desktop shortcuts skipped'
+    home = Path.home().resolve()
+    desktop = None
+    if shutil.which('xdg-user-dir'):
+        try:
+            candidate = Path(subprocess.check_output(['xdg-user-dir', 'DESKTOP'], text=True, timeout=3).strip())
+            if candidate.is_absolute() and candidate != home:
+                desktop = candidate
+        except (OSError, subprocess.SubprocessError):
+            pass
+    graphical = bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or (desktop and desktop.is_dir()))
+    if mode == 'auto' and not graphical:
+        return 'No desktop detected; shortcuts skipped (use --desktop-shortcut to create them explicitly)'
+    if not shutil.which('xdg-open'):
+        return 'xdg-open not found; shortcuts skipped. Install xdg-utils and retry'
+    if desktop is None and mode == 'always':
+        desktop = home/'Desktop'
+    data = Path(os.environ.get('XDG_DATA_HOME', str(home/'.local/share')))
+    targets = [data/'applications']
+    if desktop:
+        targets.append(desktop)
+    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    filename = f'semantic-{identity}.desktop'
+    url = f"http://{web_probe(state.get('web_host', '127.0.0.1'))}:{state['web_port']}"
+    icon = root/'bin/semantic-manager/assets/ios.png'
+    text = ('[Desktop Entry]\nType=Application\nVersion=1.0\nName=Semantic\n'
+            'Comment=Open Semantic Web\nExec=xdg-open '+url+'\nTryExec=xdg-open\n'
+            'Icon='+desktop_escape(icon)+'\nTerminal=false\nCategories=Development;\n'
+            'StartupNotify=false\nX-Semantic-Root='+desktop_escape(root)+'\n')
+    records = state.setdefault('desktop_shortcuts', {})
+    created = []
+    for directory in targets:
+        # Never write through links, outside the user's home, or over foreign files.
+        if not directory.is_absolute() or home not in directory.parents or any(p.is_symlink() for p in [directory, *directory.parents]):
+            continue
+        path = directory/filename
+        if path.is_symlink() or (path.exists() and (path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or
+                hashlib.sha256(path.read_bytes()).hexdigest() != records.get(str(path)))):
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+        path.chmod(0o755 if directory == desktop else 0o644)
+        records[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+        created.append(str(path))
+        if directory == desktop and shutil.which('gio') and (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+            try:
+                subprocess.run(['gio', 'set', str(path), 'metadata::trusted', 'true'], timeout=3,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return ('Shortcuts: ' + ', '.join(created) + '\nIf the desktop marks a shortcut as untrusted, right-click and select Allow Launching.') if created else 'Shortcuts not created: unsafe target path or modified files'
+
+
+def welcome(root, state, started, desktop_message='', stream=None, clear=True):
+    import shlex
+    console = Console(stream)
+    stream = console.stream
+    compact = terminal(stream) and height(stream) < 30
+    secret = None
+    tty = None
+    try:
+        tty = open('/dev/tty', 'w', encoding='utf-8')
+        if tty.isatty():
+            secret = json.loads((root/'configs/secrets.json').read_text())['SEMANTIC_ADMIN_PASSWORD']
+    except OSError:
+        pass
+    try:
+        # Only an actual TTY receives the inline secret. Redirected output remains public.
+        inline_secret = secret is not None and stream.isatty()
+        title = ['SEMANTIC', 'Welcome - From semantics to action', state['version'],
+                 'Services started' if started else 'Services not started']
+        output = []
+        # Keep the original orca PNG for desktop shortcuts, not terminal ASCII art.
+        for i, text in enumerate(title):
+            role = 'title' if i < 2 else 'label' if i == 2 else 'ok' if started else 'warn'
+            output.extend('  '+console.paint(row, role) for row in lines(text, console.size-4))
+        access = []
+        addresses = urls(state)
+        for index, url in enumerate(addresses):
+            access.append(('Access' if len(addresses) == 1 else 'Local' if index == 0 else 'LAN', url, 'command'))
+        access += [('Username', 'admin'),
+                   ('Password', secret if inline_secret else 'Shown only in a terminal; see configs/secrets.json', 'secret' if inline_secret else 'label')]
+        output += console.form('Access', access)
+        output += console.form('Manage', [('Start', 'semanticctl start', 'command'), ('Stop', 'semanticctl stop', 'command')])
+        output += console.form('Environment', [
+            ('Session', 'export SEMANTIC_HOME='+shlex.quote(str(root)), 'command'),
+            ('', 'export PATH="$SEMANTIC_HOME/bin:$PATH"', 'command'),
+            ('Persist', 'Add the two lines above to ~/.bashrc or ~/.zshrc', 'label')])
+        notes = [('Log', 'semanticctl logs', 'command')]
+        if desktop_message.startswith('Shortcuts:') or (not desktop_message and state.get('desktop_shortcuts')):
+            notes.append(('Desktop', 'Created; you may need to right-click and Allow Launching', 'ok'))
+        elif desktop_message:
+            notes.append(('Desktop', 'Skipped' if 'skipped' in desktop_message else 'Not created; check xdg-open and directory permissions', 'label'))
+        if state.get('web_host', '127.0.0.1') != '127.0.0.1':
+            notes.append(('Network', f"TCP {state['web_port']} for trusted LAN only; public access requires HTTPS", 'warn'))
+        if not compact:
+            notes += [('Secret file', str(root/'configs/secrets.json'), 'label'),
+                      ('Notes', 'Stop scenes / Robots before services; auto-start at boot is not configured', 'label')]
+        output += console.form('Notes', notes)
+        # Success clears the live task page, not scrollback. Failure never calls welcome.
+        console.write(output, clear=clear)
+        if secret is not None and not inline_secret and tty and tty.isatty():
+            private_console = Console(tty)
+            private_console.write(private_console.form('Credentials - terminal only', [('Password', secret, 'secret')]))
+    finally:
+        if tty:
+            tty.close()
+
+
+# The component file is deliberately a flat, scalar-only YAML mapping. Keeping
+# this grammar small lets the macOS bootstrap read it before Python is installed.
+COMPONENT_DEFAULTS = dict(http_port=8034, ws_port=8035, web_port=3000,
+                          runtime_port=8036, ability_port_first=18100,
+                          ability_port_last=18199, web_host='0.0.0.0')
+
+
+def component_values(state=None):
+    values = dict(COMPONENT_DEFAULTS)
+    if sys.platform == 'darwin':
+        values['web_host'] = '127.0.0.1'
+    values.update({k: v for k, v in (state or {}).items() if k in values})
+    return values
+
+
+def read_component_config(path):
+    import re
+    values = {}
+    text = Path(path).read_text(encoding='utf-8')
+    if len(text) > 16384:
+        raise ValueError('Component YAML exceeds 16 KiB')
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.split('#', 1)[0].strip()
+        if not line or line in ('---', '...'):
+            continue
+        match = re.fullmatch(r'([a-z_]+):\s*(?:([0-9.]+)|"([0-9.]+)"|\'([0-9.]+)\')', line)
+        if not match:
+            raise ValueError(f'Invalid component YAML at line {number}; use flat scalar key: value entries')
+        key, *parts = match.groups()
+        if key not in {'schema_version', *COMPONENT_DEFAULTS} or key in values:
+            raise ValueError('Unknown or duplicate component key: '+key)
+        value = next(part for part in parts if part is not None)
+        values[key] = value if key == 'web_host' else int(value)
+    if values.pop('schema_version', None) != 1:
+        raise ValueError('Component YAML requires schema_version: 1')
+    return values
+
+
+def validate_components(values):
+    ports = [values[k] for k in ('http_port', 'ws_port', 'web_port', 'runtime_port')]
+    if any(type(p) is not int or not 1024 <= p <= 65535 for p in ports) or len(set(ports)) != 4:
+        raise ValueError('Component ports must be distinct integers between 1024 and 65535')
+    first, last = values['ability_port_first'], values['ability_port_last']
+    if type(first) is not int or type(last) is not int or not 1024 <= first <= last <= 65535:
+        raise ValueError('Invalid Ability port range')
+    if any(first <= port <= last for port in ports):
+        raise ValueError('Component ports overlap the Ability port range')
+    web_host(values['web_host'])
+    return values
+
+
+def component_yaml(values):
+    validate_components(values)
+    return ('# Semantic component ports. CLI options override this file. No secrets.\n'
+            '# Flat YAML scalars only; comments and quoted scalars are supported.\n'
+            'schema_version: 1\n'+''.join(f'{key}: {values[key]}\n' for key in COMPONENT_DEFAULTS))
+
+
+def export_components(path, values):
+    text = component_yaml(values)
+    if str(path) == '-':
+        print(text, end='')
+        return
+    # Never overwrite an edited configuration without an explicit new filename.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(text)
+SEMANTIC_MANAGER_SOURCE
+  cat > "$1/uninstall.py" <<'SEMANTIC_MANAGER_SOURCE'
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Offline uninstaller; mirrored into install.sh so old releases need no download."""
+import argparse
+import ctypes
+import platform
+import subprocess
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import signal
+import tempfile
+import time
+import traceback
+
+UNINSTALL_DIRS = ('releases', 'python', 'runtime-envs', 'runtime-packs', 'bin')
+
+
+def uninstall_root(value):
+    raw = Path(value).expanduser()
+    root = raw.resolve()
+    forbidden = {Path('/'), Path.home().resolve(), *Path.cwd().resolve().parents, Path.cwd().resolve()}
+    forbidden.update(map(Path, ('/tmp', '/var', '/usr', '/opt', '/home', '/srv', '/mnt', '/media')))
+    if not raw.is_absolute() or raw != root or root in forbidden or any(ord(c) < 32 for c in str(root)):
+        raise ValueError('Uninstall refused: specify an absolute instance path, not a symlink, home, workspace or ancestor directory')
+    if not root.is_dir() or root.stat().st_uid != os.geteuid():
+        raise ValueError('Instance directory is missing or belongs to another user; uninstall as the original installation user')
+    for name in ('.semantic-install-root', 'install.json'):
+        path = root/name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('Not a recognized Semantic managed instance; missing '+name)
+        if path.stat().st_nlink != 1 or path.stat().st_uid != os.geteuid():
+            raise ValueError('Unsafe management file ownership or hard links: '+name)
+    state = json.loads((root/'install.json').read_text())
+    if not isinstance(state, dict) or not isinstance(state.get('version'), str) or not state['version']:
+        raise ValueError('Invalid installation state; uninstall refused')
+    # Do not cross bind mounts or filesystem mounts, including same-device bind mounts.
+    for mount in mounted_paths():
+        for escaped, char in ((r'\040', ' '), (r'\011', '\t'), (r'\012', '\n'), (r'\134', '\\')):
+            mount = mount.replace(escaped, char)
+        if Path(mount) == root or root in Path(mount).parents:
+            raise ValueError('Mount point inside instance; ask an administrator to unmount it first: '+mount)
+    for name in (*UNINSTALL_DIRS, 'run', 'logs'):
+        path = root/name
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            raise ValueError('Invalid managed directory: '+name)
+    for name in ('run/services.json', 'run/install.lock'):
+        path = root/name
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise ValueError('Invalid management file: '+name)
+    current = root/'current'
+    if current.is_symlink():
+        if root/'releases' not in current.resolve().parents:
+            raise ValueError('current points outside the instance or to an invalid location')
+    elif current.exists():
+        raise ValueError('current is not an installer-managed symlink')
+    return root, state
+
+
+def uninstall_identity(pid):
+    if platform.system() == 'Darwin':
+        return mac_process(pid)[0]
+    try:
+        fields = Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()
+        return None if fields[0] == 'Z' else fields[19]
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def uninstall_managed(root):
+    path = root/'run/services.json'
+    records = json.loads(path.read_text()) if path.exists() else {}
+    if not isinstance(records, dict):
+        raise ValueError('Invalid services.json')
+    owned = {}
+    for name, record in records.items():
+        if name not in ('server', 'web') or not isinstance(record, dict):
+            raise ValueError('Unknown managed process; refusing to stop it automatically')
+        pid, ticks = record.get('pid'), record.get('start_ticks')
+        if not isinstance(pid, int) or pid <= 1 or not isinstance(ticks, str) or not ticks:
+            raise ValueError('Incomplete managed process identity record')
+        if uninstall_identity(pid) != ticks:
+            continue  # Stale PID records are never signalled.
+        executable = Path(mac_process(pid)[1]).resolve(strict=True) if platform.system() == 'Darwin' else Path(f'/proc/{pid}/exe').resolve(strict=True)
+        expected = 'semantic-server' if name == 'server' else 'semantic-web-gateway'
+        if executable.name != expected or root/'releases' not in executable.parents:
+            raise ValueError('Managed PID does not match the instance executable; refusing to stop it')
+        owned[pid] = ticks
+    return owned
+
+
+def uninstall_processes(root, allowed=()):
+    if platform.system() == 'Darwin':
+        return mac_processes(root, allowed)
+    # Ignore this CLI and its invoking shell/terminal, not arbitrary processes.
+    ignored = set()
+    pid = os.getpid()
+    while pid > 1 and pid not in ignored:
+        ignored.add(pid)
+        try:
+            pid = int(Path(f'/proc/{pid}/stat').read_text().split(') ', 1)[1].split()[1])
+        except (FileNotFoundError, ProcessLookupError):
+            break
+    busy = []
+    prefix = str(root)+'/'
+    for proc in Path('/proc').iterdir():
+        if not proc.name.isdigit() or int(proc.name) == os.getpid() or int(proc.name) in allowed:
+            continue
+        pid = int(proc.name)
+        try:
+            args = (proc/'cmdline').read_bytes().decode(errors='replace').split('\0')
+            reasons = []
+            if pid not in ignored and any(arg == str(root) or arg.startswith(prefix) or ('='+prefix) in arg for arg in args):
+                reasons.append('Command arguments reference this instance')
+            if proc.stat().st_uid == os.geteuid():
+                for name in ('exe', 'cwd'):
+                    try:
+                        target = os.readlink(proc/name)
+                        # Linux retains an unlinked directory as a shell's cwd.
+                        # Its textual path ends in " (deleted)", but it no longer
+                        # references the live installation tree. Check the inode,
+                        # not that suffix: a real directory may have that name.
+                        if name == 'cwd' and (proc/name).stat().st_nlink == 0:
+                            continue
+                        if target == str(root) or target.startswith(prefix):
+                            reasons.append(('Working directory: ' if name == 'cwd' else 'Executable: ') + target)
+                    except (FileNotFoundError, PermissionError):
+                        # Protected system services may expose cmdline but not exe/cwd.
+                        # Their readable command arguments are still checked above.
+                        pass
+            if reasons and uninstall_identity(pid) is not None:
+                command = (proc/'comm').read_text().strip()
+                busy.append({'pid': pid, 'command': ''.join(c for c in command if c.isprintable()),
+                             'reasons': reasons})
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except PermissionError:
+            # Same-user processes must be inspectable; do not silently assume safety.
+            if proc.exists() and proc.stat().st_uid == os.geteuid():
+                raise RuntimeError(f'Cannot inspect same-user process {pid}; uninstall refused')
+    return sorted(busy, key=lambda item: item['pid'])
+
+
+def uninstall_busy(root, allowed):
+    busy = uninstall_processes(root, allowed)
+    if busy:
+        details = '; '.join(f"PID {item['pid']} ({item['command']}): " + ', '.join(item['reasons']) for item in busy)
+        raise RuntimeError('Active processes still reference this instance; no files deleted. '+details+
+                           '. For a terminal working directory, run cd ~ in that terminal or close it. Stop services using their own controls. Unrelated processes are never killed automatically.')
+
+
+def uninstall_confirm(root, purge, yes):
+    if yes:
+        return
+    try:
+        with open('/dev/tty', 'w', encoding='utf-8') as output, open('/dev/tty', 'r', encoding='utf-8') as source:
+            output.write(f'Uninstall {root}'+(' and permanently delete ALL configuration, data and logs?' if purge else ' (keep configuration, data and logs)?')+' [y/N] ')
+            output.flush()
+            answer = source.readline().strip().lower()
+    except OSError:
+        raise RuntimeError('Non-interactive mode requires --yes; review the plan with --dry-run first')
+    if answer not in ('y', 'yes'):
+        raise RuntimeError('Uninstall cancelled by user')
+
+
+def uninstall_shortcuts(root, state, note, dry_run=False):
+    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    home = Path.home().resolve()
+    for name, checksum in state.get('desktop_shortcuts', {}).items():
+        path = Path(name)
+        if (not path.is_absolute() or home not in path.parents or path.name != f'semantic-{identity}.desktop'
+                or any(p.is_symlink() for p in [path, *path.parents]) or not path.is_file()):
+            continue
+        if path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
+            note('preserved modified shortcut '+str(path))
+            continue
+        note(('would remove ' if dry_run else 'removed ') + str(path))
+        if not dry_run:
+            path.unlink()
+
+
+def uninstall_entry(argv):
+    parser = argparse.ArgumentParser(description='Semantic safe offline uninstall; no artifact downloads or removal of shared system dependencies')
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    parser.add_argument('--purge', action='store_true', help='Permanently delete all configuration, databases, logs and other files in this instance')
+    parser.add_argument('--yes', action='store_true')
+    parser.add_argument('--dry-run', action='store_true', help='Inspect and show the plan without stopping processes or deleting files')
+    a = parser.parse_args(argv)
+    fd, logfile = tempfile.mkstemp(prefix='semantic-uninstall-', suffix='.log')
+    os.close(fd)  # 0600; outside the instance so purge cannot erase failure evidence.
+    print('Uninstall log:', logfile, flush=True)
+    def note(message):
+        with open(logfile, 'a') as f:
+            f.write(message+'\n')
+    try:
+        root, state = uninstall_root(a.dir)
+        note(f'root={root}; purge={a.purge}; dry_run={a.dry_run}')
+        owned = uninstall_managed(root)
+        uninstall_busy(root, owned)
+        targets = [root] if a.purge else [root/name for name in (*UNINSTALL_DIRS, 'current')
+                                          if (root/name).exists() or (root/name).is_symlink()]
+        print('Verified Server/Web PIDs to stop:', ', '.join(map(str, owned)) or 'None')
+        for path in targets:
+            print('Will remove:', path)
+        if not a.purge:
+            print('Keeping configuration, databases, logs, scene/Robot data and other non-program directories. Reinstall the same version to restore the runtime.')
+        if a.dry_run:
+            uninstall_shortcuts(root, state, note, dry_run=True)
+            note('dry-run complete; no processes stopped or files deleted')
+            return
+        uninstall_confirm(root, a.purge, a.yes)
+        (root/'run').mkdir(exist_ok=True, mode=0o700)
+        lockfd = os.open(root/'run/install.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(lockfd, 'r+') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            uninstall_root(str(root))  # Validate again after confirmation and locking.
+            owned = uninstall_managed(root)
+            uninstall_busy(root, owned)
+            for pid, ticks in owned.items():
+                if uninstall_identity(pid) == ticks:
+                    os.kill(pid, signal.SIGTERM)  # Never signal arbitrary process groups/Robots.
+                    note(f'SIGTERM owned PID {pid}')
+            deadline = time.monotonic()+20
+            while any(uninstall_identity(pid) == ticks for pid, ticks in owned.items()):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Server/Web did not stop within 20 seconds; no data deleted and no processes forcibly killed')
+                time.sleep(.1)
+            uninstall_busy(root, {})
+            uninstall_shortcuts(root, state, note)
+            if a.purge:
+                shutil.rmtree(root)
+                note('purge complete; entire managed instance removed')
+            else:
+                # Persist a non-runnable state before removing binaries; failed deletion is retryable.
+                state.update(ready=False, uninstalled_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+                for path, value in ((root/'install.json', state), (root/'run/services.json', {})):
+                    descriptor, temporary = tempfile.mkstemp(prefix='.uninstall-state-', dir=path.parent)
+                    with os.fdopen(descriptor, 'w') as f:
+                        json.dump(value, f, indent=2)
+                    os.replace(temporary, path)
+                for path in targets:
+                    if path.is_symlink():
+                        path.unlink()
+                    elif path.is_dir():
+                        shutil.rmtree(path)
+                    note('removed '+str(path))
+                note('uninstall complete; user data preserved')
+        print('Uninstall complete. '+('The entire instance has been permanently deleted; this script cannot restore it.' if a.purge else 'Programs removed; configuration, data and logs preserved.'))
+        print('System packages were not removed. Only unchanged shortcuts created by this instance were removed. Log:', logfile)
+    except Exception:
+        with open(logfile, 'a') as f:
+            traceback.print_exc(file=f)
+        raise
+
+
+def mounted_paths():
+    if platform.system() != 'Darwin':
+        return [line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+    output = subprocess.check_output(['/sbin/mount'], text=True, timeout=10)
+    return [line.split(' on ', 1)[1].rsplit(' (', 1)[0] for line in output.splitlines() if ' on ' in line]
+
+
+class MacProcessInfo(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint32) for name in ('flags', 'status', 'xstatus', 'pid', 'ppid',
+                'uid', 'gid', 'ruid', 'rgid', 'svuid', 'svgid', 'reserved')]
+    _fields_ += [('comm', ctypes.c_char * 16), ('name', ctypes.c_char * 32)]
+    _fields_ += [(name, ctypes.c_uint32) for name in ('nfiles', 'pgid', 'jobc', 'tdev', 'tpgid', 'nice')]
+    _fields_ += [('start_sec', ctypes.c_uint64), ('start_usec', ctypes.c_uint64)]
+
+
+def mac_process(pid):
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    info = MacProcessInfo()
+    size = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size == 0:
+        # ESRCH is normal for an exited child; inaccessible live processes are not.
+        if ctypes.get_errno() in (0, 3):
+            return None, ''
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process identity')
+    if size != ctypes.sizeof(info) or info.pid != pid:
+        raise RuntimeError('Unexpected macOS process information ABI')
+    if info.status == 5:
+        return None, ''
+    path = ctypes.create_string_buffer(4096)
+    if lib.proc_pidpath(pid, path, len(path)) <= 0:
+        raise OSError(ctypes.get_errno(), 'Cannot inspect process executable')
+    return f'{info.start_sec}:{info.start_usec}', os.fsdecode(path.value)
+
+
+def mac_processes(root, allowed):
+    # lsof inspects executable mappings, working directories and open files.
+    # Recursive lookup covers Python workers whose executable lives elsewhere.
+    command = ['/usr/sbin/lsof', '-nP', '-Fpcn', '+D', str(root)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    if result.returncode not in (0, 1) or result.stderr.strip():
+        raise RuntimeError('Cannot inspect open installation files: ' + result.stderr.strip())
+    rows = {}
+    pid = None
+    for line in result.stdout.splitlines():
+        if line.startswith('p'):
+            pid = int(line[1:])
+            rows.setdefault(pid, {'pid': pid, 'command': '', 'reasons': []})
+        elif pid is not None and line.startswith('c'):
+            rows[pid]['command'] = line[1:]
+        elif pid is not None and line.startswith('n'):
+            rows[pid]['reasons'].append('Open file: '+line[1:])
+    return [row for pid, row in sorted(rows.items()) if pid not in {*allowed, os.getpid()} and row['reasons']]
+SEMANTIC_MANAGER_SOURCE
+}
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+# Shared pre-routing configuration. Works with the system Bash/awk on macOS.
+semantic_config_entry() (
+  local config='' output='' action=install root="$HOME/.local/share/semantic" python='' manager=''
+  [[ "$(uname -s)" != Darwin ]] || root="$HOME/Library/Application Support/Semantic"
+  local args=() config_args=() key value line parsed
+  while (($#)); do
+    case "$1" in
+      -f|--config) config="${2:?Missing config file}"; shift 2 ;;
+      --config=*) config="${1#*=}"; shift ;;
+      --export-config) output="${2:?Missing output path (or - for stdout)}"; shift 2 ;;
+      --export-config=*) output="${1#*=}"; shift ;;
+      reconfigure|--reconfigure|--configure-existing) action=reconfigure; shift ;;
+      --package|--sha256|--source|--tag|--version|--base-url|--cache-dir|--ticket)
+        args+=("$1" "${2:?Missing option value}"); shift 2 ;;
+      --dir) root="${2:?Missing directory}"; args+=("$1" "$2"); shift 2 ;;
+      --dir=*) root="${1#*=}"; args+=("$1"); shift ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  if [[ -n "$config" ]]; then
+    [[ -f "$config" && -r "$config" ]] || { echo 'Component YAML is not a readable file' >&2; exit 2; }
+    # Emit separate argv tokens, never source/eval user-provided YAML.
+    parsed=$(awk '
+      BEGIN { count=0 }
+      { count+=length($0)+1; if(count>16384) {print "Component YAML exceeds 16 KiB" > "/dev/stderr"; exit 2}
+        sub(/#.*/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); if($0=="" || $0=="---" || $0=="...") next
+        if($0 !~ /^[a-z_]+:[ \t]*[0-9.]+$/ && $0 !~ /^[a-z_]+:[ \t]*"[0-9.]+"$/ && $0 !~ /^[a-z_]+:[ \t]*\047[0-9.]+\047$/) { print "Invalid flat component YAML at line " NR > "/dev/stderr"; exit 2 }
+        key=$0; sub(/:.*/, "", key); value=$0; sub(/^[^:]+:[ \t]*/, "", value); gsub(/["\047]/, "", value)
+        if(key !~ /^(schema_version|http_port|ws_port|web_port|runtime_port|ability_port_first|ability_port_last|web_host)$/ || seen[key]++) {print "Unknown or duplicate component key: " key > "/dev/stderr"; exit 2}
+        if(key=="schema_version") {schema=value; next}
+        gsub(/_/, "-", key); print "--" key; print value
+      }
+      END {if(schema!="1") {print "Component YAML requires schema_version: 1" > "/dev/stderr"; exit 2}}
+    ' "$config") || exit 2
+    while IFS= read -r line; do [[ -z "$line" ]] || config_args+=("$line"); done <<< "$parsed"
+  fi
+  for line in ${args[@]+"${args[@]}"}; do
+    if [[ "$line" == --lan ]]; then
+      local filtered=() skip=0
+      for value in ${config_args[@]+"${config_args[@]}"}; do
+        if ((skip)); then skip=0; continue; fi
+        if [[ "$value" == --web-host ]]; then skip=1; else filtered+=("$value"); fi
+      done
+      config_args=("${filtered[@]}")
+    fi
+  done
+  # Carry the current manager so older release archives gain configuration support.
+  {
+    manager=$(mktemp -d "${TMPDIR:-/tmp}/semantic-manager.XXXXXXXX")
+    trap 'rm -rf -- "$manager"' EXIT
+    semantic_write_manager "$manager"
+    export SEMANTIC_BOOTSTRAP_MANAGER="$manager"
+  }
+  if [[ -n "$output" || "$action" == reconfigure ]]; then
+    if [[ "$(uname -s)" == Darwin ]]; then
+      for python in "$root"/current/python/bin/python3.13 "$root"/releases/*/python/bin/python3.13; do
+        [[ ! -x "$python" ]] || break
+      done
+      if [[ ! -x "$python" ]]; then
+        if [[ -n "$output" && "$action" != reconfigure && ! -e "$root/install.json" ]]; then
+          if [[ "$output" == - ]]; then semantic_default_yaml ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"}; else (umask 077; set -C; semantic_default_yaml ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"} > "$output"); fi
+          exit
+        fi
+        echo 'For a new Mac, export defaults without --dir/-f; reconfigure requires an installed instance.' >&2; exit 2
+      fi
+    else
+      python=$(command -v python3) || { echo 'Python 3.10+ is required' >&2; exit 2; }
+    fi
+    if [[ -n "$output" ]]; then
+      "$python" -B "$manager/installer.py" export-config --dir "$root" --output "$output" ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"}
+    else
+      local filtered=() skip=0
+      for line in ${args[@]+"${args[@]}"}; do
+        if ((skip)); then skip=0; continue; fi
+        case "$line" in
+          --package|--sha256|--source|--tag|--version|--base-url|--cache-dir|--ticket|--musl-runtime) skip=1 ;;
+          --package=*|--sha256=*|--source=*|--tag=*|--version=*|--base-url=*|--cache-dir=*|--ticket=*|--musl-runtime=*|--musl) ;;
+          *) filtered+=("$line") ;;
+        esac
+      done
+      args=("${filtered[@]}")
+      "$python" -B "$manager/installer.py" configure --payload "$root/current" --dir "$root" ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"}
+    fi
+    exit
+  fi
+  if [[ -n "$config" && "$(uname -s)" != Darwin ]]; then
+    python3 -B - "$manager" "$config" <<'SEMANTIC_VALIDATE'
+import sys
+sys.path.insert(0, sys.argv[1])
+from install_support import read_component_config
+read_component_config(sys.argv[2])
+SEMANTIC_VALIDATE
+  fi
+  main ${config_args[@]+"${config_args[@]}"} ${args[@]+"${args[@]}"}
+)
+
+semantic_default_yaml() {
+  printf '%s\n' "$@" | awk '
+    BEGIN {v["http_port"]=8034; v["ws_port"]=8035; v["web_port"]=3000; v["runtime_port"]=8036; v["ability_port_first"]=18100; v["ability_port_last"]=18199; v["web_host"]="127.0.0.1"}
+    {if($0=="") next; if(pending!="") {if(pending!="dir") v[pending]=$0; pending=""; next}
+     text=$0; sub(/^--/, "", text); key=text; sub(/=.*/, "", key); gsub(/-/, "_", key)
+     if(!(key in v) && key!="dir") {print "Unsupported export option: " $0 > "/dev/stderr"; failed=1; exit 2}
+     if(index(text,"=")) {sub(/^[^=]*=/,"",text); if(key!="dir") v[key]=text} else pending=key}
+    END {if(failed) exit 2; if(pending!="") exit 2
+      n=split("http_port ws_port web_port runtime_port ability_port_first ability_port_last web_host",keys," ")
+      for(i=1;i<n;i++) {x=v[keys[i]]; if(x!~/^[0-9]+$/ || x+0<1024 || x+0>65535) {print "Invalid component port" > "/dev/stderr"; exit 2} v[keys[i]]=x+0}
+      if(v["ability_port_first"]>v["ability_port_last"]) exit 2
+      for(i=1;i<=4;i++) {x=v[keys[i]]; if(seen[x]++ || (x>=v["ability_port_first"] && x<=v["ability_port_last"])) {print "Conflicting component ports" > "/dev/stderr"; exit 2}}
+      if(split(v["web_host"],ip,".")!=4) exit 2
+      for(i=1;i<=4;i++) if(ip[i]!~/^[0-9]+$/ || ip[i]+0>255 || (length(ip[i])>1 && substr(ip[i],1,1)=="0")) exit 2
+      if(ip[1]+0>=224) exit 2
+      print "# Semantic component ports. CLI options override this file. No secrets."
+      print "schema_version: 1"; for(i=1;i<=n;i++) print keys[i] ": " v[keys[i]]
+    }'
+}
+# END GENERATED COMPONENT CONFIG
 main() {
   if [[ "$(uname -s)" == Darwin ]]; then
     semantic_macos_dispatch "$@"
@@ -785,10 +2750,11 @@ if a.help:
     print('Customize: --web-host IPv4 --web-port PORT; localhost only: --web-host 127.0.0.1')
     print('Shortcuts: auto-detect; --desktop-shortcut to create / --no-desktop-shortcut to skip')
     print('Existing instance: --configure-existing --dir ABS_PATH --lan (management tools only; no app upgrade)')
+    print('Components: --export-config FILE (or -) exports YAML; -f FILE loads it; reconfigure --dir PATH -f FILE applies it offline.')
     print('Cache: verified archives persist across retries; --cache-dir ABS_PATH selects their location.')
     print('Offline uninstall: --uninstall --dir ABS_PATH [--purge] [--yes] [--dry-run]')
     print('Private OSS: --ticket /absolute/path/download.json (expiring ticket generated by oss_client.py)')
-    print('Ports: --http-port 8080 --ws-port 8081 --web-port 3000 --runtime-port 8090')
+    print('Ports: --http-port 8034 --ws-port 8035 --web-port 3000 --runtime-port 8036')
     print('Default: GitHub Release v0.1.0; --version selects a tag. Missing models use pinned GitHub LFS objects.')
     print('Dependencies use your configured system/uv package sources; repository and index settings are not rewritten.')
     raise SystemExit(0)
@@ -886,15 +2852,34 @@ def macos_listener_conflict(port, host):
     return False
 
 
+def installation_arguments(arguments):
+    # Forward all resolved ports to immutable release installers.
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    defaults = dict(http_port=8034, ws_port=8035, web_port=3000, runtime_port=8036)
+    for key in defaults:
+        parser.add_argument('--'+key.replace('_', '-'), type=int)
+    args, _ = parser.parse_known_args(arguments)
+    root = Path(args.dir).expanduser()
+    state = json.loads((root/'install.json').read_text()) if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}
+    result = list(arguments)
+    for key, default in defaults.items():
+        if getattr(args, key) is None:
+            result += ['--'+key.replace('_', '-'), str(state.get(key, default))]
+    return result
+
+
 def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--web-host')
     parser.add_argument('--lan', action='store_true')
-    for name, port in [('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)]:
+    parser.add_argument('--ability-port-first', type=int, default=18100)
+    parser.add_argument('--ability-port-last', type=int, default=18199)
+    for name, port in [('http', 8034), ('ws', 8035), ('web', 3000), ('runtime', 8036)]:
         parser.add_argument('--'+name+'-port', type=int, default=port)
-    args, _ = parser.parse_known_args(arguments)
+    args, _ = parser.parse_known_args(installation_arguments(arguments))
     root = Path(args.dir).expanduser()
     if not root.is_absolute() or root.is_symlink() or root.resolve() in (Path('/'), Path.home().resolve()):
         raise ValueError('--dir must be an absolute instance path, not a symlink or home directory')
@@ -906,6 +2891,8 @@ def bootstrap_preflight(arguments, managed=None, default_host='0.0.0.0'):
     state = json.loads((root/'install.json').read_text()) if (root/'install.json').is_file() else {}
     if state and any(state.get(name+'_port') != port for name, port in ports.items()):
         raise ValueError('Existing instance ports differ; use its original options or a new --dir')
+    if not 1024 <= args.ability_port_first <= args.ability_port_last <= 65535 or any(args.ability_port_first <= port <= args.ability_port_last for port in ports.values()):
+        raise ValueError('Invalid or overlapping Ability port range')
     host = '0.0.0.0' if args.lan else args.web_host or state.get('web_host', default_host)
     ipaddress.IPv4Address(host)
     owned = managed(root) if managed and state else {}
@@ -1138,6 +3125,8 @@ def hydrate_github_assets(payload, download):
             target.chmod(0o644)
     return len(pending)
 # END GENERATED GITHUB HELPERS
+if not a.configure_existing:
+    rest = installation_arguments(rest)
 def archive_download(url, sha):
     if not a.configure_existing:
         bootstrap_preflight(rest, uninstall_managed)
@@ -1256,6 +3245,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '\n'
             'sys.dont_write_bytecode = True  # Imports must not mutate the hash-verified payload.\n'
             'sys.path.insert(0, str(Path(__file__).resolve().parent))\n'
+            'from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components\n'
             'from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form\n'
             '\n'
             'INSTALL_LOG = None\n'
@@ -1804,10 +3794,13 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        raise ValueError('Refusing root, home or paths containing control characters as the installation directory')\n"
             "    if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():\n"
             "        raise ValueError('Target directory is non-empty and not managed by this installer; choose a new directory')\n"
+            "    old = load(root/'install.json') if (root/'install.json').exists() else {}\n"
+            '    values = apply_component_options(a, configured_components(root, old))\n'
+            '    for key, value in values.items():\n'
+            '        setattr(a, key, value)\n'
             '    ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]\n'
             '    if len(set(ports)) != len(ports) or any(p < 1024 or p > 65535 for p in ports):\n'
             "        raise ValueError('Ports must be distinct numbers between 1024 and 65535')\n"
-            "    old = load(root/'install.json') if (root/'install.json').exists() else {}\n"
             "    runtime_mode = getattr(a, 'musl_runtime', None) or old.get('musl_runtime') or ('bundled' if manifest.get('musl_runtime') else 'system')\n"
             "    check_platform(manifest, getattr(a, 'musl', False), runtime_mode)\n"
             "    if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:\n"
@@ -1866,6 +3859,10 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "            raise RuntimeError('Reinstallation cannot implicitly change existing instance ports')\n"
             "        state = state or dict(version=manifest['version'], payload_sha256=signature, ready=False,\n"
             '                              http_port=a.http_port, ws_port=a.ws_port, web_port=a.web_port, runtime_port=a.runtime_port)\n'
+            "        for key in ('ability_port_first', 'ability_port_last'):\n"
+            "            if state.get('configured') and state.get(key, values[key]) != values[key]:\n"
+            "                raise ValueError('Use reconfigure to change the Ability port range')\n"
+            '            state[key] = values[key]\n'
             "        state.setdefault('web_host', host)\n"
             "        if manifest.get('libc') == 'musl':\n"
             "            state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')\n"
@@ -1915,7 +3912,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "                cfg['skills']['dir'] = str(root/'configs/skills')\n"
             "                cfg['simulation'].update(runtimes_dir=str(root/'runtimes.d'), catalog_dir=str(root/'content/scene-catalogs'))\n"
             "                cfg['robot_runtime'].update(enabled=True, bundles_dir=str(release/'robot-bundles'), data_root=str(root),\n"
-            "                    server_http_url=f'http://127.0.0.1:{a.http_port}', server_websocket_url=f'ws://127.0.0.1:{a.ws_port}/ws/pilot')\n"
+            "                    server_http_url=f'http://127.0.0.1:{a.http_port}', server_websocket_url=f'ws://127.0.0.1:{a.ws_port}/ws/pilot',\n"
+            '                    ability_port_first=a.ability_port_first, ability_port_last=a.ability_port_last)\n'
             '                write_json(config, cfg)  # JSON is valid YAML; no target-side YAML dependency.\n'
             "                state['configured'] = True\n"
             '                write_json(state_path, state)\n'
@@ -1937,6 +3935,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '            current.unlink()\n'
             "        current.symlink_to(Path('releases')/manifest['version'])\n"
             '        install_manager(root, payload)\n'
+            "        replace_config(root/'configs/components.yaml', component_yaml(values).encode())\n"
             '        desktop_message = desktop_shortcuts(root, state, a.desktop)\n'
             '        write_json(state_path, state)\n'
             "        progress.next(tasks[6]+(' (skipped as requested)' if a.no_start else ''))\n"
@@ -1957,7 +3956,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        target = manager/name\n'
             '        if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):\n'
             "            raise ValueError('Unsafe management file links: '+str(target))\n"
-            "        shutil.copyfile((Path(__file__).resolve().parent if name.endswith('.py') else payload)/name, target)\n"
+            "        source = (Path(__file__).resolve().parent if name.endswith('.py') else payload)/name\n"
+            '        if source.resolve() != target.resolve():\n'
+            '            shutil.copyfile(source, target)\n'
             '        target.chmod(0o600)\n'
             "    launcher = root/'bin/semanticctl'\n"
             '    if launcher.is_symlink() or (launcher.exists() and launcher.stat().st_nlink != 1):\n'
@@ -1968,43 +3969,148 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    launcher.chmod(0o755)\n'
             '\n'
             '\n'
+            'def configured_components(root, state):\n'
+            '    values = component_values(state)\n'
+            "    path = root/'configs/semantic-server.yaml'\n"
+            '    if path.is_file():\n'
+            '        cfg = load(path)\n'
+            "        values.update({k: cfg.get('robot_runtime', {}).get(k, values[k])\n"
+            "                       for k in ('ability_port_first', 'ability_port_last')})\n"
+            '    return values\n'
+            '\n'
+            '\n'
+            'def apply_component_options(a, values):\n'
+            '    values = dict(values)\n'
+            "    if getattr(a, 'config', None):\n"
+            '        values.update(read_component_config(a.config))\n'
+            '    for key in COMPONENT_DEFAULTS:\n'
+            '        if getattr(a, key, None) is not None:\n'
+            '            values[key] = getattr(a, key)\n'
+            '    return validate_components(values)\n'
+            '\n'
+            '\n'
+            'def component_updates(root, old, values):\n'
+            "    config = root/'configs/semantic-server.yaml'\n"
+            '    cfg = load(config)\n'
+            '    cfg[\'server\'].update(http_addr=f"127.0.0.1:{values[\'http_port\']}", ws_addr=f"127.0.0.1:{values[\'ws_port\']}")\n'
+            '    cfg[\'robot_runtime\'].update(server_http_url=f"http://127.0.0.1:{values[\'http_port\']}",\n'
+            '        server_websocket_url=f"ws://127.0.0.1:{values[\'ws_port\']}/ws/pilot",\n'
+            "        ability_port_first=values['ability_port_first'], ability_port_last=values['ability_port_last'])\n"
+            "    updates = {config: (json.dumps(cfg, ensure_ascii=False, indent=2)+'\\n').encode()}\n"
+            "    runtime = root/'runtimes.d/local-native-mujoco.yaml'\n"
+            "    if old['runtime_port'] != values['runtime_port']:\n"
+            '        text = runtime.read_text()\n'
+            '        pattern = r\'(?m)^endpoint:\\s*[\\\'\\"]?http://127\\.0\\.0\\.1:\'+str(old[\'runtime_port\'])+r\'[\\\'\\"]?\\s*$\'\n'
+            "        text, count = re.subn(pattern, 'endpoint: http://127.0.0.1:'+str(values['runtime_port']), text)\n"
+            '        if count != 1:\n'
+            "            raise ValueError('Managed MuJoCo endpoint differs from install state; reconcile it before reconfigure')\n"
+            '        updates[runtime] = text.encode()\n'
+            '    # The supervisor reuses rendered instances on restart. Update their actual\n'
+            '    # connection configurations too; never edit credentials, logs or execution evidence.\n'
+            "    paths = set((root/'robots').glob('*/.instance-configs/*.yaml'))\n"
+            "    for name in ('instance.yaml', 'robot-deployment.yaml'):\n"
+            "        paths.update((root/'robots').glob('*/*/'+name))\n"
+            "    if paths and any(old[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):\n"
+            "        raise ValueError('Existing Robot instances have allocated Ability ports; remove those instances in Studio before changing the Ability range')\n"
+            '    for path in paths:\n'
+            '        text = original = path.read_text()\n'
+            "        for key, protocols in (('http_port', ('http',)), ('ws_port', ('http', 'ws')), ('runtime_port', ('http', 'ws'))):\n"
+            '            if old[key] == values[key]:\n'
+            '                continue\n'
+            '            for protocol in protocols:\n'
+            '                pattern = re.escape(f\'{protocol}://127.0.0.1:{old[key]}\')+r\'(?=[/\\s\\\'\\"\\},]|$)\'\n'
+            "                text = re.sub(pattern, f'{protocol}://127.0.0.1:{values[key]}', text)\n"
+            '        if text != original:\n'
+            '            updates[path] = text.encode()\n'
+            '    return updates\n'
+            '\n'
+            '\n'
+            'def replace_config(path, data):\n'
+            '    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):\n'
+            "        raise ValueError('Configuration path contains a symlink: '+str(path))\n"
+            '    if path.exists() and (not path.is_file() or path.stat().st_nlink != 1):\n'
+            "        raise ValueError('Configuration must be a regular, unlinked file: '+str(path))\n"
+            "    with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.configure-', delete=False) as stream:\n"
+            '        temporary = Path(stream.name)\n'
+            '        stream.write(data)\n'
+            '    try:\n'
+            '        temporary.chmod(0o600)\n'
+            '        temporary.replace(path)\n'
+            '    finally:\n'
+            '        temporary.unlink(missing_ok=True)\n'
+            '\n'
+            '\n'
             'def configure_existing(a):\n'
-            '    global INSTALL_LOG, PROGRESS\n'
-            '    from uninstall import uninstall_root\n'
+            '    global INSTALL_LOG\n'
+            '    from uninstall import uninstall_root, uninstall_managed, uninstall_processes\n'
             '    root, state = uninstall_root(a.dir)\n'
-            '    verify_payload(a.payload)\n'
-            "    if not state.get('ready') or not (root/'releases'/state['version']/'bin/semantic-server').is_file():\n"
-            "        raise ValueError('Only completed installations are supported; app artifacts are not upgraded or repaired')\n"
-            "    host = web_host(a.web_host or state.get('web_host', '127.0.0.1'))\n"
-            "    port = a.web_port if a.web_port is not None else state['web_port']\n"
-            "    if not 1024 <= port <= 65535 or port in [state[k] for k in ('http_port', 'ws_port', 'runtime_port')]:\n"
-            "        raise ValueError('Web port must be between 1024 and 65535 and distinct from API/WS/Runtime ports')\n"
-            "    if port != state['web_port']:\n"
-            '        check_port(port, host)  # Reject conflicts before stopping the existing Web service.\n'
-            "    settings_form('Update management tools', [('App version', state['version']+' (preserved)'), ('Directory', str(root)),\n"
-            '        (\'Web\', f"{host}:{port}", \'command\'), (\'Action\', \'Preserve data; restart Web if needed\', \'warn\')])\n'
-            "    confirm('  Update management tools?', a.yes)\n"
-            "    tasks = ['Verify and back up configuration', 'Update management tools and shortcuts', 'Apply Web listen settings']\n"
-            '    progress = PROGRESS = Progress(tasks)\n'
-            '    progress.next(tasks[0])\n'
+            "    release = root/'releases'/state['version']\n"
+            "    if not state.get('ready') or not (release/'bin/semantic-server').is_file():\n"
+            "        raise ValueError('Reconfigure requires a completed installation')\n"
+            '    apply_component_options(a, configured_components(root, state))\n'
             "    with (root/'run/install.lock').open('a') as lock:\n"
             '        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n'
+            "        state = load(root/'install.json')\n"
+            '        old = configured_components(root, state)\n'
+            '        values = apply_component_options(a, old)\n'
+            '        owned = uninstall_managed(root)\n'
+            '        busy = uninstall_processes(root, owned)\n'
+            '        if busy:\n'
+            "            raise ValueError('Stop all scenes and Robot Runtime before reconfigure; active instance processes: '+', '.join(str(row['pid']) for row in busy))\n"
+            '        updates = component_updates(root, old, values)\n'
+            '        records = services(root)\n'
+            "        owned_ports = {old[k] for name, keys in [('server', ('http_port','ws_port')), ('web', ('web_port',))]\n"
+            "                       if records.get(name, {}).get('pid') in owned for k in keys}\n"
+            "        for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):\n"
+            '            if values[key] not in owned_ports:\n'
+            "                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')\n"
+            "        settings_form('Reconfigure components', [(key, str(value)) for key, value in values.items()])\n"
+            "        confirm('Apply component configuration and restart managed services?', a.yes)\n"
+            '        state.update(values)\n'
+            "        updates[root/'install.json'] = (json.dumps(state, ensure_ascii=False, indent=2)+'\\n').encode()\n"
+            "        updates[root/'configs/components.yaml'] = component_yaml(values).encode()\n"
+            "        backup = root/'configs'/('reconfigure-backup-'+str(time.time_ns()))\n"
+            '        backup.mkdir(mode=0o700)\n'
+            '        originals = {}\n'
+            '        for path in updates:\n'
+            '            if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):\n'
+            "                raise ValueError('Configuration contains a symlink: '+str(path))\n"
+            '            originals[path] = path.read_bytes() if path.exists() else None\n'
+            '            if originals[path] is not None:\n'
+            '                target = backup/path.relative_to(root)\n'
+            '                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)\n'
+            '                target.write_bytes(originals[path]); target.chmod(0o600)\n'
+            '        # Upgrade only the manager shipped with this trusted bootstrap.\n'
+            '        install_manager(root, release)\n'
             "        INSTALL_LOG = root/'logs'/f'configure-{time.time_ns()}.log'\n"
             '        INSTALL_LOG.touch(mode=0o600)\n'
-            '        progress.log_path = str(INSTALL_LOG)\n'
-            "        write_json(root/'configs'/f'install-state-backup-{time.time_ns()}.json', state)\n"
-            '        progress.next(tasks[1])\n'
-            '        install_manager(root, a.payload)\n'
-            '        progress.next(tasks[2])\n'
-            "        if host != state.get('web_host', '127.0.0.1') or port != state['web_port']:\n"
-            "            stop_owned(root, ['web'])\n"
-            "        state['web_host'] = host\n"
-            "        state['web_port'] = port\n"
+            "        stop_names = ['web', 'server'] if any(old[k] != values[k] for k in COMPONENT_DEFAULTS if k not in ('web_host', 'web_port')) else ['web']\n"
+            '        stopped = False\n'
+            '        try:\n'
+            '            stop_owned(root, stop_names)\n'
+            '            stopped = True\n'
+            '            if uninstall_processes(root, uninstall_managed(root)):\n'
+            "                raise ValueError('Instance still has active processes; configuration was not changed')\n"
+            "            for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):\n"
+            "                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')\n"
+            '            for path, data in updates.items():\n'
+            '                replace_config(path, data)\n'
+            '            if not a.no_start:\n'
+            '                start(root, quiet=True)\n'
+            '        except Exception:\n'
+            '            if stopped:\n'
+            '                stop_owned(root, stop_names)\n'
+            '                for path, data in originals.items():\n'
+            '                    if data is None:\n'
+            '                        path.unlink(missing_ok=True)\n'
+            '                    else:\n'
+            '                        replace_config(path, data)\n'
+            '                if owned:\n'
+            '                    start(root, quiet=True)\n'
+            '            raise\n'
             '        message = desktop_shortcuts(root, state, a.desktop)\n'
             "        write_json(root/'install.json', state)\n"
-            '        if not a.no_start:\n'
-            '            start(root, quiet=True)\n'
-            '        progress.finish()\n'
+            "        print('Configuration backup: '+str(backup))\n"
             '        welcome(root, state, not a.no_start, message)\n'
             '\n'
             '\n'
@@ -2030,25 +4136,47 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        desktop.add_argument('--no-desktop-shortcut', dest='desktop', action='store_const', const='never')\n"
             "        p.set_defaults(desktop='auto')\n"
             '    presentation_options(p)\n'
-            "    for name, default in (('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)):\n"
-            "        p.add_argument(f'--{name}-port', type=int, default=default)\n"
+            '    def component_options(p, web=True):\n'
+            "        p.add_argument('-f', '--config', type=Path)\n"
+            '        for key in COMPONENT_DEFAULTS:\n'
+            "            if key == 'web_host':\n"
+            "                if web: p.add_argument('--web-host', type=web_host)\n"
+            '            else:\n'
+            "                p.add_argument('--'+key.replace('_', '-'), type=int)\n"
+            '    component_options(p, web=False)\n'
             "    p = commands.add_parser('configure')\n"
-            "    p.add_argument('--web-port', type=int, help='Change the Web port of an existing instance; preserve it by default')\n"
             "    p.add_argument('--payload', type=Path, required=True)\n"
             "    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))\n"
             "    p.add_argument('--yes', action='store_true')\n"
             "    p.add_argument('--no-start', action='store_true')\n"
             '    presentation_options(p)\n'
+            '    component_options(p, web=False)\n'
+            "    p = commands.add_parser('export-config')\n"
+            "    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))\n"
+            "    p.add_argument('--output', default='-')\n"
+            '    component_options(p)\n'
             "    p = commands.add_parser('control')\n"
             "    p.add_argument('--root', type=Path, required=True)\n"
-            "    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall'])\n"
+            "    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])\n"
+            "    p.add_argument('--output', default='-')\n"
+            "    p.add_argument('--no-start', action='store_true')\n"
+            "    p.set_defaults(desktop='auto')\n"
+            '    component_options(p)\n'
             "    p.add_argument('--yes', action='store_true', help='uninstall: skip confirmation')\n"
             "    p.add_argument('--purge', action='store_true', help='uninstall: delete all instance data')\n"
             "    p.add_argument('--dry-run', action='store_true', help='uninstall: show the plan only')\n"
             '    a = parser.parse_args()\n'
-            "    if a.command == 'control' and a.action != 'uninstall' and (a.yes or a.purge or a.dry_run):\n"
+            "    if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):\n"
             "        parser.error('--yes/--purge/--dry-run apply only to uninstall')\n"
-            "    if a.command == 'install':\n"
+            "    if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):\n"
+            "        root = a.root if a.command == 'control' else Path(a.dir).expanduser()\n"
+            "        state = load(root/'install.json') if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}\n"
+            '        export_components(a.output, apply_component_options(a, configured_components(root, state)))\n'
+            "    elif a.command == 'control' and a.action == 'reconfigure':\n"
+            '        a.dir = str(a.root)\n'
+            "        a.payload = a.root/'current'\n"
+            '        configure_existing(a)\n'
+            "    elif a.command == 'install':\n"
             '        install(a)\n'
             "    elif a.command == 'configure':\n"
             '        configure_existing(a)\n'
@@ -2474,6 +4602,75 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    finally:\n'
             '        if tty:\n'
             '            tty.close()\n'
+            '\n'
+            '\n'
+            '# The component file is deliberately a flat, scalar-only YAML mapping. Keeping\n'
+            '# this grammar small lets the macOS bootstrap read it before Python is installed.\n'
+            'COMPONENT_DEFAULTS = dict(http_port=8034, ws_port=8035, web_port=3000,\n'
+            '                          runtime_port=8036, ability_port_first=18100,\n'
+            "                          ability_port_last=18199, web_host='0.0.0.0')\n"
+            '\n'
+            '\n'
+            'def component_values(state=None):\n'
+            '    values = dict(COMPONENT_DEFAULTS)\n'
+            "    if sys.platform == 'darwin':\n"
+            "        values['web_host'] = '127.0.0.1'\n"
+            '    values.update({k: v for k, v in (state or {}).items() if k in values})\n'
+            '    return values\n'
+            '\n'
+            '\n'
+            'def read_component_config(path):\n'
+            '    import re\n'
+            '    values = {}\n'
+            "    text = Path(path).read_text(encoding='utf-8')\n"
+            '    if len(text) > 16384:\n'
+            "        raise ValueError('Component YAML exceeds 16 KiB')\n"
+            '    for number, line in enumerate(text.splitlines(), 1):\n'
+            "        line = line.split('#', 1)[0].strip()\n"
+            "        if not line or line in ('---', '...'):\n"
+            '            continue\n'
+            '        match = re.fullmatch(r\'([a-z_]+):\\s*(?:([0-9.]+)|"([0-9.]+)"|\\\'([0-9.]+)\\\')\', line)\n'
+            '        if not match:\n'
+            "            raise ValueError(f'Invalid component YAML at line {number}; use flat scalar key: value entries')\n"
+            '        key, *parts = match.groups()\n'
+            "        if key not in {'schema_version', *COMPONENT_DEFAULTS} or key in values:\n"
+            "            raise ValueError('Unknown or duplicate component key: '+key)\n"
+            '        value = next(part for part in parts if part is not None)\n'
+            "        values[key] = value if key == 'web_host' else int(value)\n"
+            "    if values.pop('schema_version', None) != 1:\n"
+            "        raise ValueError('Component YAML requires schema_version: 1')\n"
+            '    return values\n'
+            '\n'
+            '\n'
+            'def validate_components(values):\n'
+            "    ports = [values[k] for k in ('http_port', 'ws_port', 'web_port', 'runtime_port')]\n"
+            '    if any(type(p) is not int or not 1024 <= p <= 65535 for p in ports) or len(set(ports)) != 4:\n'
+            "        raise ValueError('Component ports must be distinct integers between 1024 and 65535')\n"
+            "    first, last = values['ability_port_first'], values['ability_port_last']\n"
+            '    if type(first) is not int or type(last) is not int or not 1024 <= first <= last <= 65535:\n'
+            "        raise ValueError('Invalid Ability port range')\n"
+            '    if any(first <= port <= last for port in ports):\n'
+            "        raise ValueError('Component ports overlap the Ability port range')\n"
+            "    web_host(values['web_host'])\n"
+            '    return values\n'
+            '\n'
+            '\n'
+            'def component_yaml(values):\n'
+            '    validate_components(values)\n'
+            "    return ('# Semantic component ports. CLI options override this file. No secrets.\\n'\n"
+            "            '# Flat YAML scalars only; comments and quoted scalars are supported.\\n'\n"
+            "            'schema_version: 1\\n'+''.join(f'{key}: {values[key]}\\n' for key in COMPONENT_DEFAULTS))\n"
+            '\n'
+            '\n'
+            'def export_components(path, values):\n'
+            '    text = component_yaml(values)\n'
+            "    if str(path) == '-':\n"
+            "        print(text, end='')\n"
+            '        return\n'
+            '    # Never overwrite an edited configuration without an explicit new filename.\n'
+            '    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n'
+            "    with os.fdopen(fd, 'w', encoding='utf-8') as stream:\n"
+            '        stream.write(text)\n'
         ),
         'uninstall.py': (
             '# Copyright 2026 InsightOS\n'
@@ -2811,4 +5008,4 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
     raise SystemExit(result.returncode if result.returncode >= 0 else 128 - result.returncode)
 PY
 }
-main "$@"
+semantic_config_entry "$@"

@@ -39,6 +39,7 @@ import urllib.request
 
 sys.dont_write_bytecode = True  # Imports must not mutate the hash-verified payload.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components
 from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form
 
 INSTALL_LOG = None
@@ -587,10 +588,13 @@ def install(a):
         raise ValueError('拒绝使用根目录、用户主目录或含控制字符的目录作为安装目录')
     if root.exists() and any(root.iterdir()) and not (root/'.semantic-install-root').is_file():
         raise ValueError('目标目录非空且不是本安装器管理的目录；请选择新目录')
+    old = load(root/'install.json') if (root/'install.json').exists() else {}
+    values = apply_component_options(a, configured_components(root, old))
+    for key, value in values.items():
+        setattr(a, key, value)
     ports = [a.http_port, a.ws_port, a.web_port, a.runtime_port]
     if len(set(ports)) != len(ports) or any(p < 1024 or p > 65535 for p in ports):
         raise ValueError('端口必须是不同的 1024～65535 数字')
-    old = load(root/'install.json') if (root/'install.json').exists() else {}
     runtime_mode = getattr(a, 'musl_runtime', None) or old.get('musl_runtime') or ('bundled' if manifest.get('musl_runtime') else 'system')
     check_platform(manifest, getattr(a, 'musl', False), runtime_mode)
     if old.get('musl_runtime') and old['musl_runtime'] != runtime_mode:
@@ -649,6 +653,10 @@ def install(a):
             raise RuntimeError('已有安装的端口不可通过重装隐式变更')
         state = state or dict(version=manifest['version'], payload_sha256=signature, ready=False,
                               http_port=a.http_port, ws_port=a.ws_port, web_port=a.web_port, runtime_port=a.runtime_port)
+        for key in ('ability_port_first', 'ability_port_last'):
+            if state.get('configured') and state.get(key, values[key]) != values[key]:
+                raise ValueError('Use reconfigure to change the Ability port range')
+            state[key] = values[key]
         state.setdefault('web_host', host)
         if manifest.get('libc') == 'musl':
             state['render_backend'] = a.render_backend or state.get('render_backend', 'auto')
@@ -698,7 +706,8 @@ def install(a):
                 cfg['skills']['dir'] = str(root/'configs/skills')
                 cfg['simulation'].update(runtimes_dir=str(root/'runtimes.d'), catalog_dir=str(root/'content/scene-catalogs'))
                 cfg['robot_runtime'].update(enabled=True, bundles_dir=str(release/'robot-bundles'), data_root=str(root),
-                    server_http_url=f'http://127.0.0.1:{a.http_port}', server_websocket_url=f'ws://127.0.0.1:{a.ws_port}/ws/pilot')
+                    server_http_url=f'http://127.0.0.1:{a.http_port}', server_websocket_url=f'ws://127.0.0.1:{a.ws_port}/ws/pilot',
+                    ability_port_first=a.ability_port_first, ability_port_last=a.ability_port_last)
                 write_json(config, cfg)  # JSON is valid YAML; no target-side YAML dependency.
                 state['configured'] = True
                 write_json(state_path, state)
@@ -720,6 +729,7 @@ def install(a):
             current.unlink()
         current.symlink_to(Path('releases')/manifest['version'])
         install_manager(root, payload)
+        replace_config(root/'configs/components.yaml', component_yaml(values).encode())
         desktop_message = desktop_shortcuts(root, state, a.desktop)
         write_json(state_path, state)
         progress.next(tasks[6]+('（按要求跳过）' if a.no_start else ''))
@@ -740,7 +750,9 @@ def install_manager(root, payload):
         target = manager/name
         if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
             raise ValueError('管理文件链接异常: '+str(target))
-        shutil.copyfile(payload/name, target)
+        source = (Path(__file__).resolve().parent if name.endswith('.py') else payload)/name
+        if source.resolve() != target.resolve():
+            shutil.copyfile(source, target)
         target.chmod(0o600)
     launcher = root/'bin/semanticctl'
     if launcher.is_symlink() or (launcher.exists() and launcher.stat().st_nlink != 1):
@@ -751,43 +763,148 @@ def install_manager(root, payload):
     launcher.chmod(0o755)
 
 
+def configured_components(root, state):
+    values = component_values(state)
+    path = root/'configs/semantic-server.yaml'
+    if path.is_file():
+        cfg = load(path)
+        values.update({k: cfg.get('robot_runtime', {}).get(k, values[k])
+                       for k in ('ability_port_first', 'ability_port_last')})
+    return values
+
+
+def apply_component_options(a, values):
+    values = dict(values)
+    if getattr(a, 'config', None):
+        values.update(read_component_config(a.config))
+    for key in COMPONENT_DEFAULTS:
+        if getattr(a, key, None) is not None:
+            values[key] = getattr(a, key)
+    return validate_components(values)
+
+
+def component_updates(root, old, values):
+    config = root/'configs/semantic-server.yaml'
+    cfg = load(config)
+    cfg['server'].update(http_addr=f"127.0.0.1:{values['http_port']}", ws_addr=f"127.0.0.1:{values['ws_port']}")
+    cfg['robot_runtime'].update(server_http_url=f"http://127.0.0.1:{values['http_port']}",
+        server_websocket_url=f"ws://127.0.0.1:{values['ws_port']}/ws/pilot",
+        ability_port_first=values['ability_port_first'], ability_port_last=values['ability_port_last'])
+    updates = {config: (json.dumps(cfg, ensure_ascii=False, indent=2)+'\n').encode()}
+    runtime = root/'runtimes.d/local-native-mujoco.yaml'
+    if old['runtime_port'] != values['runtime_port']:
+        text = runtime.read_text()
+        pattern = r'(?m)^endpoint:\s*[\'\"]?http://127\.0\.0\.1:'+str(old['runtime_port'])+r'[\'\"]?\s*$'
+        text, count = re.subn(pattern, 'endpoint: http://127.0.0.1:'+str(values['runtime_port']), text)
+        if count != 1:
+            raise ValueError('Managed MuJoCo endpoint differs from install state; reconcile it before reconfigure')
+        updates[runtime] = text.encode()
+    # The supervisor reuses rendered instances on restart. Update their actual
+    # connection configurations too; never edit credentials, logs or execution evidence.
+    paths = set((root/'robots').glob('*/.instance-configs/*.yaml'))
+    for name in ('instance.yaml', 'robot-deployment.yaml'):
+        paths.update((root/'robots').glob('*/*/'+name))
+    if paths and any(old[k] != values[k] for k in ('ability_port_first', 'ability_port_last')):
+        raise ValueError('Existing Robot instances have allocated Ability ports; remove those instances in Studio before changing the Ability range')
+    for path in paths:
+        text = original = path.read_text()
+        for key, protocols in (('http_port', ('http',)), ('ws_port', ('http', 'ws')), ('runtime_port', ('http', 'ws'))):
+            if old[key] == values[key]:
+                continue
+            for protocol in protocols:
+                pattern = re.escape(f'{protocol}://127.0.0.1:{old[key]}')+r'(?=[/\s\'\"\},]|$)'
+                text = re.sub(pattern, f'{protocol}://127.0.0.1:{values[key]}', text)
+        if text != original:
+            updates[path] = text.encode()
+    return updates
+
+
+def replace_config(path, data):
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+        raise ValueError('Configuration path contains a symlink: '+str(path))
+    if path.exists() and (not path.is_file() or path.stat().st_nlink != 1):
+        raise ValueError('Configuration must be a regular, unlinked file: '+str(path))
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.configure-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(data)
+    try:
+        temporary.chmod(0o600)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def configure_existing(a):
-    global INSTALL_LOG, PROGRESS
-    from uninstall import uninstall_root
+    global INSTALL_LOG
+    from uninstall import uninstall_root, uninstall_managed, uninstall_processes
     root, state = uninstall_root(a.dir)
-    verify_payload(a.payload)
-    if not state.get('ready') or not (root/'releases'/state['version']/'bin/semantic-server').is_file():
-        raise ValueError('只支持已完成安装的实例；不升级或修复业务产物')
-    host = web_host(a.web_host or state.get('web_host', '127.0.0.1'))
-    port = a.web_port if a.web_port is not None else state['web_port']
-    if not 1024 <= port <= 65535 or port in [state[k] for k in ('http_port', 'ws_port', 'runtime_port')]:
-        raise ValueError('Web 端口必须为 1024～65535 且不能与 API/WS/Runtime 重复')
-    if port != state['web_port']:
-        check_port(port, host)  # Reject conflicts before stopping the existing Web service.
-    settings_form('更新管理工具', [('业务版本', state['version']+'（保留）'), ('目录', str(root)),
-        ('Web', f"{host}:{port}", 'command'), ('操作', '保留数据；必要时重启 Web', 'warn')])
-    confirm('  确认更新管理工具？', a.yes)
-    tasks = ['校验并备份配置', '更新管理工具与访问入口', '应用 Web 监听配置']
-    progress = PROGRESS = Progress(tasks)
-    progress.next(tasks[0])
+    release = root/'releases'/state['version']
+    if not state.get('ready') or not (release/'bin/semantic-server').is_file():
+        raise ValueError('Reconfigure requires a completed installation')
+    apply_component_options(a, configured_components(root, state))
     with (root/'run/install.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state = load(root/'install.json')
+        old = configured_components(root, state)
+        values = apply_component_options(a, old)
+        owned = uninstall_managed(root)
+        busy = uninstall_processes(root, owned)
+        if busy:
+            raise ValueError('Stop all scenes and Robot Runtime before reconfigure; active instance processes: '+', '.join(str(row['pid']) for row in busy))
+        updates = component_updates(root, old, values)
+        records = services(root)
+        owned_ports = {old[k] for name, keys in [('server', ('http_port','ws_port')), ('web', ('web_port',))]
+                       if records.get(name, {}).get('pid') in owned for k in keys}
+        for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
+            if values[key] not in owned_ports:
+                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
+        settings_form('Reconfigure components', [(key, str(value)) for key, value in values.items()])
+        confirm('Apply component configuration and restart managed services?', a.yes)
+        state.update(values)
+        updates[root/'install.json'] = (json.dumps(state, ensure_ascii=False, indent=2)+'\n').encode()
+        updates[root/'configs/components.yaml'] = component_yaml(values).encode()
+        backup = root/'configs'/('reconfigure-backup-'+str(time.time_ns()))
+        backup.mkdir(mode=0o700)
+        originals = {}
+        for path in updates:
+            if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+                raise ValueError('Configuration contains a symlink: '+str(path))
+            originals[path] = path.read_bytes() if path.exists() else None
+            if originals[path] is not None:
+                target = backup/path.relative_to(root)
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                target.write_bytes(originals[path]); target.chmod(0o600)
+        # Upgrade only the manager shipped with this trusted bootstrap.
+        install_manager(root, release)
         INSTALL_LOG = root/'logs'/f'configure-{time.time_ns()}.log'
         INSTALL_LOG.touch(mode=0o600)
-        progress.log_path = str(INSTALL_LOG)
-        write_json(root/'configs'/f'install-state-backup-{time.time_ns()}.json', state)
-        progress.next(tasks[1])
-        install_manager(root, a.payload)
-        progress.next(tasks[2])
-        if host != state.get('web_host', '127.0.0.1') or port != state['web_port']:
-            stop_owned(root, ['web'])
-        state['web_host'] = host
-        state['web_port'] = port
+        stop_names = ['web', 'server'] if any(old[k] != values[k] for k in COMPONENT_DEFAULTS if k not in ('web_host', 'web_port')) else ['web']
+        stopped = False
+        try:
+            stop_owned(root, stop_names)
+            stopped = True
+            if uninstall_processes(root, uninstall_managed(root)):
+                raise ValueError('Instance still has active processes; configuration was not changed')
+            for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
+                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
+            for path, data in updates.items():
+                replace_config(path, data)
+            if not a.no_start:
+                start(root, quiet=True)
+        except Exception:
+            if stopped:
+                stop_owned(root, stop_names)
+                for path, data in originals.items():
+                    if data is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        replace_config(path, data)
+                if owned:
+                    start(root, quiet=True)
+            raise
         message = desktop_shortcuts(root, state, a.desktop)
         write_json(root/'install.json', state)
-        if not a.no_start:
-            start(root, quiet=True)
-        progress.finish()
+        print('Configuration backup: '+str(backup))
         welcome(root, state, not a.no_start, message)
 
 
@@ -813,25 +930,47 @@ def main():
         desktop.add_argument('--no-desktop-shortcut', dest='desktop', action='store_const', const='never')
         p.set_defaults(desktop='auto')
     presentation_options(p)
-    for name, default in (('http', 8080), ('ws', 8081), ('web', 3000), ('runtime', 8090)):
-        p.add_argument(f'--{name}-port', type=int, default=default)
+    def component_options(p, web=True):
+        p.add_argument('-f', '--config', type=Path)
+        for key in COMPONENT_DEFAULTS:
+            if key == 'web_host':
+                if web: p.add_argument('--web-host', type=web_host)
+            else:
+                p.add_argument('--'+key.replace('_', '-'), type=int)
+    component_options(p, web=False)
     p = commands.add_parser('configure')
-    p.add_argument('--web-port', type=int, help='修改已有实例 Web 端口；默认保留')
     p.add_argument('--payload', type=Path, required=True)
     p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
     p.add_argument('--yes', action='store_true')
     p.add_argument('--no-start', action='store_true')
     presentation_options(p)
+    component_options(p, web=False)
+    p = commands.add_parser('export-config')
+    p.add_argument('--dir', default=str(Path.home()/'.local/share/semantic'))
+    p.add_argument('--output', default='-')
+    component_options(p)
     p = commands.add_parser('control')
     p.add_argument('--root', type=Path, required=True)
-    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall'])
+    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
+    p.add_argument('--output', default='-')
+    p.add_argument('--no-start', action='store_true')
+    p.set_defaults(desktop='auto')
+    component_options(p)
     p.add_argument('--yes', action='store_true', help='uninstall: 跳过确认')
     p.add_argument('--purge', action='store_true', help='uninstall: 删除全部实例数据')
     p.add_argument('--dry-run', action='store_true', help='uninstall: 只显示计划')
     a = parser.parse_args()
-    if a.command == 'control' and a.action != 'uninstall' and (a.yes or a.purge or a.dry_run):
+    if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):
         parser.error('--yes/--purge/--dry-run 仅用于 uninstall')
-    if a.command == 'install':
+    if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):
+        root = a.root if a.command == 'control' else Path(a.dir).expanduser()
+        state = load(root/'install.json') if (root/'.semantic-install-root').is_file() and (root/'install.json').is_file() else {}
+        export_components(a.output, apply_component_options(a, configured_components(root, state)))
+    elif a.command == 'control' and a.action == 'reconfigure':
+        a.dir = str(a.root)
+        a.payload = a.root/'current'
+        configure_existing(a)
+    elif a.command == 'install':
         install(a)
     elif a.command == 'configure':
         configure_existing(a)
