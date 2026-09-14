@@ -22,6 +22,7 @@ for key in ('port_preflight','offline_install_and_retry','installed_math_unicode
             'offline_uninstall_preserves_data'):
     assert report.get(key),key
 assert report['shared_base_python']
+assert len(report['shared_python_environments']) >= 5
 for name in ('windows-project-first.json','windows-project-reconfigured.json'):
     project=load(name)
     assert project['success'] and project['released'],name

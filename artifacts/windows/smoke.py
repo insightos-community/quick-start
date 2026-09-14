@@ -59,13 +59,16 @@ def main():
     report['offline_install_and_retry']=True
     manager=Manager(root)
     python=manager.release/'python/python.exe'
-    venvs = list(root.rglob('pyvenv.cfg'))
-    assert len(venvs) >= 2, 'Expected Robot and Runtime environments'
-    for config_path in venvs:
-        interpreter = config_path.parent/'Scripts/python.exe'
-        actual = json.loads(subprocess.check_output([str(interpreter),'-I','-B','-c',
-            'import json,sys; print(json.dumps(sys.base_prefix))'],env=env))
-        assert Path(actual).resolve() == python.parent.resolve(), actual
+    def verify_shared_python(minimum):
+        venvs = list(root.rglob('pyvenv.cfg'))
+        assert len(venvs) >= minimum, 'Missing Robot, Runtime or Skill environments'
+        for config_path in venvs:
+            interpreter = config_path.parent/'Scripts/python.exe'
+            actual = json.loads(subprocess.check_output([str(interpreter),'-I','-B','-c',
+                'import json,sys; print(json.dumps(sys.base_prefix))'],env=env))
+            assert Path(actual).resolve() == python.parent.resolve(), actual
+        report['shared_python_environments'] = [str(path.parent.relative_to(root)) for path in venvs]
+    verify_shared_python(2)
     report['shared_base_python'] = str(python.parent)
     manifest = shared.load(manager.release/'release.json')
     robot_python = manager.release/'robot-bundles'/manifest['bundle_name']/'python/venv/Scripts/python.exe'
@@ -91,10 +94,13 @@ def main():
         project('windows-project-first')
         report['project_abilities_skills_pilot']=True
         changed=free_values()
+        config=root.parent/(root.name+' reconfigured components.yaml')
         export_components(config,changed)
         control('reconfigure','-f',str(config))
         project('windows-project-reconfigured')
         report['reconfigured_project']=True
+        # Include dynamically installed Skill venvs in the single-base assertion.
+        verify_shared_python(5)
         control('stop')
         assert manager.status()=={'server':False,'web':False}
         control('start')
