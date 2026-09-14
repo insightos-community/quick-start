@@ -87,7 +87,7 @@ def main():
             base=f"http://127.0.0.1:{manager.values['web_port']}"
             password=shared.load(root/'configs/secrets.json')['SEMANTIC_ADMIN_PASSWORD']
             token=shared.request(base+'/api/v1/auth/login',data=json.dumps({'username':'admin','password':password}).encode())['token']
-            check_project(root,base,token,args.report.with_name(label+'.json'),release_dir=manager.release)
+            check_project(root,base,token,args.report.with_name(label+'.json'),release_dir=manager.release,readiness_timeout=360)
         project('windows-project-first')
         report['project_abilities_skills_pilot']=True
         changed=free_values()

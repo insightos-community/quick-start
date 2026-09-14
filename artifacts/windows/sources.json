@@ -1,7 +1,7 @@
 {
   "Semantic-Framework": {
     "repository": "insightos-community/Semantic-Framework",
-    "commit": "3def5e6b27fe1c075cac1a57b920991d68ddcad3"
+    "commit": "8a12584441a13410091a7091e0af811453792bbf"
   },
   "AbilityFramework": {
     "repository": "insightos-community/AbilityFramework",
@@ -13,7 +13,7 @@
   },
   "semantic-deployment": {
     "repository": "insightos-community/semantic-deployment",
-    "commit": "2773494d35876f66afce393b0b26320945ef6f4e"
+    "commit": "23b36f16eeed4578634e9e988a7b08fc8593c670"
   },
   "ability-scaffold": {
     "repository": "insightos-community/ability-scaffold",

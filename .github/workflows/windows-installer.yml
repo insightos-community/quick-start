@@ -58,7 +58,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Semantic-Framework
-        ref: 3def5e6b27fe1c075cac1a57b920991d68ddcad3
+        ref: 8a12584441a13410091a7091e0af811453792bbf
         path: sources/framework
         persist-credentials: false
       if: steps.native_core.outputs.cache-hit != 'true'
@@ -70,7 +70,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 2773494d35876f66afce393b0b26320945ef6f4e
+        ref: 23b36f16eeed4578634e9e988a7b08fc8593c670
         path: sources/deployment
         persist-credentials: false
       if: steps.native_core.outputs.cache-hit != 'true'
@@ -139,7 +139,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Semantic-Framework
-        ref: 3def5e6b27fe1c075cac1a57b920991d68ddcad3
+        ref: 8a12584441a13410091a7091e0af811453792bbf
         path: sources/Semantic-Framework
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -157,7 +157,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: 2773494d35876f66afce393b0b26320945ef6f4e
+        ref: 23b36f16eeed4578634e9e988a7b08fc8593c670
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

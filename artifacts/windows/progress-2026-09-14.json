@@ -10,7 +10,12 @@
       "merged": true,
       "native_ci": 34807922439,
       "result": "passed Windows/Linux/macOS process, stop IPC and lock contracts",
-      "merge_commit": "2773494d35876f66afce393b0b26320945ef6f4e"
+      "merge_commit": "2773494d35876f66afce393b0b26320945ef6f4e",
+      "shutdown_fix": {
+        "pr": 7,
+        "merged": false,
+        "result": "Dispatch normal stop requests before waiting for asynchronous teardown; local instance/client suites passed. Native and installer verification pending."
+      }
     },
     "Semantic-Framework": {
       "branch": "feat/windows-process-ports",
@@ -26,9 +31,18 @@
         "windows_ci": 34817811763,
         "macos_ci": 34817811754,
         "linux_ci": 34817811791,
-        "result": "Windows and macOS passed; actual installed Runtime and real scene smoke passed in installer CI 34817798751",
+        "result": "Windows/Linux/macOS passed; actual installed Runtime and real scene smoke passed in installer CI 34817798751.",
         "merged": true,
         "merge_commit": "eef5a9864b9ffd3e6fd889d10a5cf027d412dd02"
+      },
+      "skill_pip_fix": {
+        "pr": 9,
+        "head": "3def5e6b27fe1c075cac1a57b920991d68ddcad3",
+        "windows_ci": 34822142411,
+        "macos_ci": 34822142433,
+        "merged": true,
+        "result": "Real offline Skill venv installation and reuse in Unicode paths passed on Windows; Linux local test and macOS regression passed.",
+        "merge_commit": "0b06425a81ea38a21db8ae2b992dcaa3a8ad9b35"
       }
     },
     "pinocchio": {
@@ -39,17 +53,18 @@
       "pr": 2,
       "merged": false,
       "full_rebuild_ci": 34816626307,
-      "release": "https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1"
+      "release": "https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1",
+      "full_rebuild_result": "Full native rebuild 34816626307 passed; eight artifact hashes and standalone math validation verified."
     },
     "AbilityFramework": {
-      "branch": "feat/windows-native",
-      "head": "acabeb6d6e62ebec98968b3da730ecc615541876",
-      "native_ci": 34812148701,
-      "result": "Windows 23 cases/109 assertions, HTTP/Unicode/SQLite and application-local CRT validation passed; Linux/macOS regression passed; PR 5 merged.",
-      "pr": 5,
+      "branch": "fix/windows-ability-spawn",
+      "head": "e281a39d84097d78890041a7f679c37c12e7ce07",
+      "native_ci": 34820446071,
+      "result": "Fixed TaskInterface/TaskBase virtual-inheritance pointer recovery. Windows 25 cases/116 assertions and Linux/macOS passed. Full installer started all seven Abilities and Pilot.",
+      "pr": 6,
       "merged": true,
-      "merge_commit": "8a26d221298ab5d31f54a07009f3cfcf129af2cf",
-      "release": "https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.1"
+      "merge_commit": "eb58010a024065851822f265d353d741cdcf50fd",
+      "release": "https://github.com/insightos-community/AbilityFramework/releases/tag/windows-v2.4.1-preview.2"
     },
     "ability-scaffold": {
       "branch": "fix/windows-package-paths",
@@ -71,13 +86,13 @@
     },
     "quick-start": {
       "branch": "feat/windows-installer-payload",
-      "head": "461f6d0a9b2e977d1ec2f57a6b9cc23d0558ecea",
-      "result": "Offline install/retry, one bundled Python base, native math in Unicode paths and Runtime scene smoke passed. Full project exposes AbilityFramework exit during navigation Ability startup; collecting component logs.",
+      "head": "fde31091c2f0ebf66586a6d3f59dedaf7916c645",
+      "result": "Offline install/retry, shared Python, Unicode math and Runtime scene smoke passed. All seven Abilities started; Skill dependencies installed, but first startup exceeded two-minute readiness. Windows five-minute startup, unprivileged Skill activation and batched normal-stop confirmation now in integration.",
       "pr": 24,
       "merged": false,
       "native_ci": 34816034789,
       "merge_commit": "65c3a26c32ddf79edb4acae26dce6b253e1ec7b2",
-      "installer_ci": 34818314900
+      "installer_ci": 34822143391
     },
     "Ability-SDK-Python": {
       "branch": "feat/windows-lifecycle",
@@ -100,7 +115,8 @@
     }
   },
   "remaining": [
-    "Complete Windows offline installer retry and project/Ability/Skill integration",
+    "Complete full project/Skill integration, normal scene release, reconfiguration and offline uninstall in the assembled ZIP",
+    "Merge qualified installer and publish windows-v0.1.0-rc.1",
     "Windows 11 desktop GPU rendering qualification"
   ]
 }

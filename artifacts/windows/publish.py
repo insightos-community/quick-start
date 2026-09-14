@@ -56,4 +56,13 @@ Physical Windows desktop GPU rendering has not been qualified. This is a preview
     subprocess.run(['gh','release','create',tag,'--repo',repo,'--target',os.environ['GITHUB_SHA'],'--draft','--prerelease',
                     '--title','Semantic Windows x64 '+version,'--notes-file',str(notes)],check=True)
 subprocess.run(['gh','release','upload',tag,'--repo',repo,'--clobber',*map(str,sorted(root.iterdir()))],check=True)
+# Verify GitHub's received assets before making the draft public.
+published=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/releases/tags/{tag}']))
+assets={asset['name']:asset for asset in published['assets']}
+for path in sorted(root.iterdir()):
+    if not path.is_file():
+        continue
+    asset=assets[path.name]
+    assert asset['size']==path.stat().st_size,path.name
+    assert asset['digest']=='sha256:'+checksum(path),path.name
 subprocess.run(['gh','release','edit',tag,'--repo',repo,'--draft=false'],check=True)

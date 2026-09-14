@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 
 
-def check_project(root, base, token, report, release_dir=None):
+def check_project(root, base, token, report, release_dir=None, readiness_timeout=180):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def request(path, data=None):
@@ -39,7 +39,7 @@ def check_project(root, base, token, report, release_dir=None):
         instance = request(project_path+'/project-scenes/'+reference['project_scene_id']+'/instances', {
             'request_id':'macos-ability-startup', 'variant_id':'layout001',
             'seed':7, 'headless':True, 'render_backend':'auto'})['instance']
-        deadline = time.monotonic()+180
+        deadline = time.monotonic()+readiness_timeout
         while instance['state'] == 'starting':
             if time.monotonic() >= deadline:
                 raise AssertionError('Scene stayed in starting: '+json.dumps(instance))
@@ -50,7 +50,7 @@ def check_project(root, base, token, report, release_dir=None):
         scene_robots = request(project_path+'/instances/'+instance['instance_id']+'/robots')['robots']
         expected_ids = {robot['robot_id'] for robot in scene_robots}
         assert expected_ids, 'Scene has no robots'
-        deadline = time.monotonic()+180
+        deadline = time.monotonic()+readiness_timeout
         while True:
             devices = [device for device in request('/devices')['devices']
                        if (device.get('runtime_instance') or {}).get('scene_instance_id') == instance['instance_id']]
