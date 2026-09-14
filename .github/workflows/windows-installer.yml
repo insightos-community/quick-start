@@ -211,7 +211,9 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: windows-installation-failure
-        path: ${{ runner.temp }}/语义 Windows test/logs/**
+        path: |
+          ${{ runner.temp }}/语义 Windows test/logs/**
+          .output/windows/*.json
         include-hidden-files: true
         if-no-files-found: ignore
   release:

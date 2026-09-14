@@ -66,6 +66,11 @@ def prune_python_templates(python):
         if path.is_file():
             removed[path.relative_to(python).as_posix()] = digest(path)
             path.unlink()
+    # Relocation invalidates timestamp-based bytecode. It is generated runtime
+    # state, so do not ship it as an immutable, checksum-tracked input.
+    for path in sorted(python.rglob('*.pyc')):
+        removed[path.relative_to(python).as_posix()] = digest(path)
+        path.unlink()
     return removed
 
 

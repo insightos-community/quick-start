@@ -123,7 +123,7 @@ def install(args):
             shared.run([uv, 'pip', 'install', '--python', venv/'Scripts/python.exe', '--no-index', '--no-deps',
                         *sorted((bundle/'wheels').glob('*.whl'))], log, env)
             shared.run([uv, 'pip', 'check', '--python', venv/'Scripts/python.exe'], log, env)
-            shared.run([venv/'Scripts/python.exe', '-I', '-c',
+            shared.run([venv/'Scripts/python.exe', '-I', '-B', '-c',
                         'import ability_py,pinocchio,ruckig,mujoco,numpy; assert numpy.__version__=="2.3.5"'], log, env)
             shared.run([bundle/'bin/AbilityFramework.exe', '--version'], log, env)
             cli = release/'bin/semantic.exe'

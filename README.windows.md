@@ -123,6 +123,10 @@ uv pip compile artifacts/macos/installer-requirements.in \
 
 上述 macOS requirements 仅用于检查现有版本组合；最终必须生成独立的 Windows 输入文件和锁文件。
 
+## 初始验收清单（实施状态以上方进度为准）
+
+以下保留原始规划范围，未勾选项不等于当前全部尚未实施。各阶段实际通过的检查、尚未通过的整包检查和对应证据见上方实施记录。
+
 ## P0：依赖和核心进程可运行
 
 ### Python 与数学依赖
@@ -244,5 +248,4 @@ Framework/deployment 和 AbilityFramework 的平台接口可以同时推进；�
 | C：安装包预览 | 实际离线 ZIP 在干净 Windows 11 安装/重装/卸载通过，发布验证报告 |
 | D：图形验证与正式分发 | 承诺的显卡/桌面组合通过；按需要补 MSI/EXE 包装、代码签名、开始菜单/卸载登记 |
 
-当前处于 A 阶段：继续完成 Pinocchio/AbilityFramework 原生验证和 Framework 集成，再推进 B/C。
-当前没有充分数据给出可靠工期；原生依赖的 Windows ABI/打包试构建后再评估。
+A 阶段的原生组件编译与数学验证已通过，关键组件预发布已提供；当前推进 B/C 的完整安装与项目闭环。首个 ZIP 已成功组装，中文路径中的 Robot 离线依赖安装和导入通过。Runtime Pack 注册暴露的 Unix 示例路径校验问题由 [Framework PR #8](https://github.com/insightos-community/Semantic-Framework/pull/8) 修复，整包重新验证中。桌面 GPU 验证仍单独待办。

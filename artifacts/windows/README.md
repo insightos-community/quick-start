@@ -56,7 +56,9 @@ inputs before revalidating the original wheels. Both revisions and verification
 evidence are included in the installer.
 
 The assembler removes pip's unused ARM/32-bit launcher templates and records their
-hashes. It preserves the x64 launchers. The bundled Python executable manifests
+hashes. It preserves the x64 launchers. Regenerable Python bytecode caches are
+removed before payload checksums are generated, so normal first-run compilation
+does not make an unchanged installation fail retry verification. The bundled Python executable manifests
 enable the [UTF-8 process code page](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page)
 so native libraries can open UTF-8 filenames in Chinese installation directories.
 Original and modified executable hashes and manifests are included in the payload.

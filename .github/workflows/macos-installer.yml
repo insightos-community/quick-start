@@ -177,7 +177,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
+        ref: 2773494d35876f66afce393b0b26320945ef6f4e
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -315,7 +315,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
-        ref: ef9bbebf9a6d1f2c25350d575d242d52f29e8e42
+        ref: 2773494d35876f66afce393b0b26320945ef6f4e
         path: sources/semantic-deployment
         persist-credentials: false
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
