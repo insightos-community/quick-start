@@ -125,6 +125,49 @@ class WindowsManagerContracts(unittest.TestCase):
                 self.assertEqual((root/'configs/user.yaml').read_text(), 'keep: true')
                 self.assertFalse(json.loads((root/'install.json').read_text())['ready'])
 
+    def test_cleanup_waits_for_parent_handle_and_preserves_reused_pid(self):
+        powershell = str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe')
+        for matched in (True, False):
+            root = self.root/('matching-parent' if matched else 'reused-parent')
+            root.mkdir()
+            (root/'.semantic-install-root').touch()
+            (root/'install.json').write_text(json.dumps(dict(platform='windows-amd64',
+                ready=True, uninstalling=True, uninstall_nonce='parent-handle-test')))
+            result = root.with_suffix('.result.json')
+            log = root.with_suffix('.log')
+            parent = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            helper = None
+            try:
+                identity = ports.process_record(parent.pid)
+                with log.open('wb') as stream:
+                    helper = subprocess.Popen([powershell, '-NoProfile', '-NonInteractive',
+                        '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'artifacts/windows/uninstall.ps1'),
+                        '-Root', str(root), '-Nonce', 'parent-handle-test', '-ParentPid', str(parent.pid),
+                        '-ParentCreated', identity['created'] if matched else '0000000000000000',
+                        '-Result', str(result), '-Purge'], stdout=stream, stderr=subprocess.STDOUT)
+                if matched:
+                    deadline = time.monotonic()+20
+                    while 'Waiting for installer PID' not in log.read_text(errors='replace'):
+                        self.assertIsNone(helper.poll(), log.read_text(errors='replace'))
+                        self.assertLess(time.monotonic(), deadline, log.read_text(errors='replace'))
+                        time.sleep(0.05)
+                    self.assertTrue(root.exists())
+                    self.assertFalse(result.exists(), 'Cleanup ran before the owned parent exited')
+                    parent.terminate()  # This test owns the inert sleeper.
+                    parent.wait(timeout=10)
+                helper.wait(timeout=30)
+                self.assertEqual(helper.returncode, 0, log.read_text(errors='replace'))
+                self.assertTrue(json.loads(result.read_text())['success'])
+                self.assertFalse(root.exists())
+                if not matched:
+                    self.assertIsNone(parent.poll(), 'Cleanup touched a reused PID')
+            finally:
+                if parent.poll() is None:
+                    parent.terminate()
+                parent.wait(timeout=10)
+                if helper is not None and helper.poll() is None:
+                    helper.wait(timeout=30)
+
     def test_real_server_restarts_and_stops_from_python_manager(self):
         import yaml
         binaries = Path(os.environ['SEMANTIC_NATIVE_BIN'])

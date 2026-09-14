@@ -43,16 +43,42 @@ try {
     if ($Root -eq [IO.Path]::GetPathRoot($Root).TrimEnd('\') -or $Root -eq [Environment]::GetFolderPath('UserProfile')) { throw 'Dedicated installation directory required' }
     Plain $Root
     [Console]::WriteLine('Installation path validated')
-    $parent = $null
-    try { $parent = [Diagnostics.Process]::GetProcessById($ParentPid) } catch [ArgumentException] {}
-    if ($parent) {
+    # Hold one native handle while checking creation time and waiting. A lazy
+    # Diagnostics.Process.StartTime query can become null as the parent exits.
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class SemanticCleanupParent {
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool GetProcessTimes(IntPtr process, out long created, out long exited, out long kernel, out long user);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+    public static void Wait(int pid, string expectedCreated) {
+        IntPtr handle = OpenProcess(0x00100000 | 0x1000, false, pid);
+        if (handle == IntPtr.Zero) {
+            int error = Marshal.GetLastWin32Error();
+            if (error == 87) return; // PID no longer exists.
+            throw new Win32Exception(error);
+        }
         try {
-            if ($parent.StartTime.ToUniversalTime().ToFileTimeUtc().ToString('x16') -eq $ParentCreated) {
-                [Console]::WriteLine('Waiting for installer PID '+$ParentPid)
-                if (!$parent.WaitForExit(120000)) { throw 'Installer process has not exited; no files removed' }
-            }
-        } finally { $parent.Dispose() }
+            long created, exited, kernel, user;
+            if (!GetProcessTimes(handle, out created, out exited, out kernel, out user))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (((ulong)created).ToString("x16") != expectedCreated) return; // Reused PID.
+            Console.WriteLine("Waiting for installer PID " + pid);
+            uint result = WaitForSingleObject(handle, 120000);
+            if (result == 258) throw new Exception("Installer process has not exited; no files removed");
+            if (result != 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+        } finally { CloseHandle(handle); }
     }
+}
+'@
+    [SemanticCleanupParent]::Wait($ParentPid, $ParentCreated)
     Plain (Join-Path $Root '.semantic-management.lock')
     [Console]::WriteLine('Acquiring installation lock')
     $lock = [IO.File]::Open((Join-Path $Root '.semantic-management.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
@@ -90,7 +116,7 @@ try {
     }
     [IO.File]::WriteAllText($Result, (@{success=$true; purge=[bool]$Purge; root=$Root} | ConvertTo-Json), $utf8)
 } catch {
-    [IO.File]::WriteAllText($Result, (@{success=$false; error=$_.Exception.Message; root=$Root} | ConvertTo-Json), $utf8)
+    [IO.File]::WriteAllText($Result, (@{success=$false; error=$_.Exception.Message; location=$_.InvocationInfo.PositionMessage; root=$Root} | ConvertTo-Json), $utf8)
     exit 1
 } finally {
     if ($lock) { $lock.Dispose() }
