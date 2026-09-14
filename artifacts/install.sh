@@ -1330,8 +1330,12 @@ def configure_existing(a):
             stopped = True
             if uninstall_processes(root, uninstall_managed(root)):
                 raise ValueError('Instance still has active processes; configuration was not changed')
+            remaining = uninstall_managed(root)
+            kept_ports = {old[k] for name, keys in [('server', ('http_port', 'ws_port')), ('web', ('web_port',))]
+                          if services(root).get(name, {}).get('pid') in remaining for k in keys}
             for key in ('http_port', 'ws_port', 'web_port', 'runtime_port'):
-                check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
+                if values[key] not in kept_ports:
+                    check_port(values[key], values['web_host'] if key == 'web_port' else '127.0.0.1')
             for path, data in updates.items():
                 replace_config(path, data)
             if not a.no_start:

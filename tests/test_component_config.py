@@ -110,6 +110,19 @@ class ComponentConfigTests(unittest.TestCase):
         self.assertEqual(support.read_component_config(self.root/'configs/components.yaml')['web_port'], 23000)
         self.assertEqual(len(list((self.root/'configs').glob('reconfigure-backup-*'))), 1)
 
+    def test_web_only_reconfigure_accepts_retained_owned_server_listeners(self):
+        self.fixture()
+        (self.root/'run/services.json').write_text(json.dumps({'server':{'pid':123}}))
+        def check(port, host='127.0.0.1'):
+            if port in (8034, 8035):
+                raise RuntimeError('Server listener remains occupied by the owned process')
+        with patch('uninstall.uninstall_managed', return_value={123:'owned'}), patch('uninstall.uninstall_processes', return_value=[]), \
+             patch.object(installer, 'install_manager'), patch.object(installer, 'stop_owned') as stop, patch.object(installer, 'check_port', side_effect=check), \
+             patch.object(installer, 'desktop_shortcuts'), patch.object(installer, 'welcome'), patch('sys.stdout', new=io.StringIO()):
+            installer.configure_existing(self.args(web_port=23000))
+        stop.assert_called_once_with(self.root, ['web'])
+        self.assertEqual(json.loads((self.root/'install.json').read_text())['web_port'], 23000)
+
     def test_reconfigure_rolls_back_files_when_restart_fails(self):
         state = self.fixture()
         original = (self.root/'configs/semantic-server.yaml').read_bytes()
