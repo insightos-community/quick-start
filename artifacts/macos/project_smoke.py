@@ -23,6 +23,7 @@ def check_project(root, base, token, report):
             raise RuntimeError(f'{path}: HTTP {error.code}: {error.read().decode()}') from error
 
     project = request('/projects', {'name':'Native macOS device startup regression'})['project']
+    request('/projects/'+project['id']+'/activate', {})
     project_path = '/projects/'+project['id']+'/simulation'
     diagnostics = {}
     release = json.loads((root/'current/release.json').read_text())
