@@ -211,8 +211,13 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw 'Windows assembly failed' }
     - name: Verify native offline installation
       run: |
-        uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:RUNNER_TEMP/语义 Windows test" --report .output/windows/windows-installation.json
-        if ($LASTEXITCODE -ne 0) { throw 'Windows installation validation failed' }
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+        $previous = (Get-ItemProperty $key).LongPathsEnabled
+        try {
+          Set-ItemProperty $key -Name LongPathsEnabled -Value 0
+          uv run --no-project --python 3.13.15 --with PyYAML==6.0.2 python artifacts/windows/smoke.py --payload .work/windows/payload --root "$env:RUNNER_TEMP/语义 Windows test" --report .output/windows/windows-installation.json
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installation validation failed' }
+        } finally { Set-ItemProperty $key -Name LongPathsEnabled -Value $previous }
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: semantic-installer-windows-amd64-preview

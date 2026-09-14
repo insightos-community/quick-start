@@ -11,6 +11,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $lock = $null
+function FileDigest([string]$Path) {
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($hash.ComputeHash([IO.File]::ReadAllBytes($Path)))).Replace('-', '').ToLower() }
+    finally { $hash.Dispose() }
+}
 function Plain([string]$Path) {
     $current = [IO.Path]::GetFullPath($Path)
     while ($current) {
@@ -107,7 +112,7 @@ public static class SemanticCleanupParent {
             $name = [IO.Path]::GetFileName($path)
             if ($parent -notin @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('DesktopDirectory')) -or $name -notin @("Semantic ($id).lnk", "Uninstall Semantic ($id).lnk")) { continue }
             try { Plain $path } catch { continue }
-            if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -eq $record.Value) { [IO.File]::Delete($path) }
+            if ((Test-Path -LiteralPath $path -PathType Leaf) -and (FileDigest $path) -eq $record.Value) { [IO.File]::Delete($path) }
         }
     }
     $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Semantic-$id"

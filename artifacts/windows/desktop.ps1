@@ -7,6 +7,11 @@ $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
 $sha = [Security.Cryptography.SHA256]::Create()
 $id = ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($Root)))).Replace('-', '').ToLower().Substring(0,12)
 $state = [IO.File]::ReadAllText((Join-Path $Root 'install.json'), $utf8) | ConvertFrom-Json
+function FileDigest([string]$Path) {
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($hash.ComputeHash([IO.File]::ReadAllBytes($Path)))).Replace('-', '').ToLower() }
+    finally { $hash.Dispose() }
+}
 function Plain([string]$Path) {
     $item = $Path
     while ($item) {
@@ -49,7 +54,7 @@ foreach ($directory in @($programs, $desktop)) {
         try { Plain $path } catch { continue }
         if (Test-Path -LiteralPath $path) {
             $old = if ($state.PSObject.Properties['native_shortcuts']) { $state.native_shortcuts.PSObject.Properties[$path] } else { $null }
-            if (!$old -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -ne $old.Value) { continue }
+            if (!$old -or (FileDigest $path) -ne $old.Value) { continue }
         }
         $targetPath = [IO.Path]::Combine($release, 'python', 'python.exe')
         if (!(Test-Path -LiteralPath $targetPath -PathType Leaf)) { throw "Shortcut executable is missing: $targetPath" }
@@ -60,7 +65,7 @@ foreach ($directory in @($programs, $desktop)) {
             if (Test-Path -LiteralPath $path) { [IO.File]::Delete($path) }
             [IO.File]::Move($temporary, $path)
         } finally { if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) } }
-        $records[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower()
+        $records[$path] = (FileDigest $path)
     }
 }
 $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Semantic-$id"
