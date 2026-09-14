@@ -12,7 +12,7 @@ Installed management commands:
 "%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" stop
 "%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" start
 
-"%LOCALAPPDATA%\\Semantic\\bin\\semanticctl.cmd" uninstall --yes
+"%LOCALAPPDATA%\Semantic\bin\semanticctl.cmd" uninstall --yes
 Uninstall uses local files, preserves configuration/data/logs, and prints an external cleanup result path.
 Add --purge only to permanently delete the whole instance.
 
