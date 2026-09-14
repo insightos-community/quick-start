@@ -134,3 +134,18 @@ python artifacts/mirror_release_to_oss.py publish --tag macos-v0.1.0-rc.4 --outp
 
 `stage` only downloads and verifies; `publish` also writes the configured OSS
 prefix. It never changes bucket ACLs or embeds credentials in installers.
+
+## Port and YAML configuration guide
+
+The bilingual `#ports` section documents default TCP ports, listen addresses,
+YAML keys, conflict handling and the Ability allocation range. Existing instances
+retain their settings. Export, install and reconfigure examples follow the main
+platform selector and language; installation also follows the validated release
+tag. Each command has a copy button. Reconfiguration targets the existing instance
+directory and does not download the full installer archive.
+
+Keep these examples aligned with the component configuration section of the root
+READMEs. Run `tests/test_artifact_site.cjs` against a local preview and the deployed
+site to verify both languages, all three platforms, clipboard contents, invalid
+tags and viewport widths from 320 to 1440 px. The table scrolls within its container
+on narrow screens without overflowing the page.

@@ -112,3 +112,24 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8
 .platform-options [aria-pressed="true"] .platform-check { visibility: visible; }
 @media(max-width:760px) { .install-selectors { grid-template-columns: 1fr; } }
 @media(max-width:430px) { .platform-options { grid-template-columns: 1fr; gap: 6px; } .platform-options button { padding: 8px 14px; gap: 12px; } .platform-options button>span:not(.platform-check) { display: flex; align-items: baseline; gap: 12px; } .platform-options small { margin: 0; } .platform-options svg { height: 29px; } .platform-check { right: 12px; top: 14px; font-size: 13px; } }
+
+/* Port reference and configuration steps use the same layout in both languages. */
+.port-guide>p{font-size:13px;line-height:1.9;max-width:100%;overflow-wrap:anywhere}
+.port-guide a,.step a{color:var(--green);text-decoration:underline;text-underline-offset:3px}
+.port-table-wrap{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#ffffff99}
+.port-table-wrap:focus-visible{outline:3px solid var(--green);outline-offset:3px}
+.port-table{width:100%;min-width:650px;border-collapse:collapse;text-align:left;font-size:13px;line-height:1.8}
+.port-table caption{text-align:left;padding:18px 20px;color:var(--muted);font-size:12px}
+.port-table th,.port-table td{padding:16px 20px;border-top:1px solid var(--line);vertical-align:top}
+.port-table thead{background:#edf1f9}.port-table th{font-weight:600}
+.port-table small{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:4px}
+.config-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-top:36px}
+.config-heading h3{font-size:21px;font-weight:550;margin:0}.config-heading a{font-size:12px;flex-shrink:0}
+.port-guide .step>div{min-width:0}.config-command{position:relative;padding-top:32px;background:#edf1f9;border:1px solid var(--line);border-radius:6px;margin:16px 0}
+.config-command pre{border:0;background:transparent;margin:0;padding-top:8px}
+.config-command button{position:absolute;top:8px;right:12px;background:#fff;border:1px solid #b9c8e5;border-radius:5px;color:var(--green);padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+.config-command button:hover{background:#e2eaff}.config-command button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:760px){.port-table th,.port-table td{padding:12px 14px}.config-heading{align-items:flex-start;flex-direction:column;gap:8px}.port-guide .step{grid-template-columns:1fr;gap:10px}.port-guide .step h3{margin-top:0}}
+
+.port-scroll-hint{display:none}
+@media(max-width:760px){.port-scroll-hint{display:block}}
