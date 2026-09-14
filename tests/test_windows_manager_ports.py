@@ -88,6 +88,14 @@ class WindowsManagerContracts(unittest.TestCase):
             (root/'configs/user.yaml').write_text('keep: true', encoding='utf-8')
             (root/'install.json').write_text(json.dumps(dict(component_values(), version='0.1.0-test.1',
                 platform='windows-amd64', ready=True)), encoding='utf-8')
+            (root/'bin').mkdir(exist_ok=True)
+            (root/'releases/0.1.0-test.1/assets').mkdir()
+            shutil.copyfile(ROOT/'artifacts/assets/ios.png', root/'releases/0.1.0-test.1/assets/ios.png')
+            entries = json.loads(subprocess.check_output(['powershell.exe', '-NoProfile', '-NonInteractive',
+                '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'artifacts/windows/desktop.ps1'),
+                '-Root', str(root), '-Version', '0.1.0-test.1']).decode('utf-8-sig'))
+            state = json.loads((root/'install.json').read_text(encoding='utf-8'))
+            (root/'install.json').write_text(json.dumps(dict(state, **entries)), encoding='utf-8')
             command = [sys.executable, '-B', str(ROOT/'artifacts/windows/manager.py'),
                        '--dir', str(root), 'uninstall', '--yes']
             if purge:
@@ -99,7 +107,13 @@ class WindowsManagerContracts(unittest.TestCase):
                 while not report.exists() and time.monotonic() < deadline:
                     time.sleep(0.1)
                 self.assertTrue(report.exists(), (report.parent/'cleanup.log').read_text(errors='replace'))
-                return json.loads(report.read_text(encoding='utf-8'))
+                result = json.loads(report.read_text(encoding='utf-8'))
+                if result.get('success'):
+                    self.assertTrue(all(not Path(p).exists() for p in entries['native_shortcuts']))
+                    import winreg
+                    with self.assertRaises(FileNotFoundError):
+                        winreg.OpenKey(winreg.HKEY_CURRENT_USER, entries['uninstall_registry'].removeprefix('HKCU:\\'))
+                return result
             if not purge:
                 outside = self.root/'outside'
                 outside.mkdir()

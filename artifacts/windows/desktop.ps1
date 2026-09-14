@@ -1,5 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Version)
 $ErrorActionPreference = 'Stop'
+trap { [Console]::Error.WriteLine($_.ToString()+[Environment]::NewLine+$_.InvocationInfo.PositionMessage+[Environment]::NewLine+$_.ScriptStackTrace); exit 1 }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
@@ -17,11 +18,6 @@ $release = Join-Path $Root "releases\$Version"
 $icon = Join-Path $Root 'bin\Semantic.ico'
 Plain $icon
 Add-Type -AssemblyName System.Drawing
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public static class SemanticIcon { [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr handle); }
-'@
 $image = [Drawing.Image]::FromFile((Join-Path $release 'assets\ios.png'))
 $bitmap = New-Object Drawing.Bitmap(256,256)
 $graphics = [Drawing.Graphics]::FromImage($bitmap)
@@ -29,12 +25,16 @@ $graphics.Clear([Drawing.Color]::White)
 $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
 $height = [int](256*$image.Height/$image.Width)
 $graphics.DrawImage($image, 0, [int]((256-$height)/2), 256, $height)
-$handle = $bitmap.GetHicon()
+# PNG-compressed ICO supports full-size 256px icons without GDI handle conversion.
+$png = New-Object IO.MemoryStream
+$bitmap.Save($png, [Drawing.Imaging.ImageFormat]::Png)
+$stream = [IO.File]::Create($icon)
+$writer = New-Object IO.BinaryWriter($stream)
 try {
-    $nativeIcon = [Drawing.Icon]::FromHandle($handle)
-    $stream = [IO.File]::Create($icon)
-    try { $nativeIcon.Save($stream) } finally { $stream.Dispose() }
-} finally { [SemanticIcon]::DestroyIcon($handle) | Out-Null; $graphics.Dispose(); $bitmap.Dispose(); $image.Dispose() }
+    $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]1)
+    $writer.Write([byte[]]@(0,0,0,0)); $writer.Write([uint16]1); $writer.Write([uint16]32)
+    $writer.Write([uint32]$png.Length); $writer.Write([uint32]22); $writer.Write($png.ToArray())
+} finally { $writer.Dispose(); $png.Dispose(); $graphics.Dispose(); $bitmap.Dispose(); $image.Dispose() }
 $shell = New-Object -ComObject WScript.Shell
 $records = @{}
 $programs = [Environment]::GetFolderPath('Programs')
