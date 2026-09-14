@@ -1,8 +1,8 @@
 # Native Windows installer preview
 
-The Windows x64 installer is under integration validation. No qualified Windows
-installer release has been published yet; Windows desktop GPU rendering remains
-unverified. The existing Linux/musl/macOS entry points continue to use their
+The Windows x64 offline installer passed [complete native CI](https://github.com/insightos-community/quick-start/actions/runs/34823853506).
+The `windows-v*` tag workflow publishes a preview only after repeating that qualification.
+Windows desktop GPU rendering remains unverified. The existing Linux/musl/macOS entry points continue to use their
 platform installers.
 
 ## Native installation and management
@@ -36,7 +36,10 @@ the extracted local ZIP. The installed management commands do not download an
 archive. Uninstall waits for the installed Python to exit, then removes program
 files and writes its result to the printed temporary path. It preserves configuration,
 data and logs; add `--purge` only to delete the entire instance permanently.
-No administrator privileges or Unix tools are required by the installer.
+No administrator privileges or Unix tools are required by the installer. Windows Skill
+activation uses persistent version references without requiring symlink privileges or
+Developer Mode. The first project start can take several minutes while seven Abilities
+start and three offline Skill environments are prepared.
 
 ## Reproduce the assembly
 

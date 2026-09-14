@@ -13,8 +13,11 @@
       "merge_commit": "2773494d35876f66afce393b0b26320945ef6f4e",
       "shutdown_fix": {
         "pr": 7,
-        "merged": false,
-        "result": "Dispatch normal stop requests before waiting for asynchronous teardown; local instance/client suites passed. Native and installer verification pending."
+        "merged": true,
+        "result": "Windows/Linux/macOS passed. Real installed project released normally with safe hold and all seven stops confirmed in installer CI 34823099323.",
+        "head": "23b36f16eeed4578634e9e988a7b08fc8593c670",
+        "merge_commit": "19e07797982145cc637fb04c7e7cc581c10c89f1",
+        "native_ci": 34822844229
       }
     },
     "Semantic-Framework": {
@@ -43,18 +46,30 @@
         "merged": true,
         "result": "Real offline Skill venv installation and reuse in Unicode paths passed on Windows; Linux local test and macOS regression passed.",
         "merge_commit": "0b06425a81ea38a21db8ae2b992dcaa3a8ad9b35"
+      },
+      "skill_activation_fix": {
+        "pr": 10,
+        "head": "8a12584441a13410091a7091e0af811453792bbf",
+        "merged": true,
+        "windows_ci": 34823109020,
+        "macos_ci": 34823109070,
+        "linux_ci": 34823108963,
+        "result": "Windows persistent Skill references require no symlink privilege; first-start readiness budget covers serial Abilities and offline Skill preparation. Native tests and real installed project readiness/release passed.",
+        "merge_commit": "4fc2067799fceb5f55b9cb5502467ed89e7f67eb"
       }
     },
     "pinocchio": {
       "branch": "feat/windows-release",
       "head": "635953fa9fd83c289e1af984944cf55885b2b53c",
-      "native_ci": 34816658038,
-      "result": "Native source compilation completed; standalone CPython FK/RNEA/URDF/mesh/collision and DLL checks passed after correcting NumPy bundled CRT policy. Component prerelease published with separate compilation/verification revisions.",
+      "native_ci": 34819515866,
+      "result": "Full native Windows rebuild and standalone math/URDF/collision/DLL tests passed on latest source; musl regression passed. PR 2 merged; component preview remains immutable.",
       "pr": 2,
-      "merged": false,
+      "merged": true,
       "full_rebuild_ci": 34816626307,
       "release": "https://github.com/insightos-community/pinocchio/releases/tag/windows-v3.9.0-preview.1",
-      "full_rebuild_result": "Full native rebuild 34816626307 passed; eight artifact hashes and standalone math validation verified."
+      "full_rebuild_result": "Full native rebuild 34816626307 passed; eight artifact hashes and standalone math validation verified.",
+      "merge_commit": "7bd84789dc2997bda6ad26997e032b31308e2b5c",
+      "musl_ci": 34819519977
     },
     "AbilityFramework": {
       "branch": "fix/windows-ability-spawn",
@@ -86,13 +101,13 @@
     },
     "quick-start": {
       "branch": "feat/windows-installer-payload",
-      "head": "fde31091c2f0ebf66586a6d3f59dedaf7916c645",
-      "result": "Offline install/retry, shared Python, Unicode math and Runtime scene smoke passed. All seven Abilities started; Skill dependencies installed, but first startup exceeded two-minute readiness. Windows five-minute startup, unprivileged Skill activation and batched normal-stop confirmation now in integration.",
+      "head": "70d4c9f82265658f56b4e45541bbd75814938367",
+      "result": "Complete native Windows installer CI passed: offline install/retry, one Python base including dynamically created Skill venvs, native math in Unicode paths, real project and reconfigured project with seven healthy Abilities/three Skills/Pilot, normal scene release, local restart and uninstall preserving data.",
       "pr": 24,
       "merged": false,
       "native_ci": 34816034789,
       "merge_commit": "65c3a26c32ddf79edb4acae26dce6b253e1ec7b2",
-      "installer_ci": 34822143391
+      "installer_ci": 34823853506
     },
     "Ability-SDK-Python": {
       "branch": "feat/windows-lifecycle",
@@ -115,8 +130,7 @@
     }
   },
   "remaining": [
-    "Complete full project/Skill integration, normal scene release, reconfiguration and offline uninstall in the assembled ZIP",
-    "Merge qualified installer and publish windows-v0.1.0-rc.1",
+    "Merge installer and publish windows-v0.1.0-rc.1 from the gated tag workflow",
     "Windows 11 desktop GPU rendering qualification"
   ]
 }
