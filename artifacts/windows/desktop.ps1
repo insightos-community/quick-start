@@ -53,6 +53,7 @@ foreach ($directory in @($programs, $desktop)) {
         }
         $link = $shell.CreateShortcut($path)
         $targetPath = [IO.Path]::Combine($release, 'python', 'python.exe')
+        if (!(Test-Path -LiteralPath $targetPath -PathType Leaf)) { throw "Shortcut executable is missing: $targetPath" }
         $link.TargetPath = [string]$targetPath
         $link.Arguments = '-I -B "'+(Join-Path $release 'manager.py')+'" --dir "'+$Root+'" '+$action+' --interactive'
         $link.WorkingDirectory = [IO.Path]::GetTempPath()

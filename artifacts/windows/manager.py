@@ -107,7 +107,7 @@ class Manager:
             records.pop(name)
             shared.write_json(self.root/'run/services.json', records)
 
-    def uninstall(self, purge=False):
+    def uninstall(self, purge=False, interactive=False):
         self.stop()
         temporary = plain(Path(tempfile.mkdtemp(prefix='semantic-uninstall-')))
         if temporary.is_relative_to(self.root):
@@ -125,6 +125,8 @@ class Manager:
                    '-ParentPid', str(identity['pid']), '-ParentCreated', identity['created'], '-Result', str(result)]
         if purge:
             command.append('-Purge')
+        if interactive:
+            command.append('-Interactive')
         try:
             with (temporary/'cleanup.log').open('wb') as log:
                 child = subprocess.Popen(command, cwd=temporary, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
@@ -269,7 +271,7 @@ def main():
             message = 'Permanently delete this instance and all its data' if args.purge else 'Remove programs and preserve configuration, data and logs'
             if not args.yes and input(message+'? [y/N] ').strip().lower() not in ('y','yes'):
                 raise RuntimeError('Uninstallation cancelled')
-            result = manager.uninstall(args.purge)
+            result = manager.uninstall(args.purge, args.interactive)
             print('Cleanup will finish after this command exits. Result: '+str(result))
             if args.interactive:
                 print('Configuration and data will be preserved unless --purge was selected.')

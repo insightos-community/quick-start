@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory=$true)][int]$ParentPid,
     [Parameter(Mandatory=$true)][string]$ParentCreated,
     [Parameter(Mandatory=$true)][string]$Result,
-    [switch]$Purge
+    [switch]$Purge,
+    [switch]$Interactive
 )
 $ErrorActionPreference = 'Stop'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -130,8 +131,13 @@ public static class SemanticCleanupParent {
         [IO.Directory]::Delete($Root, $false)
     }
     [IO.File]::WriteAllText($Result, (@{success=$true; purge=[bool]$Purge; root=$Root} | ConvertTo-Json), $utf8)
+    if ($Interactive) {
+        $message = if ($Purge) { 'Semantic and its instance data have been removed.' } else { 'Semantic programs have been removed. Your configuration, data and logs were preserved.' }
+        (New-Object -ComObject WScript.Shell).Popup($message, 0, 'Semantic uninstall', 64) | Out-Null
+    }
 } catch {
     [IO.File]::WriteAllText($Result, (@{success=$false; error=$_.Exception.Message; location=$_.InvocationInfo.PositionMessage; root=$Root} | ConvertTo-Json), $utf8)
+    if ($Interactive) { (New-Object -ComObject WScript.Shell).Popup(('Uninstall failed: '+$_.Exception.Message+[Environment]::NewLine+'Details: '+$Result), 0, 'Semantic uninstall', 16) | Out-Null }
     exit 1
 } finally {
     if ($lock) { $lock.Dispose() }

@@ -77,6 +77,8 @@ class NativeEntries(unittest.TestCase):
         import winreg
         release = self.root/'releases/0.1.0'
         (release/'assets').mkdir(parents=True)
+        (release/'python').mkdir()
+        shutil.copyfile(sys.executable, release/'python/python.exe')
         (self.root/'bin').mkdir()
         shutil.copyfile(ROOT/'artifacts/assets/ios.png', release/'assets/ios.png')
         statefile = self.root/'install.json'

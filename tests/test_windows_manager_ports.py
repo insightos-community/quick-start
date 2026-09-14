@@ -90,6 +90,8 @@ class WindowsManagerContracts(unittest.TestCase):
                 platform='windows-amd64', ready=True)), encoding='utf-8')
             (root/'bin').mkdir(exist_ok=True)
             (root/'releases/0.1.0-test.1/assets').mkdir()
+            (root/'releases/0.1.0-test.1/python').mkdir()
+            shutil.copyfile(sys.executable, root/'releases/0.1.0-test.1/python/python.exe')
             shutil.copyfile(ROOT/'artifacts/assets/ios.png', root/'releases/0.1.0-test.1/assets/ios.png')
             entries = json.loads(subprocess.check_output(['powershell.exe', '-NoProfile', '-NonInteractive',
                 '-ExecutionPolicy', 'Bypass', '-File', str(ROOT/'artifacts/windows/desktop.ps1'),
