@@ -58,7 +58,9 @@ Physical Windows desktop GPU rendering has not been qualified. This is a preview
                     '--title','Semantic Windows x64 '+version,'--notes-file',str(notes)],check=True)
 subprocess.run(['gh','release','upload',tag,'--repo',repo,'--clobber',*map(str,sorted(root.iterdir()))],check=True)
 # Verify GitHub's received assets before making the draft public.
-published=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/releases/tags/{tag}']))
+# GitHub's tag lookup omits drafts. The CLI resolves the draft's release ID.
+release_url=json.loads(subprocess.check_output(['gh','release','view',tag,'--repo',repo,'--json','apiUrl']))['apiUrl']
+published=json.loads(subprocess.check_output(['gh','api',release_url]))
 assets={asset['name']:asset for asset in published['assets']}
 for path in sorted(root.iterdir()):
     if not path.is_file():
