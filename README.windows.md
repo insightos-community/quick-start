@@ -1,6 +1,6 @@
 # Windows 原生适配清单
 
-审计日期：2026-09-13。基线为 `macos-v0.1.0-rc.3` 及其锁定的组件提交。
+依赖审计日期：2026-09-13；实施进度更新：2026-09-14。审计基线为 `macos-v0.1.0-rc.3` 及其锁定的组件提交。
 下方依赖审计以该基线为准；实施进度单独记录。当前没有 Windows installer，
 也没有 Windows 整套产品实机运行通过的结论。
 编译诊断、源码版本及 PyPI 文件检查见 [审计记录](artifacts/windows/audit-2026-09-13.json)。
@@ -15,19 +15,36 @@
 官网与安装脚本的优先改动已通过 [quick-start PR #17](https://github.com/insightos-community/quick-start/pull/17)
 合并并部署；macOS 安装包已发布为 `macos-v0.1.0-rc.4`。
 
-第一项 Windows 代码适配见 [semantic-deployment PR #5](https://github.com/insightos-community/semantic-deployment/pull/5)：
-supervisor 与 debug stack 的实例锁接入 `internal/ports/filelock`，
-提供 Linux/macOS `flock` 和 Windows `LockFileEx` 实现。
-新增三平台原生 CI，验证非阻塞互斥、独立进程竞争、解锁/关闭及进程崩溃后的恢复。
-验证结果见 [CI](https://github.com/insightos-community/semantic-deployment/pull/5/checks)。
+| 组件 | 已完成的 Windows 工作 | 验证与待办 |
+| --- | --- | --- |
+| semantic-deployment | 实例锁、Job Object 进程树、带创建时间身份的正常停止 IPC、临时路径 | [PR #6](https://github.com/insightos-community/semantic-deployment/pull/6) 已合并；Windows/Linux/macOS 原生契约测试通过。完整 Robot 闭环仍待验证 |
+| ability-scaffold | 原生 `ability.exe`，直接调用包内 Python；Windows 打包入口 | [PR #4](https://github.com/insightos-community/ability-scaffold/pull/4) 已合并；中文/空格路径、JSON 参数、退出码、子进程清理测试通过 |
+| mujoco-runtime | Pydantic 版本对齐、跨平台资产路径检查、Windows 正常退出事件、原生 CI | [PR #10](https://github.com/insightos-community/mujoco-runtime/pull/10) 已合并；Windows 72 项 API/生命周期测试、MuJoCo 3.4.0 物理步进及 wheel 构建通过，Linux/macOS 回归通过 |
+| Semantic-Framework | CLI/Server/Pilot 的进程、路径和 PowerShell ports；Windows `glfw` 默认后端 | [PR #7](https://github.com/insightos-community/Semantic-Framework/pull/7) 已合并；Windows 原生构建、真实 Server 初始化/重启/正常停止、PowerShell 和 PDF 错误恢复测试通过，Linux/macOS 回归通过 |
+| AbilityFramework | MSVC/xmake、Windows 网卡/MAC/HostInfo、`.exe` 入口和路径支持 | [PR #5](https://github.com/insightos-community/AbilityFramework/pull/5) 原生 CI 验证中；Linux 22 项测试、125 项断言通过，Windows 整体运行尚未通过 |
+| Pinocchio 3.9.0 | Windows 构建锁、EigenPy/Coal/HPP-FCL 兼容依赖、wheel/DLL 打包和脱离 Conda 验证脚本 | `feat/windows-release` 原生 CI 验证中，尚未产出通过验证的 Windows Release |
+| Ability-SDK-Python | 原生入口下的已安装 wheel、IPC 与生命周期心跳集成测试 | [PR #3](https://github.com/insightos-community/Ability-SDK-Python/pull/3) 已合并；Windows/Linux 安装后 wheel 的生命周期、IPC 与入口回收测试通过 |
+| quick-start | Windows 安装包集成边界与待办已记录 | 尚无 Windows 安装包；配置、离线安装/卸载和整套项目闭环仍待实现与验证 |
 
-仅此平台接口能够在 Windows 构建和测试，不代表完整 supervisor 或 installer 已支持 Windows。
-进程树、正常停止 IPC、进程身份和 Pinocchio 可重定位产物仍待推进。
+机器可读的提交/CI 记录见 [实施记录](artifacts/windows/progress-2026-09-14.json)。
+
+MuJoCo 的通过结果仅覆盖 API 和物理步进。Windows 桌面 GPU、连续 RGB/depth
+渲染、完整拆码垛项目与 7 个 Ability/3 个 Skill 的联合验证仍未完成。
+Windows venv 的 `python.exe` 可能是重定向入口，正常停止 IPC 必须定位实际解释器，
+不能将 `Popen.terminate()` 当成正常停止。
+
 在 semantic-deployment 中使用 Go 1.25.8 复现（Windows PowerShell 同样适用）：
 
 ```text
 go test ./internal/ports/... -count=1 -timeout=2m
 ```
+
+组件具体复现入口：
+
+- Framework：[Windows 构建与原生验证](https://github.com/insightos-community/Semantic-Framework/blob/feat/windows-process-ports/docs/platforms/windows.md)。
+- Ability 入口：[MSVC 构建说明](https://github.com/insightos-community/ability-scaffold/blob/main/README.build.md#windows-native-launcher)。
+- MuJoCo：[Windows 构建和物理验证](https://github.com/insightos-community/mujoco-runtime/blob/main/README.build.md#windows-x64-native-validation)。
+- Pinocchio：[`ci/windows/build.ps1`](https://github.com/insightos-community/pinocchio/blob/feat/windows-release/ci/windows/build.ps1)，当前为待验证构建配方。
 
 ## 实施路线与 ports 边界
 
@@ -75,7 +92,9 @@ Windows 下 Job 句柄的拥有者、生命周期、异常退出策略和进程�
 
 这些是源码审计后的相对判断，不是已经完成的 Windows 构建结果或工期承诺。
 
-## 已确认的结论
+## 初始基线审计（2026-09-13）
+
+本节保留适配前的诊断，当前实现结果以上方实施进度为准。
 
 | 检查 | 结果 | 对适配的影响 |
 | --- | --- | --- |
@@ -222,5 +241,5 @@ Framework/deployment 和 AbilityFramework 的平台接口可以同时推进；�
 | C：安装包预览 | 实际离线 ZIP 在干净 Windows 11 安装/重装/卸载通过，发布验证报告 |
 | D：图形验证与正式分发 | 承诺的显卡/桌面组合通过；按需要补 MSI/EXE 包装、代码签名、开始菜单/卸载登记 |
 
-建议首先推进 A，优先消除 Pinocchio wheel 和 Go 进程层的已确认阻塞。
+当前处于 A 阶段：继续完成 Pinocchio/AbilityFramework 原生验证和 Framework 集成，再推进 B/C。
 当前没有充分数据给出可靠工期；原生依赖的 Windows ABI/打包试构建后再评估。
