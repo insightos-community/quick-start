@@ -50,25 +50,34 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      id: native_core
+      with:
+        path: sources/framework/.output/bin
+        key: windows2022-core-go1258-llvm60908-${{ hashFiles('artifacts/windows/sources.json', 'artifacts/gateway/*.go') }}-v1
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/Semantic-Framework
         ref: a855056be68ea1f94c84a581513f07629c254554
         path: sources/framework
         persist-credentials: false
+      if: steps.native_core.outputs.cache-hit != 'true'
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
       with:
         go-version: 1.25.8
         cache-dependency-path: sources/framework/go.sum
+      if: steps.native_core.outputs.cache-hit != 'true'
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: insightos-community/semantic-deployment
         ref: 2773494d35876f66afce393b0b26320945ef6f4e
         path: sources/deployment
         persist-credentials: false
+      if: steps.native_core.outputs.cache-hit != 'true'
     - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
       with:
         version: 0.12.12
+      if: steps.native_core.outputs.cache-hit != 'true'
     - name: Install pinned native compiler
       run: |
         $archive = Join-Path $env:RUNNER_TEMP 'llvm-mingw.zip'
@@ -78,6 +87,7 @@ jobs:
         "$env:RUNNER_TEMP/llvm-mingw-20260908-ucrt-x86_64/bin" >> $env:GITHUB_PATH
         'CC=x86_64-w64-mingw32-clang' >> $env:GITHUB_ENV
         'CXX=x86_64-w64-mingw32-clang++' >> $env:GITHUB_ENV
+      if: steps.native_core.outputs.cache-hit != 'true'
     - name: Build real Framework executables
       working-directory: sources/framework
       run: |
@@ -87,16 +97,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Build failed: $name" }
         }
         "SEMANTIC_NATIVE_BIN=$((Resolve-Path .output/bin).Path)" >> $env:GITHUB_ENV
+      if: steps.native_core.outputs.cache-hit != 'true'
     - name: Build native Web gateway
       run: |
         $env:CGO_ENABLED = '0'
         go build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-web-gateway.exe" artifacts/gateway/main.go artifacts/gateway/stop_windows.go
         if ($LASTEXITCODE -ne 0) { throw 'Gateway build failed' }
+      if: steps.native_core.outputs.cache-hit != 'true'
     - name: Build native Robot supervisor
       run: |
         $env:CGO_ENABLED = '0'
         go -C sources/deployment build -trimpath -o "$env:SEMANTIC_NATIVE_BIN/semantic-robot-instance.exe" ./cmd/semantic-robot-instance
         if ($LASTEXITCODE -ne 0) { throw 'Robot supervisor build failed' }
+      if: steps.native_core.outputs.cache-hit != 'true'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: windows-core
@@ -216,6 +229,7 @@ jobs:
           .output/windows/*.json
           ${{ runner.temp }}/语义 Windows test/robots/**/logs/**
           ${{ runner.temp }}/语义 Windows test/robots/**/run/state.json
+          ${{ runner.temp }}/语义 Windows test/robots/**/log/**
         include-hidden-files: true
         if-no-files-found: ignore
   release:
