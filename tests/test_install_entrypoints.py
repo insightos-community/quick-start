@@ -43,7 +43,7 @@ class InstallEntrypointTests(unittest.TestCase):
     def test_default_download_sources_work_without_checkout(self):
         for name, expected in [
             ('install.sh', 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic/channels/stable.json'),
-            ('install-en.sh', 'https://github.com/insightos-community/quick-start/releases/download/v0.1.0/SHA256SUMS'),
+            ('install-en.sh', 'https://github.com/insightos-community/quick-start/releases/download/v0.1.1/SHA256SUMS'),
         ]:
             with self.subTest(name=name):
                 result = self.run_script(name, pipe=True)

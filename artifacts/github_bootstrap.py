@@ -11,9 +11,13 @@ import urllib.request
 
 GITHUB_INSTALLER_REPO = 'insightos-community/quick-start'
 GITHUB_ASSET_REPO = 'insightos-community/mujoco-asset'
-GITHUB_DEFAULT_TAG = 'v0.1.0'
-GITHUB_MUSL_TAG = 'musl-v0.1.0-2'
+GITHUB_DEFAULT_TAG = 'v0.1.1'
+GITHUB_MUSL_TAG = 'musl-v0.1.0-3'
 GITHUB_BASELINE_COMMIT = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
+GITHUB_VERIFIED_COMMITS = {
+    'v0.1.0': GITHUB_BASELINE_COMMIT,
+    'v0.1.1': 'a9ce9255c618c7c5a7f3b625b5e1cde8b16edaef',
+}
 LFS_POINTER_PREFIX = b'version https://git-lfs.github.com/spec/v1\n'
 
 
@@ -55,7 +59,7 @@ def github_archive(work, version, download, requested_sha=None, musl=False, arch
         raise ValueError('GitHub release identity or platform mismatch')
     if musl and metadata.get('libc') != 'musl':
         raise ValueError('Release does not declare musl support')
-    if tag == GITHUB_DEFAULT_TAG and metadata.get('source_commit') != GITHUB_BASELINE_COMMIT:
+    if tag in GITHUB_VERIFIED_COMMITS and metadata.get('source_commit') != GITHUB_VERIFIED_COMMITS[tag]:
         raise ValueError('GitHub release differs from the verified source baseline')
     name = f'semantic-{release_version}-{target_platform}.tar.gz'
     expected = sums.get(name)

@@ -23,10 +23,10 @@ class GithubBootstrapTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work=Path(temporary.name)
 
-    def release(self, corrupt=False):
+    def release(self, corrupt=False, tag=github.GITHUB_DEFAULT_TAG):
         body=b'archive'
-        metadata=json.dumps(dict(tag='v0.1.0',version='0.1.0',component='semantic-installer',platform='linux-x86_64',source_commit=github.GITHUB_BASELINE_COMMIT)).encode()
-        name='semantic-0.1.0-linux-x86_64.tar.gz'
+        metadata=json.dumps(dict(tag=tag,version=tag[1:],component='semantic-installer',platform='linux-x86_64',source_commit=github.GITHUB_VERIFIED_COMMITS[tag])).encode()
+        name=f'semantic-{tag[1:]}-linux-x86_64.tar.gz'
         files={'release.json':metadata,name:body}
         files['SHA256SUMS']=''.join(f'{hashlib.sha256(data).hexdigest()}  {key}\n' for key,data in files.items()).encode()
         if corrupt:files[name]=b'corrupted'
@@ -40,12 +40,12 @@ class GithubBootstrapTests(unittest.TestCase):
         download,urls=self.release()
         archive,expected=github.github_archive(self.work,'stable',download)
         self.assertEqual(github.github_digest(archive),expected)
-        self.assertTrue(all(url.startswith('https://github.com/insightos-community/quick-start/releases/download/v0.1.0/') for url in urls))
+        self.assertTrue(all(url.startswith('https://github.com/insightos-community/quick-start/releases/download/v0.1.1/') for url in urls))
         with self.assertRaises(ValueError):github.github_archive(self.work,'../bad',download)
-        with self.assertRaises(ValueError):github.github_archive(self.work,'0.1.0',download,'0'*64)
+        with self.assertRaises(ValueError):github.github_archive(self.work,'0.1.1',download,'0'*64)
 
     def test_corrupt_release_does_not_reach_installation(self):
-        download,_=self.release(corrupt=True)
+        download,_=self.release(corrupt=True,tag='v0.1.0')
         with self.assertRaisesRegex(ValueError,'SHA256 mismatch'):
             github.github_archive(self.work,'v0.1.0',download)
 

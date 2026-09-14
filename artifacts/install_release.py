@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 
 from fetch_releases import download, fetch
+from github_bootstrap import GITHUB_DEFAULT_TAG, GITHUB_VERIFIED_COMMITS
 
 
 def main():
@@ -21,15 +22,15 @@ def main():
     if args.musl:
         return subprocess.run(['bash', str(Path(__file__).with_name('install.sh')), '--musl',
                                '--version', args.tag or 'stable', *options]).returncode
-    args.tag = args.tag or 'v0.1.0'
+    args.tag = args.tag or GITHUB_DEFAULT_TAG
     if not re.fullmatch(r'v[0-9][0-9A-Za-z._+-]*', args.tag):
         parser.error('Invalid release tag')
     # The verified baseline has a fixed source SHA. Other explicitly requested versions
     # resolve their tag and must agree with the publisher's release metadata.
     with tempfile.TemporaryDirectory(prefix='semantic-release-') as temporary:
         temporary = Path(temporary)
-        if args.tag == 'v0.1.0':
-            commit = 'ee0619eae2bce808d4b76b829dfb937440a964a4'
+        if args.tag in GITHUB_VERIFIED_COMMITS:
+            commit = GITHUB_VERIFIED_COMMITS[args.tag]
         else:
             download(f'https://api.github.com/repos/insightos-community/quick-start/commits/{args.tag}',temporary/'commit.json',4*1024**2)
             commit = json.loads((temporary/'commit.json').read_text())['sha']

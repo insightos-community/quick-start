@@ -6,9 +6,11 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
+import time
 import urllib.request
 
 HERE=Path(__file__).resolve().parent
@@ -16,6 +18,25 @@ HERE=Path(__file__).resolve().parent
 
 def run(*args, **kwargs):
     return subprocess.run(list(map(str,args)), check=True, **kwargs)
+
+
+
+def uninstall_after_indexing(ctl, *options):
+    """Allow transient Spotlight readers to close; preserve other uninstall failures."""
+    deadline = time.monotonic() + 30
+    while True:
+        result = subprocess.run([str(ctl), 'uninstall', *options], capture_output=True, text=True)
+        output = result.stdout + result.stderr
+        if result.returncode == 0:
+            print(output, end='')
+            return
+        readers = re.findall(r'PID [0-9]+ \(([^)]+)\):', output)
+        if ('Active processes still reference this instance; no files deleted.' not in output or not readers or
+                set(readers) != {'mdworker_shared'} or time.monotonic() >= deadline):
+            print(output, end='')
+            result.check_returncode()
+        print('Waiting for transient Spotlight readers before retrying safe uninstall', flush=True)
+        time.sleep(1)
 
 
 def request(url, data=None):
@@ -103,8 +124,8 @@ def main(a):
         finally:
             blocker.terminate(); blocker.wait(timeout=10)
         report['checks'].append('Uninstall refuses a foreign process holding an installation file')
-        run(ctl,'uninstall','--dry-run')
-        run(ctl,'uninstall','--yes')
+        uninstall_after_indexing(ctl,'--dry-run')
+        uninstall_after_indexing(ctl,'--yes')
         assert (root/'configs/secrets.json').is_file() and not (root/'releases').exists()
         assert all(not Path(p).exists() for p in app_entries)
         report['checks'].append('Uninstall preserves user configuration and removes installed programs and application entries')

@@ -103,7 +103,7 @@ def render():
         "if not a.package and not a.base_url and not a.ticket:\n    raise SystemExit('Specify a release server with --base-url or a local archive with --package.')\n", '')
     python = replace_once(python,
         "print('Public snapshot: no default binary channel. Supply an approved --package or --base-url.')",
-        "print('Default: GitHub Release v0.1.0; --version selects a tag. Missing models use pinned GitHub LFS objects.')\n    print('Dependencies use your configured system/uv package sources; repository and index settings are not rewritten.')")
+        "print('Default: GitHub Release v0.1.1; --version selects a tag. Missing models use pinned GitHub LFS objects.')\n    print('Dependencies use your configured system/uv package sources; repository and index settings are not rewritten.')")
     python = replace_once(python,
         "print('Semantic: --base-url HTTPS_URL [--version VERSION] | --package FILE [--sha256 HASH]')",
         "print('Semantic: [--version VERSION] | --base-url HTTPS_URL | --package FILE [--sha256 HASH]')")

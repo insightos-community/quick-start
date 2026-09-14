@@ -56,7 +56,7 @@ class MuslInstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             directory=Path(tmp)
             tag=github.GITHUB_MUSL_TAG
-            version='0.1.0-musl.2'
+            version='0.1.0-musl.3'
             archive=f'semantic-{version}-linux-musl-x86_64.tar.gz'
             metadata={'component':'semantic-installer','tag':tag,'version':version,'platform':'linux-musl-x86_64','libc':'musl'}
             def fixture():

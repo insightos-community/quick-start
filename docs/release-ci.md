@@ -30,7 +30,7 @@ python3 semantic_installer.py --release --install-system-deps
 python3 semantic_installer.py --release --dir "$HOME/.local/share/semantic-demo" --yes
 ```
 
-默认下载 quick-start 的 `v0.1.0` Release。入口核对该 Tag 的固定源码 SHA，校验每个下载文件，再交给原有制品安装器完成解包、环境初始化、Runtime 注册、技能发布和服务启动。目标机不需要 Go/Node/xmake 或各子仓库源码；需要 Python 3.10+，系统图形运行库与 zstd，以及首次安装 Python 运行环境时的网络。管理员账号 `admin` 使用安装时生成的随机密码，`semanticctl welcome` 查看；源码开发模式的 `test-admin-pass` 不适用于此入口。
+默认下载 quick-start 的 `v0.1.1` Release。入口核对该 Tag 的固定源码 SHA，校验每个下载文件，再交给原有制品安装器完成解包、环境初始化、Runtime 注册、技能发布和服务启动。目标机不需要 Go/Node/xmake 或各子仓库源码；需要 Python 3.10+，系统图形运行库与 zstd，以及首次安装 Python 运行环境时的网络。管理员账号 `admin` 使用安装时生成的随机密码，`semanticctl welcome` 查看；源码开发模式的 `test-admin-pass` 不适用于此入口。
 
 也可以只下载 Release 中的 `install.sh`、整包 `.tar.gz` 及 `SHA256SUMS`，先运行 `sha256sum --check --ignore-missing SHA256SUMS`，再运行 `bash install.sh --package <整包路径> --sha256 <整包SHA256> --install-system-deps`。安装入口不覆盖已有不同版本的实例，升级应使用新目录并单独迁移数据。
 
@@ -54,3 +54,16 @@ PR/main 组装后执行真实安装冒烟检查，覆盖 Web SPA、认证 API、
 默认 installer 及 `repo-versions.json` 继续使用现有 glibc 运行栈。额外的 `.github/workflows/musl-release.yml` 使用独立的 `musl-v*` Tag，发布供 `--musl` 选择的预发布包，不更新普通 latest Release 或 OSS stable。
 
 锁定的输入见 `artifacts/musl/releases.json`（组织内依赖 Release）、`upstream.json`（官方 musl Python/uv、基础安装包与源码）和 `python-wheels.json`（PyPI musl Wheel）。组装会验证 SHA-256、源码提交和平台，审计整个包及 Wheel 中的 ELF 依赖，包内还包含锁定版本的 musl 加载器、libc 及许可证。随后在断网 Alpine（包内/系统 musl）与没有系统 musl 的 Ubuntu 22.04（包内 musl）容器中测试中英文安装入口、Server/Web、Native MuJoCo 场景、机器人库联合运行和 Python 子进程。`--musl-runtime bundled|system` 选择运行时，默认 bundled。详见 [musl 构建说明](../artifacts/musl/README.md)。
+
+### Optional musl tag publication
+
+Push one platform tag at a time. A manual dispatch at an existing musl tag also
+publishes after qualification; dispatching a branch only builds and tests:
+
+```bash
+gh workflow run musl-release.yml --ref musl-vMAJOR.MINOR.PATCH-REVISION
+```
+
+Published assets and tags are immutable. For an already published version, use its
+existing release; a changed package requires a new tag. To mirror verified releases
+to OSS, see [the four-platform mirror commands](../artifacts/site/README.md#reproduce-an-oss-release-mirror).
