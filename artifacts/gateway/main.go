@@ -17,16 +17,28 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// Windows builds include stop_windows.go, which registers the native stop IPC.
+// Keeping the Unix default here preserves existing single-file build recipes.
+var notifyStop = func() (context.Context, context.CancelFunc, error) {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	return ctx, cancel, nil
+}
 
 func handler(root, api, ws string) http.Handler {
 	mux := http.NewServeMux()
@@ -49,14 +61,20 @@ func handler(root, api, ws string) http.Handler {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		clean := filepath.Clean("/" + r.URL.Path)
+		// URL paths always use slashes. Reject Windows separators and NTFS stream
+		// syntax before passing the name to the host filesystem.
+		if strings.ContainsAny(r.URL.Path, "\\:") {
+			http.NotFound(w, r)
+			return
+		}
+		clean := path.Clean("/" + r.URL.Path)
 		for _, part := range strings.Split(clean, "/") {
 			if strings.HasPrefix(part, ".") {
 				http.NotFound(w, r)
 				return
 			}
 		}
-		info, err := os.Stat(filepath.Join(root, clean))
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(clean, "/"))))
 		if err == nil && !info.IsDir() {
 			files.ServeHTTP(w, r)
 			return
@@ -75,9 +93,27 @@ func main() {
 	addr := flag.String("listen", "127.0.0.1:3000", "Web listen address")
 	root := flag.String("root", "web", "Production static directory")
 	api := flag.String("api", "http://127.0.0.1:8034", "Server HTTP URL")
-	ws := flag.String("ws", "http://127.0.0.1:8081", "Server WebSocket URL")
+	ws := flag.String("ws", "http://127.0.0.1:8035", "Server WebSocket URL")
 	flag.Parse()
 	s := &http.Server{Addr: *addr, Handler: handler(*root, *api, *ws), ReadHeaderTimeout: 10 * time.Second}
+	ctx, cancel, err := notifyStop()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cancel()
 	log.Printf("Semantic Web listening on %s", *addr)
-	log.Fatal(s.ListenAndServe())
+	done := make(chan error, 1)
+	go func() { done <- s.ListenAndServe() }()
+	select {
+	case err = <-done:
+		if !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+		shutdown, release := context.WithTimeout(context.Background(), 10*time.Second)
+		defer release()
+		if err = s.Shutdown(shutdown); err != nil {
+			log.Fatal(err)
+		}
+	}
 }

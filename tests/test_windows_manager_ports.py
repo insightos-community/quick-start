@@ -124,6 +124,45 @@ class WindowsManagerContracts(unittest.TestCase):
             database.rename(renamed)
             renamed.rename(database)
 
+    def test_native_gateway_serves_assets_and_stops_without_console_signal(self):
+        binaries = Path(os.environ['SEMANTIC_NATIVE_BIN'])
+        web = self.root/'web'; web.mkdir()
+        (web/'index.html').write_text('Semantic SPA', encoding='utf-8')
+        (web/'app.js').write_text('window.semantic = true;', encoding='utf-8')
+        (web/'.private').write_text('must not be served', encoding='utf-8')
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            port = listener.getsockname()[1]
+        address = f'127.0.0.1:{port}'
+        client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        for cycle in range(2):
+            child = subprocess.Popen([binaries/'semantic-web-gateway.exe', '--root', web, '--listen', address])
+            try:
+                record = ports.process_record(child.pid)
+                for attempt in range(100):
+                    self.assertIsNone(child.poll())
+                    try:
+                        with client.open('http://'+address+'/workspace', timeout=1) as reply:
+                            self.assertEqual(reply.read(), b'Semantic SPA')
+                            break
+                    except OSError:
+                        time.sleep(0.1)
+                else:
+                    self.fail('Gateway did not become ready')
+                with client.open('http://'+address+'/app.js', timeout=1) as reply:
+                    self.assertEqual(reply.read(), b'window.semantic = true;')
+                for path in ('/.private', '/app.js:stream', '/nested%5C.private'):
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        client.open('http://'+address+path, timeout=1)
+                    self.assertEqual(error.exception.code, 404)
+                ports.stop(record)
+                self.assertEqual(child.wait(timeout=10), 0)
+                ports.check_port(port)
+            finally:
+                if child.poll() is None:
+                    child.terminate()
+                    child.wait(timeout=10)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
