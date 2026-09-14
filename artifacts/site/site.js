@@ -16,6 +16,8 @@
 "use strict";
 // Translations are trusted, static site copy. Never insert URL or user input as HTML.
 const englishCopy = {
+  portsTableTitle: "Component TCP ports",
+  portsScroll: "Scroll the table horizontally for listen addresses and YAML settings →",
   stepNetwork: "Web defaults to port <code>3000</code>; API / WS communication stays local. To avoid port conflicts or enable LAN access, see the <a href=\"#ports\">port table and configuration guide below ↓</a>.",
   portsTitle: "Ports and configuration.",
   portsIntro: "Check port availability before installation and configure with one YAML file.<br>Component connections and discovery addresses update together.",

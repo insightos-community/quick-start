@@ -130,3 +130,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline-color:#164ed8
 .config-command button{position:absolute;top:8px;right:12px;background:#fff;border:1px solid #b9c8e5;border-radius:5px;color:var(--green);padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
 .config-command button:hover{background:#e2eaff}.config-command button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:760px){.port-table th,.port-table td{padding:12px 14px}.config-heading{align-items:flex-start;flex-direction:column;gap:8px}.port-guide .step{grid-template-columns:1fr;gap:10px}.port-guide .step h3{margin-top:0}}
+
+.port-scroll-hint{display:none}
+@media(max-width:760px){.port-scroll-hint{display:block}}

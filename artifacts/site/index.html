@@ -126,9 +126,11 @@ limitations under the License.
     </section>
     <section class="section wrap port-guide" id="ports" aria-labelledby="ports-title">
       <div class="section-heading"><div><span class="eyebrow">PORTS &amp; CONFIGURATION</span><h2 id="ports-title" data-i18n="portsTitle">端口与组件配置。</h2></div><p data-i18n="portsIntro">安装前检查端口占用，使用一份 YAML 统一配置。<br>修改端口后，组件连接与发现地址一起更新。</p></div>
+      <p class="muted" data-i18n="portsCaption">新安装的默认 TCP 端口；已有实例保留原配置，请导出查看实际值。</p>
+      <p class="port-scroll-hint muted" data-i18n="portsScroll">横向滑动表格，查看监听范围与配置项 →</p>
       <div class="port-table-wrap" tabindex="0" role="region" aria-label="组件端口表，可横向滚动" data-i18n-label="portTableLabel">
         <table class="port-table">
-          <caption data-i18n="portsCaption">新安装的默认 TCP 端口；已有实例保留原配置，请导出查看实际值。</caption>
+          <caption data-i18n="portsTableTitle">组件 TCP 端口</caption>
           <thead><tr><th scope="col" data-i18n="portComponent">组件 / 用途</th><th scope="col" data-i18n="portDefault">默认端口</th><th scope="col" data-i18n="portBinding">监听范围</th><th scope="col" data-i18n="portKey">YAML 配置项</th></tr></thead>
           <tbody>
             <tr><th scope="row">Semantic Web<small data-i18n="portWeb">浏览器控制台入口</small></th><td><code>3000</code></td><td data-i18n="portWebBinding">Linux：<code>0.0.0.0</code><br>macOS：<code>127.0.0.1</code></td><td><code>web_port</code><br><code>web_host</code></td></tr>
