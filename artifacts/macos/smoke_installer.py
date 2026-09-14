@@ -29,7 +29,7 @@ def main(a):
     root=a.root.resolve()
     package=a.package.resolve()
     checksum=hashlib.file_digest(package.open('rb'),'sha256').hexdigest()
-    options=['--package',package,'--sha256',checksum,'--dir',root,'--yes','--no-desktop-shortcut',
+    options=['--package',package,'--sha256',checksum,'--dir',root,'--yes','--desktop-shortcut',
              '--http-port','28080','--ws-port','28081','--web-port','28082','--runtime-port','28083']
     ctl=root/'bin/semanticctl'
     report={'checks':[], 'graphics':'not-qualified: physical Mac CGL validation required'}

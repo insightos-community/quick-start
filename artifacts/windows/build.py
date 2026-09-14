@@ -334,7 +334,7 @@ def build(a):
     for name in ('ios.png', 'banner.json'):
         copy(HERE.parent/'assets'/name, payload/'assets'/name)
     copy(ROOT/'LICENSE', payload/'LICENSE')
-    for name in ('install.py', 'manager.py', 'windows_ports.py', 'uninstall.ps1', 'install.cmd'):
+    for name in ('install.py', 'manager.py', 'windows_ports.py', 'uninstall.ps1', 'desktop.ps1', 'install.cmd'):
         copy(HERE/name, payload/name)
     copy(HERE/'PACKAGE-README.txt', payload/'README.txt')
     skills = []

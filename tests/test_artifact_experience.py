@@ -141,10 +141,11 @@ class ExperienceTests(unittest.TestCase):
     def test_desktop_icon_url_and_format_with_localized_directory(self):
         self.desktop()
         records = self.state['desktop_shortcuts']
-        self.assertEqual(len(records), 2)
+        self.assertEqual(len(records), 4)
         for name, digest in records.items():
             path = Path(name)
-            self.assertIn('Exec=xdg-open http://127.0.0.1:3010', path.read_text())
+            self.assertIn('semanticctl" '+('uninstall' if '-uninstall.desktop' in name else 'open'), path.read_text())
+            self.assertNotIn('3010', path.read_text())
             self.assertIn('Icon='+str(self.root/'bin/semantic-manager/assets/ios.png'), path.read_text())
             self.assertNotIn('secret-MUST', path.read_text())
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)

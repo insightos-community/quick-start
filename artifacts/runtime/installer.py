@@ -961,7 +961,7 @@ def main():
     component_options(p)
     p = commands.add_parser('control')
     p.add_argument('--root', type=Path, required=True)
-    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
+    p.add_argument('action', choices=['open', 'start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
     p.add_argument('--output', default='-')
     p.add_argument('--no-start', action='store_true')
     p.set_defaults(desktop='auto')
@@ -986,8 +986,12 @@ def main():
         configure_existing(a)
     elif a.action == 'welcome':
         welcome(a.root, load(a.root/'install.json'), all(alive(r) for r in services(a.root).values()) and len(services(a.root)) == 2)
-    elif a.action == 'start':
+    elif a.action in ('start', 'open'):
         start(a.root)
+        if a.action == 'open':
+            state = load(a.root/'install.json')
+            subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open',
+                            f"http://{web_probe(state.get('web_host', '127.0.0.1'))}:{state['web_port']}"], check=True)
     elif a.action == 'stop':
         # Only these services; do not force-kill any Robot instance or unrelated user process.
         stop_owned(a.root)

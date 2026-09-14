@@ -22,7 +22,7 @@ sys.path.insert(0, str(HERE))
 if not (HERE/'installer.py').is_file():
     sys.path.insert(0, str(HERE.parent/'runtime'))  # Source checkout only.
 import installer as shared
-from install_support import component_values, read_component_config, validate_components, component_yaml, export_components
+from install_support import web_probe, component_values, read_component_config, validate_components, component_yaml, export_components
 import windows_ports as ports
 
 
@@ -245,19 +245,22 @@ def main():
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'reconfigure', 'export-config', 'uninstall'])
+    parser.add_argument('command', choices=['open', 'start', 'stop', 'status', 'reconfigure', 'export-config', 'uninstall'])
     parser.add_argument('--dir', type=Path, required=True)
     parser.add_argument('-f', '--config', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--purge', action='store_true', help='Delete this installation including its configuration and data')
+    parser.add_argument('--interactive', action='store_true', help='Keep a shortcut console visible on failure')
     parser.add_argument('--yes', action='store_true')
     args = parser.parse_args()
     manager = Manager(args.dir)
     with ports.directory_lock(manager.root):
         manager.reload()
-        if args.command == 'start':
+        if args.command in ('start', 'open'):
             manager.start()
+            if args.command == 'open':
+                os.startfile(f"http://{web_probe(manager.values['web_host'])}:{manager.values['web_port']}")
         elif args.command == 'stop':
             manager.stop()
         elif args.command == 'status':
@@ -266,7 +269,10 @@ def main():
             message = 'Permanently delete this instance and all its data' if args.purge else 'Remove programs and preserve configuration, data and logs'
             if not args.yes and input(message+'? [y/N] ').strip().lower() not in ('y','yes'):
                 raise RuntimeError('Uninstallation cancelled')
-            print('Cleanup will finish after this command exits. Result: '+str(manager.uninstall(args.purge)))
+            result = manager.uninstall(args.purge)
+            print('Cleanup will finish after this command exits. Result: '+str(result))
+            if args.interactive:
+                print('Configuration and data will be preserved unless --purge was selected.')
         elif args.command == 'export-config':
             if args.output:
                 export_components(args.output, manager.values)
@@ -279,4 +285,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as exc:
+        if '--interactive' in sys.argv:
+            print(str(exc), file=sys.stderr)
+            input('Press Enter to close...')
+        raise

@@ -155,6 +155,12 @@ def install(args):
         script = ('@echo off\r\n"%~dp0..\\releases\\'+state['version']+'\\python\\python.exe" -I -B '
                   '"%~dp0..\\releases\\'+state['version']+'\\manager.py" --dir "%~dp0.." %*\r\n')
         (root/'bin/semanticctl.cmd').write_text(script,encoding='utf-8',newline='')
+        if not args.no_desktop_shortcut:
+            powershell = Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.check_output([str(powershell), '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                '-File', str(release/'desktop.ps1'), '-Root', str(root), '-Version', state['version']])
+            state.update(json.loads(result.decode('utf-8-sig')))
+            shared.write_json(root/'install.json', state)
         manager.reload()
         if not args.no_start:
             manager.start()
@@ -172,6 +178,7 @@ def main():
     parser.add_argument('--export-config', type=Path)
     parser.add_argument('--yes', action='store_true')
     parser.add_argument('--no-start', action='store_true')
+    parser.add_argument('--no-desktop-shortcut', action='store_true')
     args = parser.parse_args()
     if args.export_config:
         export_components(args.export_config, component_values())

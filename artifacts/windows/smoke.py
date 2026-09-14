@@ -57,6 +57,9 @@ def main():
     subprocess.run(command,env=env,check=True)
     subprocess.run(command,env=env,check=True)
     report['offline_install_and_retry']=True
+    native_shortcuts = shared.load(root/'install.json')['native_shortcuts']
+    assert len(native_shortcuts) == 4 and all(Path(p).is_file() for p in native_shortcuts)
+    report['native_application_entries']=True
     manager=Manager(root)
     python=manager.release/'python/python.exe'
     def verify_shared_python(minimum):

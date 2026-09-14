@@ -96,6 +96,21 @@ public static class SemanticCleanupParent {
     # Validate the whole selected tree before the first deletion.
     foreach ($target in $targets) { CheckTree $target }
     [Console]::WriteLine('Cleanup targets validated')
+    # Remove only unchanged shortcuts belonging to this exact installation.
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $id = ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($Root.TrimEnd('\'))))).Replace('-', '').ToLower().Substring(0,12)
+    if ($state.PSObject.Properties['native_shortcuts']) {
+        foreach ($record in $state.native_shortcuts.PSObject.Properties) {
+            $path = $record.Name
+            $parent = [IO.Path]::GetDirectoryName($path)
+            $name = [IO.Path]::GetFileName($path)
+            if ($parent -notin @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('DesktopDirectory')) -or $name -notin @("Semantic ($id).lnk", "Uninstall Semantic ($id).lnk")) { continue }
+            Plain $path
+            if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -eq $record.Value) { [IO.File]::Delete($path) }
+        }
+    }
+    $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Semantic-$id"
+    if ((Test-Path $key) -and (Get-ItemProperty $key).InstallLocation -eq $Root) { Remove-Item $key -Recurse }
     foreach ($target in $targets) { RemoveTree $target }
     if (!$Purge) {
         $state.ready = $false

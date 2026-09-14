@@ -1407,7 +1407,7 @@ def main():
     component_options(p)
     p = commands.add_parser('control')
     p.add_argument('--root', type=Path, required=True)
-    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
+    p.add_argument('action', choices=['open', 'start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])
     p.add_argument('--output', default='-')
     p.add_argument('--no-start', action='store_true')
     p.set_defaults(desktop='auto')
@@ -1432,8 +1432,12 @@ def main():
         configure_existing(a)
     elif a.action == 'welcome':
         welcome(a.root, load(a.root/'install.json'), all(alive(r) for r in services(a.root).values()) and len(services(a.root)) == 2)
-    elif a.action == 'start':
+    elif a.action in ('start', 'open'):
         start(a.root)
+        if a.action == 'open':
+            state = load(a.root/'install.json')
+            subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open',
+                            f"http://{web_probe(state.get('web_host', '127.0.0.1'))}:{state['web_port']}"], check=True)
     elif a.action == 'stop':
         # Only these services; do not force-kill any Robot instance or unrelated user process.
         stop_owned(a.root)
@@ -1493,6 +1497,9 @@ import hashlib
 import ipaddress
 import json
 import os
+import plistlib
+import shlex
+import tempfile
 from pathlib import Path
 import shutil
 import socket
@@ -1741,11 +1748,83 @@ def desktop_escape(value):
     return str(value).replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
 
 
+def app_tree(path):
+    """Fingerprint only ordinary, single-link, user-owned bundle files."""
+    result = {}
+    for item in [path, *path.rglob('*')]:
+        if item.is_symlink() or item.stat().st_uid != os.geteuid():
+            raise ValueError('Unsafe application bundle: '+str(item))
+        if item.is_file():
+            if item.stat().st_nlink != 1:
+                raise ValueError('Hard-linked application file: '+str(item))
+            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()
+        elif not item.is_dir():
+            raise ValueError('Unexpected application file: '+str(item))
+    return result
+
+
+def macos_shortcuts(root, state):
+    applications = Path.home().resolve()/'Applications'
+    if any(p.is_symlink() for p in [applications, *applications.parents]):
+        return 'Application entries skipped: Applications contains a symbolic link'
+    applications.mkdir(exist_ok=True)
+    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    records = state.setdefault('application_bundles', {})
+    created = []
+    for action, title in [('open', 'Semantic'), ('uninstall', 'Uninstall Semantic')]:
+        target = applications/f'{title} ({identity}).app'
+        if target.exists() or target.is_symlink():
+            try:
+                if not target.is_dir() or app_tree(target) != records.get(str(target)):
+                    continue
+            except (OSError, ValueError):
+                continue
+        command = shlex.join([str(root/'bin/semanticctl'), action] + (['--yes'] if action == 'uninstall' else []))
+        # Use a neutral working directory so local cleanup can remove the install.
+        command = 'cd /tmp && '+command
+        script = 'on run\n'
+        if action == 'uninstall':
+            script += 'display dialog "Remove Semantic programs? Configuration, data and logs will be kept. Release active simulation scenes first." buttons {"Cancel", "Uninstall"} default button "Cancel" with icon caution\n'
+        script += 'try\ndo shell script '+json.dumps(command, ensure_ascii=False)+'\n'
+        if action == 'uninstall':
+            script += 'display dialog "Semantic has been uninstalled. Your configuration and data were preserved." buttons {"OK"}\n'
+        script += 'on error messageText number errorNumber\nif errorNumber is not -128 then display dialog messageText buttons {"OK"} with icon stop\nend try\nend run\n'
+        with tempfile.TemporaryDirectory(prefix='.semantic-app-', dir=applications) as temporary:
+            temporary = Path(temporary)
+            app = temporary/target.name
+            subprocess.run(['/usr/bin/osacompile', '-o', str(app), '-'], input=script, text=True, check=True, capture_output=True)
+            resources = app/'Contents/Resources'
+            iconset = temporary/'Semantic.iconset'; iconset.mkdir()
+            source = root/'bin/semantic-manager/assets/ios.png'
+            for size in (16, 32, 128, 256, 512):
+                for scale in (1, 2):
+                    output = iconset/f'icon_{size}x{size}{"@2x" if scale == 2 else ""}.png'
+                    subprocess.run(['/usr/bin/sips', '-Z', str(size*scale), str(source), '--out', str(output)], check=True, capture_output=True)
+                    subprocess.run(['/usr/bin/sips', '-p', str(size*scale), str(size*scale), str(output)], check=True, capture_output=True)
+            subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'Semantic.icns')], check=True, capture_output=True)
+            info_path = app/'Contents/Info.plist'
+            info = plistlib.loads(info_path.read_bytes())
+            info.update(CFBundleName=title, CFBundleDisplayName=title, CFBundleIdentifier=f'cn.insightos.semantic.{identity}.{action}',
+                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'],
+                        LSApplicationCategoryType='public.app-category.developer-tools')
+            info_path.write_bytes(plistlib.dumps(info))
+            subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)
+            fingerprint = app_tree(app)
+            if target.exists():
+                shutil.rmtree(target)
+            app.rename(target)
+            records[str(target)] = fingerprint
+        register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+        subprocess.run([register, '-f', str(target)], check=False, capture_output=True)
+        created.append(str(target))
+    return 'Application entries: '+', '.join(created)
+
+
 def desktop_shortcuts(root, state, mode='auto'):
-    if sys.platform == 'darwin':
-        return 'macOS: use bin/semanticctl to manage services and open the URL above (desktop shortcut skipped)'
     if mode == 'never':
         return 'Desktop shortcuts skipped'
+    if sys.platform == 'darwin':
+        return macos_shortcuts(root, state)
     home = Path.home().resolve()
     desktop = None
     if shutil.which('xdg-user-dir'):
@@ -1768,11 +1847,12 @@ def desktop_shortcuts(root, state, mode='auto'):
         targets.append(desktop)
     identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
     filename = f'semantic-{identity}.desktop'
-    url = f"http://{web_probe(state.get('web_host', '127.0.0.1'))}:{state['web_port']}"
+    executable = str(root/'bin/semanticctl').replace('%', '%%')
+    executable = '"'+''.join('\\'+c if c in '"`$\\' else c for c in executable)+'"'
     icon = root/'bin/semantic-manager/assets/ios.png'
     text = ('[Desktop Entry]\nType=Application\nVersion=1.0\nName=Semantic\n'
-            'Comment=Open Semantic Web\nExec=xdg-open '+url+'\nTryExec=xdg-open\n'
-            'Icon='+desktop_escape(icon)+'\nTerminal=false\nCategories=Development;\n'
+            'Comment=Start Semantic and open its Web interface\nExec='+desktop_escape(executable)+' open\n'
+            'Icon='+desktop_escape(icon)+'\nTerminal=true\nCategories=Development;\n'
             'StartupNotify=false\nX-Semantic-Root='+desktop_escape(root)+'\n')
     records = state.setdefault('desktop_shortcuts', {})
     created = []
@@ -1789,6 +1869,11 @@ def desktop_shortcuts(root, state, mode='auto'):
         path.chmod(0o755 if directory == desktop else 0o644)
         records[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
         created.append(str(path))
+        uninstall_path = directory/f'semantic-{identity}-uninstall.desktop'
+        if not uninstall_path.is_symlink() and (not uninstall_path.exists() or (uninstall_path.stat().st_uid == os.geteuid() and uninstall_path.stat().st_nlink == 1 and hashlib.sha256(uninstall_path.read_bytes()).hexdigest() == records.get(str(uninstall_path)))):
+            uninstall_path.write_text(text.replace('Name=Semantic\n', 'Name=Uninstall Semantic\n').replace(' open\n', ' uninstall\n'), encoding='utf-8')
+            uninstall_path.chmod(0o755 if directory == desktop else 0o644)
+            records[str(uninstall_path)] = hashlib.sha256(uninstall_path.read_bytes()).hexdigest()
         if directory == desktop and shutil.which('gio') and (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
             try:
                 subprocess.run(['gio', 'set', str(path), 'metadata::trusted', 'true'], timeout=3,
@@ -1952,6 +2037,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import sys
 import tempfile
 import time
 import traceback
@@ -2106,12 +2192,27 @@ def uninstall_confirm(root, purge, yes):
         raise RuntimeError('Uninstall cancelled by user')
 
 
+def app_tree(path):
+    """Fingerprint only ordinary, single-link, user-owned bundle files."""
+    result = {}
+    for item in [path, *path.rglob('*')]:
+        if item.is_symlink() or item.stat().st_uid != os.geteuid():
+            raise ValueError('Unsafe application bundle: '+str(item))
+        if item.is_file():
+            if item.stat().st_nlink != 1:
+                raise ValueError('Hard-linked application file: '+str(item))
+            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()
+        elif not item.is_dir():
+            raise ValueError('Unexpected application file: '+str(item))
+    return result
+
+
 def uninstall_shortcuts(root, state, note, dry_run=False):
     identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
     home = Path.home().resolve()
     for name, checksum in state.get('desktop_shortcuts', {}).items():
         path = Path(name)
-        if (not path.is_absolute() or home not in path.parents or path.name != f'semantic-{identity}.desktop'
+        if (not path.is_absolute() or home not in path.parents or path.name not in (f'semantic-{identity}.desktop', f'semantic-{identity}-uninstall.desktop')
                 or any(p.is_symlink() for p in [path, *path.parents]) or not path.is_file()):
             continue
         if path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
@@ -2120,6 +2221,25 @@ def uninstall_shortcuts(root, state, note, dry_run=False):
         note(('would remove ' if dry_run else 'removed ') + str(path))
         if not dry_run:
             path.unlink()
+
+    for name, fingerprint in state.get('application_bundles', {}).items():
+        path = Path(name)
+        if path.parent != home/'Applications' or path.name not in (f'Semantic ({identity}).app', f'Uninstall Semantic ({identity}).app'):
+            continue
+        if any(p.is_symlink() for p in [path, *path.parents]) or not path.is_dir():
+            continue
+        try:
+            if app_tree(path) != fingerprint:
+                note('preserved modified application '+str(path))
+                continue
+        except (OSError, ValueError):
+            continue
+        note(('would remove ' if dry_run else 'removed ')+str(path))
+        if not dry_run:
+            if sys.platform == 'darwin':
+                register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+                subprocess.run([register, '-u', str(path)], check=False, capture_output=True)
+            shutil.rmtree(path)
 
 
 def uninstall_entry(argv):
@@ -2408,6 +2528,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import sys
 import tempfile
 import time
 import traceback
@@ -2562,12 +2683,27 @@ def uninstall_confirm(root, purge, yes):
         raise RuntimeError('Uninstall cancelled by user')
 
 
+def app_tree(path):
+    """Fingerprint only ordinary, single-link, user-owned bundle files."""
+    result = {}
+    for item in [path, *path.rglob('*')]:
+        if item.is_symlink() or item.stat().st_uid != os.geteuid():
+            raise ValueError('Unsafe application bundle: '+str(item))
+        if item.is_file():
+            if item.stat().st_nlink != 1:
+                raise ValueError('Hard-linked application file: '+str(item))
+            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()
+        elif not item.is_dir():
+            raise ValueError('Unexpected application file: '+str(item))
+    return result
+
+
 def uninstall_shortcuts(root, state, note, dry_run=False):
     identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
     home = Path.home().resolve()
     for name, checksum in state.get('desktop_shortcuts', {}).items():
         path = Path(name)
-        if (not path.is_absolute() or home not in path.parents or path.name != f'semantic-{identity}.desktop'
+        if (not path.is_absolute() or home not in path.parents or path.name not in (f'semantic-{identity}.desktop', f'semantic-{identity}-uninstall.desktop')
                 or any(p.is_symlink() for p in [path, *path.parents]) or not path.is_file()):
             continue
         if path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
@@ -2576,6 +2712,25 @@ def uninstall_shortcuts(root, state, note, dry_run=False):
         note(('would remove ' if dry_run else 'removed ') + str(path))
         if not dry_run:
             path.unlink()
+
+    for name, fingerprint in state.get('application_bundles', {}).items():
+        path = Path(name)
+        if path.parent != home/'Applications' or path.name not in (f'Semantic ({identity}).app', f'Uninstall Semantic ({identity}).app'):
+            continue
+        if any(p.is_symlink() for p in [path, *path.parents]) or not path.is_dir():
+            continue
+        try:
+            if app_tree(path) != fingerprint:
+                note('preserved modified application '+str(path))
+                continue
+        except (OSError, ValueError):
+            continue
+        note(('would remove ' if dry_run else 'removed ')+str(path))
+        if not dry_run:
+            if sys.platform == 'darwin':
+                register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+                subprocess.run([register, '-u', str(path)], check=False, capture_output=True)
+            shutil.rmtree(path)
 
 
 def uninstall_entry(argv):
@@ -4191,7 +4346,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    component_options(p)\n'
             "    p = commands.add_parser('control')\n"
             "    p.add_argument('--root', type=Path, required=True)\n"
-            "    p.add_argument('action', choices=['start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])\n"
+            "    p.add_argument('action', choices=['open', 'start', 'stop', 'status', 'doctor', 'logs', 'welcome', 'uninstall', 'export-config', 'reconfigure'])\n"
             "    p.add_argument('--output', default='-')\n"
             "    p.add_argument('--no-start', action='store_true')\n"
             "    p.set_defaults(desktop='auto')\n"
@@ -4216,8 +4371,12 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        configure_existing(a)\n'
             "    elif a.action == 'welcome':\n"
             "        welcome(a.root, load(a.root/'install.json'), all(alive(r) for r in services(a.root).values()) and len(services(a.root)) == 2)\n"
-            "    elif a.action == 'start':\n"
+            "    elif a.action in ('start', 'open'):\n"
             '        start(a.root)\n'
+            "        if a.action == 'open':\n"
+            "            state = load(a.root/'install.json')\n"
+            "            subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open',\n"
+            '                            f"http://{web_probe(state.get(\'web_host\', \'127.0.0.1\'))}:{state[\'web_port\']}"], check=True)\n'
             "    elif a.action == 'stop':\n"
             '        # Only these services; do not force-kill any Robot instance or unrelated user process.\n'
             '        stop_owned(a.root)\n'
@@ -4277,6 +4436,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             'import ipaddress\n'
             'import json\n'
             'import os\n'
+            'import plistlib\n'
+            'import shlex\n'
+            'import tempfile\n'
             'from pathlib import Path\n'
             'import shutil\n'
             'import socket\n'
@@ -4525,11 +4687,83 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    return str(value).replace('\\\\', '\\\\\\\\').replace('\\n', '\\\\n').replace('\\r', '\\\\r').replace('\\t', '\\\\t')\n"
             '\n'
             '\n'
+            'def app_tree(path):\n'
+            '    """Fingerprint only ordinary, single-link, user-owned bundle files."""\n'
+            '    result = {}\n'
+            "    for item in [path, *path.rglob('*')]:\n"
+            '        if item.is_symlink() or item.stat().st_uid != os.geteuid():\n'
+            "            raise ValueError('Unsafe application bundle: '+str(item))\n"
+            '        if item.is_file():\n'
+            '            if item.stat().st_nlink != 1:\n'
+            "                raise ValueError('Hard-linked application file: '+str(item))\n"
+            '            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()\n'
+            '        elif not item.is_dir():\n'
+            "            raise ValueError('Unexpected application file: '+str(item))\n"
+            '    return result\n'
+            '\n'
+            '\n'
+            'def macos_shortcuts(root, state):\n'
+            "    applications = Path.home().resolve()/'Applications'\n"
+            '    if any(p.is_symlink() for p in [applications, *applications.parents]):\n'
+            "        return 'Application entries skipped: Applications contains a symbolic link'\n"
+            '    applications.mkdir(exist_ok=True)\n'
+            '    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]\n'
+            "    records = state.setdefault('application_bundles', {})\n"
+            '    created = []\n'
+            "    for action, title in [('open', 'Semantic'), ('uninstall', 'Uninstall Semantic')]:\n"
+            "        target = applications/f'{title} ({identity}).app'\n"
+            '        if target.exists() or target.is_symlink():\n'
+            '            try:\n'
+            '                if not target.is_dir() or app_tree(target) != records.get(str(target)):\n'
+            '                    continue\n'
+            '            except (OSError, ValueError):\n'
+            '                continue\n'
+            "        command = shlex.join([str(root/'bin/semanticctl'), action] + (['--yes'] if action == 'uninstall' else []))\n"
+            '        # Use a neutral working directory so local cleanup can remove the install.\n'
+            "        command = 'cd /tmp && '+command\n"
+            "        script = 'on run\\n'\n"
+            "        if action == 'uninstall':\n"
+            '            script += \'display dialog "Remove Semantic programs? Configuration, data and logs will be kept. Release active simulation scenes first." buttons {"Cancel", "Uninstall"} default button "Cancel" with icon caution\\n\'\n'
+            "        script += 'try\\ndo shell script '+json.dumps(command, ensure_ascii=False)+'\\n'\n"
+            "        if action == 'uninstall':\n"
+            '            script += \'display dialog "Semantic has been uninstalled. Your configuration and data were preserved." buttons {"OK"}\\n\'\n'
+            '        script += \'on error messageText number errorNumber\\nif errorNumber is not -128 then display dialog messageText buttons {"OK"} with icon stop\\nend try\\nend run\\n\'\n'
+            "        with tempfile.TemporaryDirectory(prefix='.semantic-app-', dir=applications) as temporary:\n"
+            '            temporary = Path(temporary)\n'
+            '            app = temporary/target.name\n'
+            "            subprocess.run(['/usr/bin/osacompile', '-o', str(app), '-'], input=script, text=True, check=True, capture_output=True)\n"
+            "            resources = app/'Contents/Resources'\n"
+            "            iconset = temporary/'Semantic.iconset'; iconset.mkdir()\n"
+            "            source = root/'bin/semantic-manager/assets/ios.png'\n"
+            '            for size in (16, 32, 128, 256, 512):\n'
+            '                for scale in (1, 2):\n'
+            '                    output = iconset/f\'icon_{size}x{size}{"@2x" if scale == 2 else ""}.png\'\n'
+            "                    subprocess.run(['/usr/bin/sips', '-Z', str(size*scale), str(source), '--out', str(output)], check=True, capture_output=True)\n"
+            "                    subprocess.run(['/usr/bin/sips', '-p', str(size*scale), str(size*scale), str(output)], check=True, capture_output=True)\n"
+            "            subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'Semantic.icns')], check=True, capture_output=True)\n"
+            "            info_path = app/'Contents/Info.plist'\n"
+            '            info = plistlib.loads(info_path.read_bytes())\n'
+            "            info.update(CFBundleName=title, CFBundleDisplayName=title, CFBundleIdentifier=f'cn.insightos.semantic.{identity}.{action}',\n"
+            "                        CFBundleIconFile='Semantic.icns', CFBundleShortVersionString=state['version'],\n"
+            "                        LSApplicationCategoryType='public.app-category.developer-tools')\n"
+            '            info_path.write_bytes(plistlib.dumps(info))\n'
+            "            subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)\n"
+            '            fingerprint = app_tree(app)\n'
+            '            if target.exists():\n'
+            '                shutil.rmtree(target)\n'
+            '            app.rename(target)\n'
+            '            records[str(target)] = fingerprint\n'
+            "        register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'\n"
+            "        subprocess.run([register, '-f', str(target)], check=False, capture_output=True)\n"
+            '        created.append(str(target))\n'
+            "    return 'Application entries: '+', '.join(created)\n"
+            '\n'
+            '\n'
             "def desktop_shortcuts(root, state, mode='auto'):\n"
-            "    if sys.platform == 'darwin':\n"
-            "        return 'macOS: use bin/semanticctl to manage services and open the URL above (desktop shortcut skipped)'\n"
             "    if mode == 'never':\n"
             "        return 'Desktop shortcuts skipped'\n"
+            "    if sys.platform == 'darwin':\n"
+            '        return macos_shortcuts(root, state)\n'
             '    home = Path.home().resolve()\n'
             '    desktop = None\n'
             "    if shutil.which('xdg-user-dir'):\n"
@@ -4552,11 +4786,12 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        targets.append(desktop)\n'
             '    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]\n'
             "    filename = f'semantic-{identity}.desktop'\n"
-            '    url = f"http://{web_probe(state.get(\'web_host\', \'127.0.0.1\'))}:{state[\'web_port\']}"\n'
+            "    executable = str(root/'bin/semanticctl').replace('%', '%%')\n"
+            '    executable = \'"\'+\'\'.join(\'\\\\\'+c if c in \'"`$\\\\\' else c for c in executable)+\'"\'\n'
             "    icon = root/'bin/semantic-manager/assets/ios.png'\n"
             "    text = ('[Desktop Entry]\\nType=Application\\nVersion=1.0\\nName=Semantic\\n'\n"
-            "            'Comment=Open Semantic Web\\nExec=xdg-open '+url+'\\nTryExec=xdg-open\\n'\n"
-            "            'Icon='+desktop_escape(icon)+'\\nTerminal=false\\nCategories=Development;\\n'\n"
+            "            'Comment=Start Semantic and open its Web interface\\nExec='+desktop_escape(executable)+' open\\n'\n"
+            "            'Icon='+desktop_escape(icon)+'\\nTerminal=true\\nCategories=Development;\\n'\n"
             "            'StartupNotify=false\\nX-Semantic-Root='+desktop_escape(root)+'\\n')\n"
             "    records = state.setdefault('desktop_shortcuts', {})\n"
             '    created = []\n'
@@ -4573,6 +4808,11 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        path.chmod(0o755 if directory == desktop else 0o644)\n'
             '        records[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()\n'
             '        created.append(str(path))\n'
+            "        uninstall_path = directory/f'semantic-{identity}-uninstall.desktop'\n"
+            '        if not uninstall_path.is_symlink() and (not uninstall_path.exists() or (uninstall_path.stat().st_uid == os.geteuid() and uninstall_path.stat().st_nlink == 1 and hashlib.sha256(uninstall_path.read_bytes()).hexdigest() == records.get(str(uninstall_path)))):\n'
+            "            uninstall_path.write_text(text.replace('Name=Semantic\\n', 'Name=Uninstall Semantic\\n').replace(' open\\n', ' uninstall\\n'), encoding='utf-8')\n"
+            '            uninstall_path.chmod(0o755 if directory == desktop else 0o644)\n'
+            '            records[str(uninstall_path)] = hashlib.sha256(uninstall_path.read_bytes()).hexdigest()\n'
             "        if directory == desktop and shutil.which('gio') and (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):\n"
             '            try:\n'
             "                subprocess.run(['gio', 'set', str(path), 'metadata::trusted', 'true'], timeout=3,\n"
@@ -4736,6 +4976,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             'from pathlib import Path\n'
             'import shutil\n'
             'import signal\n'
+            'import sys\n'
             'import tempfile\n'
             'import time\n'
             'import traceback\n'
@@ -4890,12 +5131,27 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        raise RuntimeError('Uninstall cancelled by user')\n"
             '\n'
             '\n'
+            'def app_tree(path):\n'
+            '    """Fingerprint only ordinary, single-link, user-owned bundle files."""\n'
+            '    result = {}\n'
+            "    for item in [path, *path.rglob('*')]:\n"
+            '        if item.is_symlink() or item.stat().st_uid != os.geteuid():\n'
+            "            raise ValueError('Unsafe application bundle: '+str(item))\n"
+            '        if item.is_file():\n'
+            '            if item.stat().st_nlink != 1:\n'
+            "                raise ValueError('Hard-linked application file: '+str(item))\n"
+            '            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()\n'
+            '        elif not item.is_dir():\n'
+            "            raise ValueError('Unexpected application file: '+str(item))\n"
+            '    return result\n'
+            '\n'
+            '\n'
             'def uninstall_shortcuts(root, state, note, dry_run=False):\n'
             '    identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]\n'
             '    home = Path.home().resolve()\n'
             "    for name, checksum in state.get('desktop_shortcuts', {}).items():\n"
             '        path = Path(name)\n'
-            "        if (not path.is_absolute() or home not in path.parents or path.name != f'semantic-{identity}.desktop'\n"
+            "        if (not path.is_absolute() or home not in path.parents or path.name not in (f'semantic-{identity}.desktop', f'semantic-{identity}-uninstall.desktop')\n"
             '                or any(p.is_symlink() for p in [path, *path.parents]) or not path.is_file()):\n'
             '            continue\n'
             '        if path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or hashlib.sha256(path.read_bytes()).hexdigest() != checksum:\n'
@@ -4904,6 +5160,25 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        note(('would remove ' if dry_run else 'removed ') + str(path))\n"
             '        if not dry_run:\n'
             '            path.unlink()\n'
+            '\n'
+            "    for name, fingerprint in state.get('application_bundles', {}).items():\n"
+            '        path = Path(name)\n'
+            "        if path.parent != home/'Applications' or path.name not in (f'Semantic ({identity}).app', f'Uninstall Semantic ({identity}).app'):\n"
+            '            continue\n'
+            '        if any(p.is_symlink() for p in [path, *path.parents]) or not path.is_dir():\n'
+            '            continue\n'
+            '        try:\n'
+            '            if app_tree(path) != fingerprint:\n'
+            "                note('preserved modified application '+str(path))\n"
+            '                continue\n'
+            '        except (OSError, ValueError):\n'
+            '            continue\n'
+            "        note(('would remove ' if dry_run else 'removed ')+str(path))\n"
+            '        if not dry_run:\n'
+            "            if sys.platform == 'darwin':\n"
+            "                register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'\n"
+            "                subprocess.run([register, '-u', str(path)], check=False, capture_output=True)\n"
+            '            shutil.rmtree(path)\n'
             '\n'
             '\n'
             'def uninstall_entry(argv):\n'

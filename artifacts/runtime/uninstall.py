@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import sys
 import tempfile
 import time
 import traceback
@@ -179,12 +180,27 @@ def uninstall_confirm(root, purge, yes):
         raise RuntimeError('用户取消卸载')
 
 
+def app_tree(path):
+    """Fingerprint only ordinary, single-link, user-owned bundle files."""
+    result = {}
+    for item in [path, *path.rglob('*')]:
+        if item.is_symlink() or item.stat().st_uid != os.geteuid():
+            raise ValueError('Unsafe application bundle: '+str(item))
+        if item.is_file():
+            if item.stat().st_nlink != 1:
+                raise ValueError('Hard-linked application file: '+str(item))
+            result[item.relative_to(path).as_posix()] = hashlib.sha256(item.read_bytes()).hexdigest()
+        elif not item.is_dir():
+            raise ValueError('Unexpected application file: '+str(item))
+    return result
+
+
 def uninstall_shortcuts(root, state, note, dry_run=False):
     identity = hashlib.sha256(str(root).encode()).hexdigest()[:12]
     home = Path.home().resolve()
     for name, checksum in state.get('desktop_shortcuts', {}).items():
         path = Path(name)
-        if (not path.is_absolute() or home not in path.parents or path.name != f'semantic-{identity}.desktop'
+        if (not path.is_absolute() or home not in path.parents or path.name not in (f'semantic-{identity}.desktop', f'semantic-{identity}-uninstall.desktop')
                 or any(p.is_symlink() for p in [path, *path.parents]) or not path.is_file()):
             continue
         if path.stat().st_uid != os.geteuid() or path.stat().st_nlink != 1 or hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
@@ -193,6 +209,25 @@ def uninstall_shortcuts(root, state, note, dry_run=False):
         note(('would remove ' if dry_run else 'removed ') + str(path))
         if not dry_run:
             path.unlink()
+
+    for name, fingerprint in state.get('application_bundles', {}).items():
+        path = Path(name)
+        if path.parent != home/'Applications' or path.name not in (f'Semantic ({identity}).app', f'Uninstall Semantic ({identity}).app'):
+            continue
+        if any(p.is_symlink() for p in [path, *path.parents]) or not path.is_dir():
+            continue
+        try:
+            if app_tree(path) != fingerprint:
+                note('preserved modified application '+str(path))
+                continue
+        except (OSError, ValueError):
+            continue
+        note(('would remove ' if dry_run else 'removed ')+str(path))
+        if not dry_run:
+            if sys.platform == 'darwin':
+                register = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+                subprocess.run([register, '-u', str(path)], check=False, capture_output=True)
+            shutil.rmtree(path)
 
 
 def uninstall_entry(argv):
