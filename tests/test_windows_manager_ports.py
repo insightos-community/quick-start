@@ -86,6 +86,18 @@ class WindowsManagerContracts(unittest.TestCase):
             (root/'releases/0.1.0-test.1/bin/program.exe').write_bytes(b'test-owned payload')
             (root/'data/user.txt').write_text('keep my data', encoding='utf-8')
             (root/'configs/user.yaml').write_text('keep: true', encoding='utf-8')
+            # Cleanup must stay bounded for populated Skill environments and use
+            # native long paths even when the host's Python can create them.
+            tree = root/'releases/0.1.0-test.1/many-files'
+            tree.mkdir()
+            for index in range(1500):
+                (tree/f'module-{index}.py').write_bytes(b'# installed dependency\n')
+            deep = tree/('long-directory-'*10)/('nested-module-'*10)/'owned.py'
+            self.assertGreater(len(str(deep)), 260)
+            native_deep = Path('\\\\?\\'+str(deep))
+            native_deep.parent.mkdir(parents=True)
+            native_deep.write_bytes(b'# long path\n')
+
             (root/'install.json').write_text(json.dumps(dict(component_values(), version='0.1.0-test.1',
                 platform='windows-amd64', ready=True)), encoding='utf-8')
             (root/'bin').mkdir(exist_ok=True)
