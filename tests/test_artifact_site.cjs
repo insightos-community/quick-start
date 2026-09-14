@@ -97,6 +97,42 @@ const { createHash } = require('node:crypto');
       for (const text of await page.locator('[data-install-command]').allTextContents()) {
         assert.match(text, /https:\/\/semantic.insightos.cn\/install-en.sh/);
       }
+      // Port reference and YAML examples follow every platform and language.
+      assert.equal(await page.locator('#ports tbody tr').count(), 5);
+      for (const port of ['3000', '8034', '8035', '8036', '18100–18199']) {
+        assert.ok((await page.locator('#ports table').textContent()).includes(port));
+      }
+      for (const lang of ['zh', 'en']) {
+        await page.locator(`[data-language="${lang}"]`).click();
+        for (const platform of ['glibc', 'musl', 'macos']) {
+          await page.locator(`[data-platform="${platform}"]`).click();
+          const dir = platform === 'glibc' ? '$HOME/.local/share/semantic' : `$HOME/semantic-${platform}`;
+          const script = lang === 'zh' ? '/install.sh' : '/install-en.sh';
+          for (const action of ['export', 'install', 'reconfigure']) {
+            const selector = `#config-${action}-command`;
+            const command = await page.locator(selector).textContent();
+            assert.ok(command.includes(script));
+            assert.ok(command.includes(`--dir "${dir}"`));
+            assert.ok(command.includes(action === 'export' ? '--export-config components.yaml' : '-f components.yaml'));
+            if (action === 'install') {
+              assert.ok(command.includes(lang === 'zh' ? '--source oss' : '--source github'));
+              if (platform !== 'glibc') assert.ok(command.includes(`--tag ${platform}-v`));
+            }
+            if (action === 'reconfigure') assert.ok(command.includes('bash -s -- reconfigure'));
+            await page.locator(`[data-copy-target="config-${action}-command"]`).click();
+            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command);
+          }
+          assert.ok((await page.locator('#config-yaml').textContent()).includes(`web_host: ${platform === 'macos' ? '127.0.0.1' : '0.0.0.0'}`));
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `port guide overflow at ${width}px / ${lang} / ${platform}`);
+        }
+      }
+      await page.locator('#install-tag').fill('$(touch bad)');
+      assert.equal(await page.locator('#config-install-command').textContent(), '');
+      assert.ok(await page.locator('[data-copy-target="config-install-command"]').isDisabled());
+      assert.ok(await page.locator('#config-tag-error').isVisible());
+      await page.locator('#install-tag').fill('macos-v0.1.0-rc.1');
+      assert.match(await page.locator('#config-install-command').textContent(), /--tag macos-v0.1.0-rc.1/);
+      await page.locator('[data-platform="glibc"]').click();
       await page.locator('#copy-command-en').click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.locator('#install-command-en').textContent());
       assert.match(await page.locator('#install-command-en').textContent(), /\/install-en\.sh/);

@@ -118,10 +118,43 @@ limitations under the License.
       <div class="guide-grid">
         <article class="step"><span class="step-num">1</span><div><h3 data-i18n="stepInstallTitle">选择目录，安装环境</h3><p data-i18n="stepInstall">上方命令使用交互式确认。自动安装可增加 <code>--yes</code>；自定义目录使用绝对路径。</p><pre><code data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
   --yes --install-system-deps --dir "$HOME/semantic"</code></pre><p class="muted" data-i18n="stepPackages">Linux 依赖安装支持 apt-get、dnf/yum、pacman、zypper 和 APK，沿用已有源；macOS 随包提供依赖，无需包管理器。</p></div></article>
-        <article class="step"><span class="step-num">2</span><div><h3 data-i18n="stepWebTitle">打开你的控制台</h3><p data-i18n="stepWeb">安装后访问 <code>http://127.0.0.1:3000</code>，用户名 <code>admin</code>。随机密码显示在交互终端，并保存在实例目录的 <code>configs/secrets.json</code>，不会写入安装日志。</p><p class="muted" data-i18n="stepNetwork">Linux 默认 Web 监听 <code>0.0.0.0:3000</code>，macOS 默认仅监听 <code>127.0.0.1:3000</code>。使用 <code>--web-host</code> / <code>--web-port</code> 自定义。API/WS 保持仅本机；新安装 HTTP / WS / Runtime 端口为 <code>8034 / 8035 / 8036</code>，Web 保持 <code>3000</code>。使用 <code>--export-config 文件.yaml</code> 导出配置，<code>-f 文件.yaml</code> 安装，安装后用 <code>semanticctl reconfigure -f 文件.yaml</code> 修改。仅向可信网络开放 Web。</p></div></article>
+        <article class="step"><span class="step-num">2</span><div><h3 data-i18n="stepWebTitle">打开你的控制台</h3><p data-i18n="stepWeb">安装后访问 <code>http://127.0.0.1:3000</code>，用户名 <code>admin</code>。随机密码显示在交互终端，并保存在实例目录的 <code>configs/secrets.json</code>，不会写入安装日志。</p><p class="muted" data-i18n="stepNetwork">Web 默认端口为 <code>3000</code>，API / WS 仅供本机通信。需要避开端口占用或开启局域网访问时，请查看下方<a href="#ports">端口表与配置指南 ↓</a>。</p></div></article>
         <article class="step"><span class="step-num">3</span><div><h3 data-i18n="stepManageTitle">检查服务，配置任务</h3><pre><code>~/.local/share/semantic/bin/semanticctl status
 ~/.local/share/semantic/bin/semanticctl doctor
 ~/.local/share/semantic/bin/semanticctl logs</code></pre><p class="muted" data-i18n="stepManage">自定义安装目录时请替换上述路径。默认模型配置为 mock，真实模型需另行配置；不会自动创建业务任务或启动真实机器人。</p></div></article>
+      </div>
+    </section>
+    <section class="section wrap port-guide" id="ports" aria-labelledby="ports-title">
+      <div class="section-heading"><div><span class="eyebrow">PORTS &amp; CONFIGURATION</span><h2 id="ports-title" data-i18n="portsTitle">端口与组件配置。</h2></div><p data-i18n="portsIntro">安装前检查端口占用，使用一份 YAML 统一配置。<br>修改端口后，组件连接与发现地址一起更新。</p></div>
+      <div class="port-table-wrap" tabindex="0" role="region" aria-label="组件端口表，可横向滚动" data-i18n-label="portTableLabel">
+        <table class="port-table">
+          <caption data-i18n="portsCaption">新安装的默认 TCP 端口；已有实例保留原配置，请导出查看实际值。</caption>
+          <thead><tr><th scope="col" data-i18n="portComponent">组件 / 用途</th><th scope="col" data-i18n="portDefault">默认端口</th><th scope="col" data-i18n="portBinding">监听范围</th><th scope="col" data-i18n="portKey">YAML 配置项</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Semantic Web<small data-i18n="portWeb">浏览器控制台入口</small></th><td><code>3000</code></td><td data-i18n="portWebBinding">Linux：<code>0.0.0.0</code><br>macOS：<code>127.0.0.1</code></td><td><code>web_port</code><br><code>web_host</code></td></tr>
+            <tr><th scope="row">Server HTTP API<small data-i18n="portHttp">应用与任务接口</small></th><td><code>8034</code></td><td><code>127.0.0.1</code></td><td><code>http_port</code></td></tr>
+            <tr><th scope="row">Server WebSocket<small data-i18n="portWs">实时状态与事件</small></th><td><code>8035</code></td><td><code>127.0.0.1</code></td><td><code>ws_port</code></td></tr>
+            <tr><th scope="row">Native MuJoCo Runtime<small data-i18n="portRuntime">仿真运行时，启动时监听</small></th><td><code>8036</code></td><td><code>127.0.0.1</code></td><td><code>runtime_port</code></td></tr>
+            <tr><th scope="row">AbilityFramework<small data-i18n="portAbility">按 Robot 实例分配</small></th><td><code>18100–18199</code></td><td><code>127.0.0.1</code></td><td><code>ability_port_first</code><br><code>ability_port_last</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" data-i18n="portsScope">Ability 范围用于按需分配，不会同时占用全部 100 个端口。<code>127.0.0.1</code> 仅限本机，<code>0.0.0.0</code> 监听所有 IPv4 网卡；只向可信网络开放 Web，无需向局域网开放 API、WS 或 Runtime。</p>
+      <p class="muted" data-i18n="portsConflict">安装前会检查端口占用，不会终止其他程序。若端口已被占用，请修改配置后重试；已校验的安装包会从缓存复用。四个服务端口须互不相同，取值 1024–65535，且不能落入 Ability 分配范围。</p>
+      <div class="config-heading"><h3 data-i18n="configTitle">用 YAML 安装与重新配置</h3><a href="#install" data-i18n="configPlatformLink">选择平台与版本 ↑</a></div>
+      <p data-i18n="configIntro">下方命令跟随上方平台、标签与页面语言切换。请在同一终端目录执行，并将 <code>--dir</code> 替换为实际实例目录；为已有实例重新配置时，必须使用它原来的目录。</p>
+      <div class="guide-grid">
+        <article class="step"><span class="step-num">1</span><div><h3 data-i18n="configExportTitle">导出配置</h3><p data-i18n="configExport">新目录导出默认值，已有实例导出当前值。这里只下载小型入口脚本，不会下载完整安装包。导出不会覆盖同名文件；再次导出时请换一个文件名。</p><div class="config-command"><button type="button" data-copy-target="config-export-command" data-i18n="configCopy">复制</button><pre><code id="config-export-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --dir "$HOME/.local/share/semantic" --export-config components.yaml</code></pre></div></div></article>
+        <article class="step"><span class="step-num">2</span><div><h3 data-i18n="configEditTitle">编辑需要修改的端口</h3><p data-i18n="configEdit">用文本编辑器打开 <code>components.yaml</code>。例如，把 <code>web_port: 3000</code> 改为 <code>web_port: 33000</code>，应用后访问 <code>http://127.0.0.1:33000</code>。下方是所选平台的新安装默认模板，已有实例请以导出值为准。</p><pre><code id="config-yaml">schema_version: 1
+http_port: 8034
+ws_port: 8035
+web_port: 3000
+runtime_port: 8036
+ability_port_first: 18100
+ability_port_last: 18199
+web_host: 0.0.0.0</code></pre><p class="muted" data-i18n="configRules">保留平面 <code>键: 值</code> 格式，支持注释，不支持嵌套、锚点、未知项或重复项。显式命令行参数优先于 YAML；未指定项保留已有值，新实例使用默认值。此配置不包含密码或令牌。</p></div></article>
+        <article class="step"><span class="step-num">3</span><div><h3 data-i18n="configInstallTitle">使用配置安装</h3><p data-i18n="configInstall">首次安装使用 <code>-f</code> 加载文件，可与平台、版本标签和下载源参数一起使用。系统依赖沿用机器现有的软件源。</p><div class="config-command"><button type="button" data-copy-target="config-install-command" data-i18n="configCopy">复制</button><pre><code id="config-install-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- --source oss --version stable --install-system-deps --dir "$HOME/.local/share/semantic" -f components.yaml</code></pre></div><p id="config-tag-error" class="muted" data-i18n="configTagError" hidden>请先在上方选择有效的平台与版本标签，再复制安装命令。</p></div></article>
+        <article class="step"><span class="step-num">4</span><div><h3 data-i18n="configReconfigureTitle">已安装？重新配置即可</h3><p data-i18n="configReconfigure">先停止场景与 Robot Runtime，导出当前配置并编辑，然后执行下方命令。不需要再次执行安装步骤，也无需下载完整安装包；业务版本、数据与凭据保留。旧版管理工具也可使用此入口。</p><div class="config-command"><button type="button" data-copy-target="config-reconfigure-command" data-i18n="configCopy">复制</button><pre><code id="config-reconfigure-command" data-install-command>curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- reconfigure --dir "$HOME/.local/share/semantic" -f components.yaml</code></pre></div><p class="muted" data-i18n="configSync">重新配置会先检查端口，备份配置，同步 Server、Web 代理、Robot / Pilot 连接与 MuJoCo 发现地址，再重启受影响的服务；启动失败时恢复原配置。应用后的配置位于实例的 <code>configs/components.yaml</code>，备份位于 <code>configs/reconfigure-backup-*</code>。</p><p class="muted" data-i18n="configAbilityLimit">如果已经生成 Robot 配置，不能直接更改 Ability 端口分配范围；请使用新的安装目录。其他组件端口可按上述方式重新配置。</p></div></article>
       </div>
     </section>
     <section class="section wrap compatibility" id="requirements">

@@ -16,6 +16,40 @@
 "use strict";
 // Translations are trusted, static site copy. Never insert URL or user input as HTML.
 const englishCopy = {
+  stepNetwork: "Web defaults to port <code>3000</code>; API / WS communication stays local. To avoid port conflicts or enable LAN access, see the <a href=\"#ports\">port table and configuration guide below ↓</a>.",
+  portsTitle: "Ports and configuration.",
+  portsIntro: "Check port availability before installation and configure with one YAML file.<br>Component connections and discovery addresses update together.",
+  portTableLabel: "Component ports table, scroll horizontally",
+  portsCaption: "Default TCP ports for new installations. Existing instances keep their configuration; export it to check actual values.",
+  portComponent: "Component / purpose",
+  portDefault: "Default port",
+  portBinding: "Listen address",
+  portKey: "YAML settings",
+  portWeb: "Browser console entry point",
+  portWebBinding: "Linux: <code>0.0.0.0</code><br>macOS: <code>127.0.0.1</code>",
+  portHttp: "Application and task API",
+  portWs: "Live status and events",
+  portRuntime: "Listens when the simulation runtime starts",
+  portAbility: "Allocated per Robot instance",
+  portsScope: "The Ability range is allocated on demand; all 100 ports are not occupied at once. <code>127.0.0.1</code> is local only; <code>0.0.0.0</code> listens on all IPv4 interfaces. Expose Web only to trusted networks. API, WS and Runtime do not need LAN access.",
+  portsConflict: "The installer checks for port conflicts before installation and never terminates other programs. If a port is occupied, edit the configuration and retry; verified archives are reused from cache. The four service ports must be distinct, within 1024–65535, and outside the Ability allocation range.",
+  configTitle: "Install and reconfigure with YAML",
+  configPlatformLink: "Select platform and version ↑",
+  configIntro: "Commands below follow the platform, tag and page language selected above. Run them from the same working directory and replace <code>--dir</code> with your actual instance directory. To reconfigure an existing instance, use its original directory.",
+  configExportTitle: "Export the configuration",
+  configExport: "A new directory exports defaults; an existing instance exports its current values. This only fetches the small entry script, without downloading the full installer archive. Export never overwrites a file; choose another filename when exporting again.",
+  configCopy: "Copy",
+  configEditTitle: "Edit the ports you need",
+  configEdit: "Open <code>components.yaml</code> in a text editor. For example, change <code>web_port: 3000</code> to <code>web_port: 33000</code>, then visit <code>http://127.0.0.1:33000</code> after applying it. The template below shows new-install defaults for the selected platform; use exported values for existing instances.",
+  configRules: "Keep the flat <code>key: value</code> format. Comments are supported; nested mappings, anchors, unknown or duplicate keys are not. Explicit command-line options override YAML. Unspecified values retain existing settings, or use defaults for new instances. No passwords or tokens are included.",
+  configInstallTitle: "Install using the configuration",
+  configInstall: "For a new installation, load the file with <code>-f</code> alongside the platform, release tag and download source options. System dependencies use your machine’s existing package repositories.",
+  configTagError: "Select a valid platform and release tag above before copying the install command.",
+  configReconfigureTitle: "Already installed? Reconfigure it.",
+  configReconfigure: "Stop scenes and Robot Runtime first, export and edit the current configuration, then run the command below. Skip the installation step: no full archive download is needed. The application version, data and credentials are preserved. This entry also supports older management tools.",
+  configSync: "Reconfiguration checks ports, backs up configuration, updates Server, Web proxy, Robot / Pilot connections and MuJoCo discovery addresses, then restarts affected services. If startup fails, the original configuration is restored. Applied settings are saved in the instance’s <code>configs/components.yaml</code>, with backups under <code>configs/reconfigure-backup-*</code>.",
+  configAbilityLimit: "Once Robot configurations exist, changing the Ability allocation range requires a new installation directory. Other component ports can be reconfigured as shown above.",
+
   home: "Semantic home",
   navigation: "Main navigation",
   navProduct: "Product",
@@ -86,8 +120,6 @@ const englishCopy = {
   stepWebTitle: "Open your console",
   stepWeb:
     "Open <code>http://127.0.0.1:3000</code> and sign in as <code>admin</code>. The random password appears in the interactive terminal and is saved to <code>configs/secrets.json</code> in the instance directory, never to installation logs.",
-  stepNetwork:
-    "Linux Web defaults to <code>0.0.0.0:3000</code>; macOS defaults to <code>127.0.0.1:3000</code>. Customize with <code>--web-host</code> / <code>--web-port</code>. API/WS stay local. New HTTP / WS / Runtime ports are <code>8034 / 8035 / 8036</code>; Web remains on <code>3000</code>. Export with <code>--export-config file.yaml</code>, install with <code>-f file.yaml</code>, and update with <code>semanticctl reconfigure -f file.yaml</code>. Expose Web only to trusted networks.",
   stepManageTitle: "Check services and configure tasks",
   stepManage:
     "Replace these paths if you chose a custom directory. The default model is a mock; configure a real model separately. Installation does not create application tasks or start physical robots.",
@@ -187,6 +219,23 @@ function updateInstallCommand() {
       : " --install-system-deps";
     command.textContent = `curl -fsSL https://semantic.insightos.cn/install${lang === "en" ? "-en" : ""}.sh | bash -s -- ${source}${options}`;
   }
+  const bootstrap = `curl -fsSL https://semantic.insightos.cn/install${en ? '-en' : ''}.sh | bash -s --`;
+  const platformOption = target === 'musl' ? ' --musl' : '';
+  document.getElementById('config-export-command').textContent = `${bootstrap}${platformOption} --dir "${directory}" --export-config components.yaml`;
+  document.getElementById('config-reconfigure-command').textContent = `${bootstrap} reconfigure --dir "${directory}" -f components.yaml`;
+  const installCommand = document.getElementById(en ? 'install-command-en' : 'install-command').textContent;
+  document.getElementById('config-install-command').textContent = valid
+    ? `${installCommand}${target === 'glibc' ? ` --dir "${directory}"` : ''} -f components.yaml` : '';
+  document.querySelector('[data-copy-target="config-install-command"]').disabled = !valid;
+  document.getElementById('config-tag-error').hidden = valid;
+  document.getElementById('config-yaml').textContent = `schema_version: 1
+http_port: 8034
+ws_port: 8035
+web_port: 3000
+runtime_port: 8036
+ability_port_first: 18100
+ability_port_last: 18199
+web_host: ${target === 'macos' ? '127.0.0.1' : '0.0.0.0'}`;
   document.getElementById("install-architecture").textContent = target === "macos" ? "arm64" : "x86_64";
   document.querySelector('[data-i18n="downloadRegion"]').textContent = !en
     ? "中国大陆 · 阿里云 OSS 镜像" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
@@ -316,5 +365,32 @@ for (const language of ["", "-en"]) {
       status.classList.remove("visible");
       button.textContent = english ? "Copy" : "复制";
     }, 4000);
+  });
+}
+
+// Configuration commands share the current platform and language selection.
+for (const button of document.querySelectorAll('[data-copy-target]')) {
+  button.addEventListener('click', async () => {
+    const command = document.getElementById(button.dataset.copyTarget);
+    const language = currentLanguage;
+    clearTimeout(toastTimer);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(command.textContent);
+      copied = true;
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(command);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    if (language !== currentLanguage) return;
+    status.textContent = copied
+      ? (language === 'en' ? 'Command copied.' : '命令已复制。')
+      : (language === 'en' ? 'Please copy the selected command manually.' : '请手动复制已选中的命令。');
+    status.lang = language === 'en' ? 'en' : 'zh-CN';
+    status.classList.add('visible');
+    toastTimer = setTimeout(() => status.classList.remove('visible'), 4000);
   });
 }
