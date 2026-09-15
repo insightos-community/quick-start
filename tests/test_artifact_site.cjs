@@ -57,6 +57,57 @@ const { createHash } = require('node:crypto');
       await page.locator('#install-tag').fill('$(touch bad)');
       assert.ok(await page.locator('#copy-command-en').isDisabled());
       assert.equal(await page.locator('#install-command-en').textContent(), '');
+      // Windows shares the tag/language controls but uses its native installer.
+      await page.locator('[data-platform="windows"]').click();
+      assert.equal(await page.locator('[data-platform="windows"]').getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('[data-platform="windows"] use').getAttribute('href'), '#platform-windows-icon');
+      assert.equal(await page.locator('#install-tag').inputValue(), 'windows-v0.1.0-rc.2');
+      assert.ok(await page.locator('#windows-download-panel').isVisible());
+      for (const lang of ['zh', 'en']) {
+        await page.locator(`[data-language="${lang}"]`).click();
+        const prefix = lang === 'zh'
+          ? 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic/releases/0.1.0-rc.2/windows-amd64'
+          : 'https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2';
+        assert.equal(await page.locator('#windows-archive-link').getAttribute('href'), `${prefix}/semantic-0.1.0-rc.2-windows-amd64.zip`);
+        assert.equal(await page.locator('#windows-checksums-link').getAttribute('href'), `${prefix}/SHA256SUMS`);
+        const command = '.\\install.cmd --dir "%LOCALAPPDATA%\\Semantic"';
+        const ctl = '"%LOCALAPPDATA%\\Semantic\\bin\\semanticctl.cmd"';
+        const main = lang === 'en' ? '#install-command-en' : '#install-command';
+        assert.equal(await page.locator(main).textContent(), command);
+        assert.equal(await page.locator('#guide-install-command').textContent(), command);
+        assert.equal(await page.locator('#config-install-command').textContent(), command + ' -f components.yaml');
+        assert.equal(await page.locator('#config-export-command').textContent(), command + ' --export-config components.yaml');
+        assert.equal(await page.locator('#config-reconfigure-command').textContent(), ctl + ' reconfigure -f components.yaml');
+        assert.equal(await page.locator('#uninstall-local-command').textContent(), ctl + ' uninstall');
+        assert.match(await page.locator('#config-yaml').textContent(), /web_host: 127\.0\.0\.1/);
+        assert.ok(await page.locator('#musl-install').isHidden());
+        assert.ok(await page.locator('#macos-install').isHidden());
+        assert.ok(await page.locator('#uninstall-bootstrap-command').isHidden());
+        await page.locator(lang === 'en' ? '#copy-command-en' : '#copy-command').click();
+        assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `Windows overflow at ${width}px / ${lang}`);
+        if (lang === 'en') for (const text of await page.locator('[data-i18n]').allTextContents()) {
+          assert.ok(!/[\u4e00-\u9fff]/.test(text), `Untranslated Windows copy: ${text}`);
+        }
+      }
+      await page.locator('#install-tag').fill('windows-v0.1.0-rc.1');
+      assert.match(await page.locator('#windows-archive-link').getAttribute('href'), /windows-v0\.1\.0-rc\.1\/semantic-0\.1\.0-rc\.1-windows-amd64\.zip$/);
+      for (const invalid of ['$(touch bad)', 'macos-v0.1.0-rc.5', 'windows-v0.1.0-' + 'a'.repeat(100)]) {
+        await page.locator('#install-tag').fill(invalid);
+        assert.equal(await page.locator('#windows-archive-link').getAttribute('href'), null);
+        assert.equal(await page.locator('#windows-checksums-link').getAttribute('href'), null);
+        assert.equal(await page.locator('#script-link').getAttribute('href'), null);
+        assert.equal(await page.locator('#install-command-en').textContent(), '');
+        assert.ok(await page.locator('#copy-command-en').isDisabled());
+        assert.ok(await page.locator('[data-copy-target="config-install-command"]').isDisabled());
+      }
+      await page.locator('[data-platform="macos"]').click();
+      assert.ok(await page.locator('#windows-download-panel').isHidden());
+      assert.equal(await page.locator('#macos-install').getAttribute('hidden'), null);
+      assert.equal(await page.locator('#script-link').getAttribute('href'), '/install-en.sh');
+      assert.match(await page.locator('#guide-install-command').textContent(), /install-en\.sh.*--tag macos-v/);
+      assert.match(await page.locator('#guide-manage-command').textContent(), /semantic-macos\/bin\/semanticctl.*status/);
+      assert.match(await page.locator('#uninstall-local-command').textContent(), /--dry-run/);
       await page.locator('[data-platform="musl"]').click();
       assert.match(await page.locator('#install-command-en').textContent(), /--tag musl-v0.1.0-3/);
       await page.locator('[data-platform="glibc"]').click();

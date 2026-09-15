@@ -12,18 +12,19 @@ The language selector supports `?lang=zh|en`, a saved preference, and browser la
 curl -fsSL https://semantic.insightos.cn/install-en.sh | bash -s -- --install-system-deps
 ```
 
-On Linux, the English script defaults to the verified GitHub `v0.1.1` installer Release; on macOS it selects the native preview. `--version 0.1.0` (or `v0.1.1`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
+On Linux, the English script defaults to the verified GitHub `v0.1.1` installer Release; on macOS it selects the native preview. `--version 0.1.1` (or `v0.1.1`) selects an explicit tag; `--package` and an explicit `--base-url` remain available. `SEMANTIC_DOWNLOAD_BASE` does not change the English default. Release metadata, platform, source commit and SHA-256 are checked before execution.
 
 Complete Releases already contain the Git LFS model objects. If an asset is missing or is a pointer, the English bootstrap uses the asset repository commit in `release-lock.json`, reads its GitHub pointer and downloads the object through the [Git LFS Batch API](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md). Both object size and SHA-256 must match the original `files.json`; the archive and integrity inventory are never rewritten. No Git or Git LFS executable is needed on the installation target.
 
 System dependencies use the target machine's existing apt/dnf/yum/pacman/zypper or Alpine APK configuration. The English manager also preserves uv user configuration and package-index environment variables. It does not write repository lists, install mirror configuration, or select a different package index. Bundled wheels remain installed offline with `--no-index`.
 
-The corresponding Chinese entry is `/install.sh`. Both pages describe Linux x86_64 (glibc/musl) and native macOS 15.5+ Apple Silicon arm64, with the qualification boundaries below. Other package-manager support does not imply full validation of every distribution.
+The corresponding Chinese entry is `/install.sh`. Both pages describe Linux x86_64 (glibc/musl) and native macOS 15.5+ Apple Silicon arm64 / Windows x64 previews, with the qualification boundaries below. Other package-manager support does not imply full validation of every distribution.
 
 The bilingual FAQ links the separate Windows x64 ZIP preview and describes native
-application/uninstall entries for all platforms. The shell platform selector still
-selects Linux glibc/musl or macOS; Windows users follow the visible Windows download
-link, verify SHA256SUMS, extract the ZIP and run `install.cmd`. Chinese Windows
+application/uninstall entries for all platforms. The shared platform picker includes Linux glibc/musl, macOS and Windows with local
+SVG icons. Windows selection uses a validated `windows-v*` tag, ZIP/checksum links
+and native CMD installation/configuration/uninstall examples. Verify the ZIP with
+the separate PowerShell checksum command, extract it completely and run `install.cmd`. Chinese Windows
 links use OSS; English links use GitHub. Both serve the same release bytes.
 Existing Linux/macOS instances can refresh their management tools and entries with
 `--configure-existing --dir "<actual-install-directory>" --desktop-shortcut`, without
@@ -38,8 +39,9 @@ Both languages also state that more Linux distributions will be tested soon and 
 
 The homepage has a platform selector and tag input. Language switches keep the
 selected platform/tag and regenerate the corresponding `/install.sh` or
-`/install-en.sh` command. Invalid or mismatched tags disable copying; user input
-is never inserted as HTML or executable shell syntax. Static musl/macOS examples
+`/install-en.sh` command on Unix, or ZIP links and native CMD examples on Windows.
+Invalid or mismatched tags disable copying and Windows download links; user input
+is never inserted as HTML or executable shell syntax. Static musl/macOS/Windows examples
 remain available without JavaScript.
 
 | Platform | Verified tag | Source | Target requirements |
@@ -160,6 +162,6 @@ directory and does not download the full installer archive.
 
 Keep these examples aligned with the component configuration section of the root
 READMEs. Run `tests/test_artifact_site.cjs` against a local preview and the deployed
-site to verify both languages, all three platforms, clipboard contents, invalid
+site to verify both languages, all four platforms, clipboard contents, invalid
 tags and viewport widths from 320 to 1440 px. The table scrolls within its container
 on narrow screens without overflowing the page.
