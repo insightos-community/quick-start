@@ -16,6 +16,10 @@
 "use strict";
 // Translations are trusted, static site copy. Never insert URL or user input as HTML.
 const englishCopy = {
+  windowsSteps: "① Download the ZIP and checksums → ② Verify and extract completely → ③ Open CMD in the extracted folder and run the installation command below.",
+  windowsZip: "Download Windows ZIP ↗",
+  windowsVerify: "First use PowerShell to calculate the ZIP SHA-256 and compare it with the matching filename in SHA256SUMS:",
+  windowsTagNote: "Choose a published windows-v tag available from the selected source. Chinese uses OSS; English uses GitHub. Switch to English for versions not yet mirrored.",
   portsTableTitle: "Component TCP ports",
   portsScroll: "Scroll the table horizontally for listen addresses and YAML settings →",
   stepNetwork: "Web defaults to port <code>3000</code>; API / WS communication stays local. To avoid port conflicts or enable LAN access, see the <a href=\"#ports\">port table and configuration guide below ↓</a>.",
@@ -28,7 +32,7 @@ const englishCopy = {
   portBinding: "Listen address",
   portKey: "YAML settings",
   portWeb: "Browser console entry point",
-  portWebBinding: "Linux: <code>0.0.0.0</code><br>macOS: <code>127.0.0.1</code>",
+  portWebBinding: "Linux: <code>0.0.0.0</code><br>macOS / Windows: <code>127.0.0.1</code>",
   portHttp: "Application and task API",
   portWs: "Live status and events",
   portRuntime: "Listens when the simulation runtime starts",
@@ -73,7 +77,7 @@ const englishCopy = {
   terminal: "<span class=\"terminal-dot\"></span> Run on the target machine",
   downloadRegion: "Downloads via GitHub Releases",
   viewScript: "View installer ↗",
-  supportNote: "Linux x86_64 (glibc / musl) · Native macOS 15.5+ Apple Silicon preview",
+  supportNote: "Linux x86_64 (glibc / musl) · Native macOS 15.5+ Apple Silicon / Windows x64 preview",
   supportRoadmap:
     "More Linux distributions will be tested soon, with compatibility results published as validation progresses.",
   installNote:
@@ -127,7 +131,7 @@ const englishCopy = {
     "Replace these paths if you chose a custom directory. The default model is a mock; configure a real model separately. Installation does not create application tasks or start physical robots.",
   requirementsTitle: "Check first. Deploy next.",
   requirementsIntro:
-    "Separate installer distributions support Linux x86_64 glibc/musl and native macOS Apple Silicon arm64. Each uses its own runtime and dependency set; binaries are not interchangeable.",
+    "Separate installer distributions support Linux x86_64 glibc/musl and native macOS Apple Silicon arm64 / Windows x64. Each uses its own runtime and dependency set; binaries are not interchangeable.",
   validatedTitle: "Verified operating system",
   validated: "Ubuntu 24.04 (glibc); Ubuntu 22.04 / Alpine 3.23 (musl); macOS 15.5+ Apple Silicon (installation, API and physics checks)",
   compatibilityTitle: "Compatibility limits",
@@ -141,10 +145,9 @@ const englishCopy = {
   faqApps: "New installers include the InsightOS icon and app entries. Linux adds application-menu entries and desktop shortcuts on graphical desktops. macOS creates Semantic and Uninstall Semantic apps in your user <code>~/Applications</code> folder and registers them with the system app launcher. Windows adds Start menu and desktop shortcuts, plus an entry in Settings → Apps → Installed apps. Opening Semantic starts services and opens the Web console using its current configuration.",
   faqAppsUninstall: "Stop scenes and Robot Runtime before opening Uninstall Semantic. Windows also supports removal from Installed apps. Configuration, data and logs are kept by default; no installer archive download is needed. On macOS, moving only the Semantic launcher to Trash does not remove the runtime; use the uninstall app.",
   faqAppsRefresh: "Existing Linux / macOS installations can refresh management tools and create app entries with the command below, without upgrading application components or downloading the full archive. Stop scenes first and replace the directory with your actual installation path; the example follows the platform selected above. Use <code>--no-desktop-shortcut</code> during installation to skip app entries.",
-  windowsDownload: 'Windows x64: <a href="#windows-install">ZIP download and installation guide ↓</a> (separate native installer)',
   faqWindowsChecksum: 'In PowerShell, run <code>Get-FileHash .\\semantic-0.1.0-rc.2-windows-amd64.zip -Algorithm SHA256</code> and compare the ZIP entry in SHA256SUMS above. The <a href="https://github.com/insightos-community/quick-start/releases/tag/windows-v0.1.0-rc.2">GitHub Release</a> includes all validation reports.',
   faqWindowsTitle: "How do I install on Windows?",
-  faqWindows: 'Download the <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/semantic-0.1.0-rc.2-windows-amd64.zip">Windows x64 ZIP (v0.1.0-rc.2 · GitHub)</a>, verify it against <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/SHA256SUMS">SHA256SUMS</a>, extract the complete ZIP and run <code>install.cmd</code>. Windows has its own installer entry point; the Bash commands above do not apply. This version includes the Skill environment fix, app icons and uninstall entries.',
+  faqWindows: 'Download the <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/semantic-0.1.0-rc.2-windows-amd64.zip">Windows x64 ZIP (v0.1.0-rc.2 · GitHub)</a>, verify it against <a href="https://github.com/insightos-community/quick-start/releases/download/windows-v0.1.0-rc.2/SHA256SUMS">SHA256SUMS</a>, extract the complete ZIP and run <code>install.cmd</code>. Select Windows in the platform picker above to choose a release tag and view matching download links and CMD commands. This version includes the Skill environment fix, app icons and uninstall entries.',
   faqWindowsUpgrade: "To switch from an older version, stop scenes and old services, install into a new dedicated directory, retain old data and migrate it explicitly. Native Windows CI verifies installation, Abilities / Skills, physics simulation and uninstall. Physical GPU rendering still needs validation.",
   faqLanTitle:
     "Already installed? How do I enable LAN access and desktop shortcuts?",
@@ -195,25 +198,65 @@ const videoError = document.getElementById("video-error");
 let toastTimer;
 const installPlatform = document.getElementById("install-platform");
 const installTag = document.getElementById("install-tag");
-const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-3", macos: "macos-v0.1.0-rc.5" };
+
+const windowsCopy = {
+  zh: {
+    terminal: '<span class="terminal-dot"></span> 在已解压的 ZIP 目录中打开命令提示符（CMD）',
+    installNote: 'Windows x64 原生安装包包含 Python 和依赖，无需 WSL、Bash 或编译器。先下载并校验 ZIP，再完整解压、运行安装命令。',
+    guideIntro: 'Windows 默认安装目录为 <code>%LOCALAPPDATA%\\Semantic</code>。下方安装与管理命令使用 CMD；首次安装前，请先下载并完整解压上方选择的 ZIP。',
+    stepInstall: '在 ZIP 解压目录打开 CMD，执行下方命令。可通过 <code>--dir</code> 修改安装目录；自动安装可增加 <code>--yes</code>。',
+    stepPackages: '随包提供原生运行时和依赖，无需预装 Python。安装器先检查端口占用，可使用下方 YAML 配置调整端口。',
+    stepManage: '命令使用 CMD；自定义安装目录时请替换路径，运行日志位于实例的 logs 目录。停止服务前请先在 Web 中释放场景。',
+    configIntro: '下方命令跟随平台切换，Windows 使用 CMD。安装与首次导出在已解压的 ZIP 目录执行；重新配置使用已安装的管理命令。请把目录替换为实际实例目录。',
+    configExport: '在已解压的 ZIP 目录执行：新目录导出默认值，已有实例导出当前值。已有实例也可使用 bin\\semanticctl.cmd export-config --output components.yaml，无需重新下载安装包。',
+    configInstall: '在 ZIP 解压目录用 <code>-f</code> 加载编辑后的 YAML。安装程序和依赖随包提供，默认 Web 端口为 3000。',
+    configReconfigure: '先在 Web 中释放场景，再导出并编辑配置，使用已安装的管理命令重新配置。无需下载 ZIP，已有版本、配置与数据保留。',
+    configSync: '重新配置会检查端口，更新 Server、Web、Robot / Pilot 与 MuJoCo 的连接地址，并重启受影响的服务；启动失败时恢复原配置。',
+    faqUninstall: '先在 Web 中释放场景，再从“已安装的应用”、Uninstall Semantic 或下方 CMD 命令卸载。使用本地文件，默认保留配置、数据和日志。请替换为实际安装路径。',
+    faqUninstallSafety: '清理会在管理进程退出后完成，结果日志路径会显示在终端中。只有显式增加 <code>--purge</code> 并确认，才会删除全部实例数据。',
+    faqTrouble: '确认使用 Windows x64 包，ZIP 已完整解压且校验和正确。端口冲突时修改 components.yaml 并重试；可复用已解压的文件。使用 semanticctl.cmd status 和实例 logs 目录排查。',
+  },
+  en: {
+    terminal: '<span class="terminal-dot"></span> Open Command Prompt (CMD) in the extracted ZIP folder',
+    installNote: 'The native Windows x64 ZIP includes Python and dependencies; no WSL, Bash or compiler is needed. Download and verify the ZIP, extract it completely, then run the installation command.',
+    guideIntro: 'Windows defaults to <code>%LOCALAPPDATA%\\Semantic</code>. Installation and management commands below use CMD. Download and fully extract the selected ZIP before first installation.',
+    stepInstall: 'Open CMD in the extracted ZIP folder and run the command below. Set <code>--dir</code> to choose an installation directory; add <code>--yes</code> for unattended installation.',
+    stepPackages: 'Native runtimes and dependencies are bundled; no host Python is needed. Ports are checked before installation. Use the YAML guide below to change them.',
+    stepManage: 'Use CMD and replace the path for a custom directory. Runtime logs are in the instance logs folder. Release scenes in Web before stopping services.',
+    configIntro: 'Commands follow the selected platform; Windows uses CMD. Run installation and initial export from the extracted ZIP folder. Reconfigure with the installed manager. Replace the directory with your actual instance path.',
+    configExport: 'From the extracted ZIP folder, export defaults for a new directory or current values for an existing instance. Installed instances can also use bin\\semanticctl.cmd export-config --output components.yaml without downloading the archive again.',
+    configInstall: 'From the extracted ZIP folder, load your edited YAML with <code>-f</code>. The installer and dependencies are bundled. Web defaults to port 3000.',
+    configReconfigure: 'Release scenes in Web first, export and edit the configuration, then use the installed manager to reconfigure. No ZIP download is needed; the installed version, configuration and data are kept.',
+    configSync: 'Reconfiguration checks ports, updates Server, Web, Robot / Pilot and MuJoCo connections, then restarts affected services. Failed startup restores the previous configuration.',
+    faqUninstall: 'Release scenes in Web, then uninstall from Installed apps, Uninstall Semantic or the CMD command below. Local files are used; configuration, data and logs are kept by default. Replace the installation path as needed.',
+    faqUninstallSafety: 'Cleanup finishes after the manager exits; the terminal shows the result log path. Only explicit <code>--purge</code> with confirmation deletes all instance data.',
+    faqTrouble: 'Check that you have the Windows x64 ZIP, have verified its checksum and extracted it completely. Edit components.yaml for port conflicts and retry using the extracted files. Use semanticctl.cmd status and the instance logs folder for diagnostics.',
+  },
+};
+
+const platformDefaults = { glibc: "stable", musl: "musl-v0.1.0-3", macos: "macos-v0.1.0-rc.5", windows: "windows-v0.1.0-rc.2" };
 function updateInstallCommand() {
   const target = installPlatform.value;
   for (const button of document.querySelectorAll('[data-platform]')) {
     button.setAttribute('aria-pressed', String(button.dataset.platform === target));
   }
+  const windows = target === 'windows';
+  for (const node of document.querySelectorAll('[data-unix-only], #musl-install, #macos-install')) node.hidden = windows;
+  document.getElementById('windows-download-panel').hidden = !windows;
   const directory = target === 'macos' ? '$HOME/semantic-macos' : target === 'musl' ? '$HOME/semantic-musl' : '$HOME/.local/share/semantic';
   document.getElementById('uninstall-local-command').textContent = `"${directory}/bin/semanticctl" uninstall --dry-run\n"${directory}/bin/semanticctl" uninstall`;
   document.getElementById('uninstall-bootstrap-command').textContent = `curl -fsSL https://semantic.insightos.cn/install${currentLanguage === 'en' ? '-en' : ''}.sh | bash -s -- --uninstall --dir "${directory}"`;
 
   const tag = installTag.value.trim();
-  document.getElementById("release-version").textContent = tag === "stable" ? "v0.1.1" : tag;
   const en = currentLanguage === "en";
   const patterns = {
     glibc: /^(stable|v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._+-]*)$/,
     musl: /^musl-v[0-9]+\.[0-9]+\.[0-9]+-[1-9][0-9]*$/,
     macos: /^macos-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/,
   };
-  const valid = patterns[target].test(tag);
+  patterns.windows = /^windows-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/;
+  const valid = tag.length <= 100 && patterns[target].test(tag);
+  document.getElementById("release-version").textContent = valid ? (tag === "stable" ? "v0.1.1" : tag) : "—";
   const error = document.getElementById("tag-error");
   error.hidden = valid;
   error.textContent = en ? "Enter a valid tag for the selected platform." : "请输入与所选平台匹配的版本标签。";
@@ -248,10 +291,47 @@ web_port: 3000
 runtime_port: 8036
 ability_port_first: 18100
 ability_port_last: 18199
-web_host: ${target === 'macos' ? '127.0.0.1' : '0.0.0.0'}`;
+web_host: ${['macos', 'windows'].includes(target) ? '127.0.0.1' : '0.0.0.0'}`;
   document.getElementById("install-architecture").textContent = target === "macos" ? "arm64" : "x86_64";
   document.querySelector('[data-i18n="downloadRegion"]').textContent = !en
     ? "中国大陆 · 阿里云 OSS 镜像" : en ? "Selected tag · GitHub Releases" : "指定标签 · GitHub Releases";
+  // Restore common copy/commands on every platform change, including after Windows.
+  for (const {element, key, original} of translated) {
+    if (Object.hasOwn(windowsCopy.zh, key)) element.innerHTML = windows ? windowsCopy[en ? 'en' : 'zh'][key] : en ? englishCopy[key] : original;
+  }
+  const selectedCommand = document.getElementById(en ? 'install-command-en' : 'install-command').textContent;
+  document.getElementById('guide-install-command').textContent = selectedCommand;
+  document.getElementById('guide-manage-command').textContent = `"${directory}/bin/semanticctl" status\n"${directory}/bin/semanticctl" doctor\n"${directory}/bin/semanticctl" logs`;
+  const scriptLink = document.getElementById('script-link');
+  scriptLink.href = en ? '/install-en.sh' : '/install.sh';
+  scriptLink.textContent = en ? englishCopy.viewScript : translated.find(item => item.key === 'viewScript').original;
+  for (const node of document.querySelectorAll('.command-row .prompt')) node.textContent = windows ? '>' : '$';
+  if (windows) updateWindowsCommands(tag, valid, en);
+}
+
+function updateWindowsCommands(tag, valid, en) {
+  const install = '.\\install.cmd --dir "%LOCALAPPDATA%\\Semantic"';
+  const ctl = '"%LOCALAPPDATA%\\Semantic\\bin\\semanticctl.cmd"';
+  const version = tag.slice('windows-v'.length);
+  const archive = `semantic-${version}-windows-amd64.zip`;
+  const base = en ? `https://github.com/insightos-community/quick-start/releases/download/${tag}`
+    : `https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic/releases/${version}/windows-amd64`;
+  for (const [id, name] of [['windows-archive-link', archive], ['windows-checksums-link', 'SHA256SUMS']]) {
+    const link = document.getElementById(id);
+    if (valid) link.href = `${base}/${name}`; else link.removeAttribute('href');
+    link.setAttribute('aria-disabled', String(!valid));
+  }
+  document.getElementById('windows-checksum-command').textContent = valid ? `Get-FileHash .\\${archive} -Algorithm SHA256` : '';
+  for (const id of ['install-command', 'install-command-en', 'guide-install-command']) document.getElementById(id).textContent = valid ? install : '';
+  document.getElementById('config-export-command').textContent = `.\\install.cmd --dir "%LOCALAPPDATA%\\Semantic" --export-config components.yaml`;
+  document.getElementById('config-install-command').textContent = valid ? `${install} -f components.yaml` : '';
+  document.getElementById('config-reconfigure-command').textContent = `${ctl} reconfigure -f components.yaml`;
+  document.getElementById('uninstall-local-command').textContent = `${ctl} uninstall`;
+  document.getElementById('guide-manage-command').textContent = `${ctl} status\n${ctl} start\n${ctl} stop`;
+  document.getElementById('install-architecture').textContent = 'x64 · CMD';
+  const scriptLink = document.getElementById('script-link');
+  if (valid) scriptLink.href = `https://github.com/insightos-community/quick-start/releases/tag/${tag}`; else scriptLink.removeAttribute('href');
+  scriptLink.textContent = en ? 'View release ↗' : '查看版本说明 ↗';
 }
 for (const button of document.querySelectorAll('[data-platform]')) {
   button.addEventListener('click', () => {
@@ -268,7 +348,7 @@ function setLanguage(language, persist = false) {
   document.documentElement.lang = en ? "en" : "zh-CN";
   document.title = en ? "Semantic — From semantics to action" : originalTitle;
   description.content = en
-    ? "Install Semantic Server, Web, MuJoCo Runtime and the R1Pro Robot Bundle with one command. Linux x86_64 only; verified on Ubuntu 24.04."
+    ? "Install Semantic Server, Web, MuJoCo Runtime and the R1Pro Robot Bundle with one command. Linux x86_64, macOS Apple Silicon and Windows x64."
     : originalDescription;
   for (const { element, key, original } of translated)
     element.innerHTML = en ? englishCopy[key] : original;
@@ -359,8 +439,8 @@ for (const language of ["", "-en"]) {
       await navigator.clipboard.writeText(command.textContent);
       button.textContent = english ? "Copied" : "已复制";
       status.textContent = english
-        ? "Command copied. Run it in a terminal on your Linux machine."
-        : "安装命令已复制，请在目标 Linux 机器的终端中运行。";
+        ? "Command copied. Run it in the indicated terminal on your target machine."
+        : "安装命令已复制，请在目标机器的指定终端中运行。";
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
