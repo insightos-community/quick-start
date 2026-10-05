@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Native Windows primitives for the forthcoming installer manager.
 
 Uses the same creation-time-qualified stop event as Framework and deployment.

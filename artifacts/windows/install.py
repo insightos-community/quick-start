@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Install the verified native Windows payload using only bundled components."""
 import argparse
 import csv

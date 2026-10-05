@@ -261,7 +261,7 @@ def assemble(args):
     spec = yaml.safe_load((bundle/'bundle.yaml').read_text())
     spec['spec']['artifacts']['pythonWheels'] = [f'wheels/{p.name}' for p in sorted((bundle/'wheels').glob('*.whl'))]
     (bundle/'bundle.yaml').write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
-    for filename in ('installer.py','install_support.py','uninstall.py'):
+    for filename in ('installer.py','install_support.py','extension.py','uninstall.py'):
         shutil.copy2(ROOT/'artifacts/runtime'/filename, payload/filename)
     meta = {**old, 'tag':args.tag, 'version':args.version, 'platform':'linux-musl-x86_64',
             'libc':'musl','minimum_musl':'1.2','musl_runtime':{'default':'bundled','loader':'musl/lib/ld-musl-x86_64.so.1','template':'python/bin/python3.13.musl-template','package':musl['package']},'robot_python':PYTHON,'runtime_python':PYTHON,

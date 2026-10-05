@@ -183,7 +183,7 @@ def build(a):
             copy_file(native/name, payload/'bin'/name)
         copy_file(Path(shutil.which('uv')).resolve(), payload/'bin/uv')
         copy_file(HERE/'runtime/installer.py', payload/'installer.py')
-        for name in ('install_support.py', 'uninstall.py'):
+        for name in ('install_support.py', 'extension.py', 'uninstall.py'):
             copy_file(HERE/'runtime'/name, payload/name)
         for name in ('ios.png', 'banner.json'):
             copy_file(HERE/'assets'/name, payload/'assets'/name)

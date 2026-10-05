@@ -52,7 +52,7 @@ def replace_once(source, old, new):
 
 def manager_sources():
     result = {name: translate((HERE/'runtime'/name).read_text())
-              for name in ('installer.py', 'install_support.py', 'uninstall.py')}
+              for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py')}
     # Management code is independent of immutable business payloads.
     # Assets still come from the verified archive, while future semanticctl calls
     # retain the English management modules that installed/configured the instance.
@@ -68,7 +68,7 @@ def manager_sources():
 
 def manager_shell(english=False):
     sources = manager_sources() if english else {name: (HERE/'runtime'/name).read_text()
-              for name in ('installer.py', 'install_support.py', 'uninstall.py')}
+              for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py')}
     rows = ['semantic_write_manager() {', '  mkdir -p "$1"']
     for name, source in sources.items():
         rows += ["  cat > \"$1/"+name+"\" <<'SEMANTIC_MANAGER_SOURCE'", source.rstrip(), 'SEMANTIC_MANAGER_SOURCE']

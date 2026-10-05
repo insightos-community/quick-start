@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Exercise the extracted payload on native Windows without dependency downloads."""
 import argparse
 import json

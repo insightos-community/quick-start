@@ -101,8 +101,8 @@ class InstallerPresentationTests(unittest.TestCase):
         with patch.object(installer.curses, "color_pair", return_value=0):
             ui._draw_top(20, 90)
             self.assertIn("Semantic Installer", ui.stdscr.addstr.call_args_list[0].args[2])
-            for sid, expected in (("7.1", "将来源托盘当前最上面一层周转箱"),
-                                  ("6.1", "test-admin-pass"), ("6.3", "test-admin-pass")):
+            for sid, expected in (("7.2", "系统设置里加 DeepSeek"),
+                                  ("6.1", "端口: HTTP 8080"), ("6.3", "登录: 用户名 admin")):
                 with self.subTest(sid=sid):
                     ui.log_win.reset_mock()
                     ui.rows = [("step", self.app.bysid[sid], None)]

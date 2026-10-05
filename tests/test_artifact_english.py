@@ -56,7 +56,7 @@ class EnglishInstallerTests(unittest.TestCase):
                 if isinstance(node.value, str):
                     return ast.copy_location(ast.Constant(value='STRING'), node)
                 return node
-        for name in ('installer.py', 'install_support.py', 'uninstall.py'):
+        for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py'):
             original = (ROOT/'artifacts/runtime'/name).read_text()
             before = NormalizeStrings().visit(ast.parse(original))
             after = NormalizeStrings().visit(ast.parse(generator.translate(original)))

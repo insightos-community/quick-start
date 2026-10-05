@@ -31,6 +31,27 @@ import urllib.parse
 HERE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = Path.home()/'.config/semantic-artifacts/oss.env'
 LOG_FILE = None
+# Objects allowed to change after first upload: install entry points, the channel
+# version pointers, and each extension's stable pointer. Everything else under
+# extensions/<id>/<version>/ stays immutable so a release can be reproduced.
+MUTABLE_KEYS = ('install.sh', 'channels/stable.json', 'channels/musl-stable.json')
+MUTABLE_PATTERNS = (r'extensions/[^/]+/stable\.json',)
+
+
+def extension_prefix(identifier, version):
+    """Immutable OSS prefix ``extensions/<id>/<version>`` for one extension version."""
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', identifier):
+        raise ValueError('非法扩展标识')
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', version):
+        raise ValueError('非法扩展版本')
+    return f'extensions/{identifier}/{version}'
+
+
+def extension_pointer(identifier):
+    """Mutable OSS pointer ``extensions/<id>/stable.json`` (allowlisted for updates)."""
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', identifier):
+        raise ValueError('非法扩展标识')
+    return f'extensions/{identifier}/stable.json'
 
 
 def emit(*values):
@@ -93,6 +114,10 @@ def digest(path):
     return h.hexdigest()
 
 
+def _matches(relative, patterns):
+    return any(re.fullmatch(pattern, relative) for pattern in patterns)
+
+
 def release_files(version):
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', version):
         raise ValueError('非法发布版本')
@@ -150,8 +175,10 @@ class Store:
 
     def upload(self, path, relative, mutable=False):
         path = Path(path)
-        if mutable and relative not in ('install.sh', 'channels/stable.json', 'channels/musl-stable.json'):
-            raise ValueError('只允许更新安装入口和默认版本清单')
+        # only mutable: install entries, channel pointers and each extension's stable.json.
+        # An extension's versioned manifest and artifacts stay immutable.
+        if mutable and relative not in MUTABLE_KEYS and not _matches(relative, MUTABLE_PATTERNS):
+            raise ValueError('只允许更新安装入口、默认版本清单与扩展场景的稳定版指针')
         key, checksum = self.key(relative), digest(path)
         head = self.head(key)
         if head:

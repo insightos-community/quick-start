@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Exercise real desktop integration on the target OS, including ownership cleanup."""
 import hashlib
 import json

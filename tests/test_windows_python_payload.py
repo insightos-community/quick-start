@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Validate the real bundled interpreter and native UTF-8 filesystem behavior."""
 import json
 import os

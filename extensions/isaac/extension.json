@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "id": "isaac",
+  "title": "BEHAVIOR 场景 (Isaac Sim 5.1 + OmniGibson 3.9.2 + R1Pro + π0.5)",
+  "version": "0.1.0",
+  "compatible_base": ">=0.5.0",
+  "profile": "behavior-omnigibson",
+  "note": "模板文件: url 为相对路径 (由 --source/base 拼接), sha256 与 size 由 artifacts/build_extension.py 从真实产物回填 (见同目录 README.md)。当前 size 取自 2026-09 实测值。六个产物均小于 GitHub 2 GiB 单资产上限, 可完整镜像。引擎镜像与数据集不在清单里 (不可下载, 只能探测)。",
+  "runtime": {
+    "installation_id": "local-behavior-omnigibson",
+    "endpoint": "http://127.0.0.1:18090",
+    "content": {
+      "name": "behavior_data",
+      "option": "--asset-root",
+      "requires": "2026-challenge-task-instances/metadata/available_tasks.yaml",
+      "note": "Runtime 需要授权数据集: --asset-root 只接受宿主绝对路径, 且必须是含 2026-challenge-task-instances/ 的上一级目录"
+    },
+    "pack": {
+      "url": "behavior-runtime-0.1.18.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 24117248,
+      "license": "behavior-assets"
+    }
+  },
+  "components": [
+    {
+      "role": "scene_catalog",
+      "id": "behavior-scenes",
+      "url": "behavior-scenes-3.9.2.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 1331,
+      "previews": {
+        "default_scenes": ["turning-on-radio"],
+        "note": "包内 7 个场景, 只登记任务与原生实例引用, 资产由 Runtime 的 asset-root 解析; 预览需 >=6144 MiB 空闲显存, 6 GB 卡上必须 --generate-previews=false"
+      }
+    },
+    {
+      "role": "robot_base",
+      "id": "r1pro-behavior-robot",
+      "url": "r1pro-behavior-robot-0.1.1.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 55574528
+    },
+    {
+      "role": "robot_ability",
+      "id": "r1pro-behavior-ability",
+      "url": "r1pro-behavior-ability-0.1.3.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 25165824,
+      "project_default": true
+    },
+    {
+      "role": "model",
+      "id": "r1pro-radio-model",
+      "url": "r1pro-radio-model-0.1.1.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 1229,
+      "project_default": true
+    },
+    {
+      "role": "robot_skill",
+      "id": "vla-manipulation",
+      "url": "vla-manipulation-0.1.10.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 11264,
+      "robot_required": true
+    }
+  ],
+  "host_requirements": {
+    "gpu": "required",
+    "disk_gib": 50
+  },
+  "ports": [[18090, 18090], [18100, 18199], [20080, 20080]],
+  "prerequisites": [
+    { "kind": "probe", "text": "本机已导入引擎镜像 behavior:v3.9.2 且身份与 runtime-settings.json 一致",
+      "check": "docker image inspect behavior:v3.9.2 >/dev/null 2>&1" },
+    { "kind": "probe", "text": "asset-root 所在盘可用空间 >= 50 GiB",
+      "check": "test \"$(df -B1G --output=avail . 2>/dev/null | tail -1)\" -ge 50" },
+    { "kind": "probe", "text": "存在空闲显存 >= 6144 MiB 的 GPU (预览需要, 仅启动场景可更低)",
+      "check": "test \"$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | sort -nr | head -1)\" -ge 6144" },
+    { "kind": "user_action", "text": "授权数据集需按上游说明单独取得 (数十 GB), 用 --asset-root 指向其上一级目录" },
+    { "kind": "user_action", "text": "π0.5 策略服务需自行准备 (OpenPI + 官方 radio 权重, 端口 20080), 必须先于机器人四件套启动, 否则 Robot 永不就绪" },
+    { "kind": "user_action", "text": "Agent 对话需要 LLM 端点与密钥 (semantic-server 工作目录 .env 里的 SEMANTIC_LLM_API_KEY_<名称>)" },
+    { "kind": "user_action", "text": "Ability 段默认 18100-18199 与 LIBERO 重叠: 同机并存时给两套环境分配不同端口段" }
+  ],
+  "post_install": [
+    { "kind": "user_action", "text": "场景配置 → 添加兼容场景: 安装只把场景注册到 scene-catalogs, 不会自动进项目" },
+    { "kind": "user_action", "text": "项目内容 → 机器人与模型配置: 为 r1pro 绑定 Ability 与模型 (模型选 0.1.1), 否则 Ability 停在 Standby" },
+    { "kind": "user_action", "text": "设备中心 → 添加 Pilot: 全新环境设备列表为空, 拿一次性加入码后再用 Bundle 启动器加入机器人" }
+  ],
+  "license": "behavior-assets"
+}

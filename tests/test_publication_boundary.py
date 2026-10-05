@@ -28,7 +28,7 @@ class PublicationBoundaryTests(unittest.TestCase):
 
     def test_bootstraps_document_approved_download_channels(self):
         for script, source in [('install.sh', 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'),
-                               ('install-en.sh', 'GitHub Release v0.1.0')]:
+                               ('install-en.sh', 'GitHub Release v0.1')]:
             result = subprocess.run(['bash', str(ROOT / 'artifacts' / script), '--help'],
                                     capture_output=True, text=True, timeout=20,
                                     env={'PATH': '/usr/bin:/bin'})

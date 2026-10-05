@@ -4,7 +4,7 @@
 
 > R1 Pro maintenance models are now available through the pinned asset repository's Git LFS. See [publication scope](PUBLICATION.md) for third-party attribution. Component and installer archives are published through GitHub Releases with their original notices.
 
-🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 13 component repositories; it is not the server itself.
+🚀 Build and run Semantic: a workspace that connects a web Studio, an orchestration server, robot skills, abilities, and simulation. This repository coordinates 14 component repositories; it is not the server itself.
 
 A native **macOS Apple Silicon / macOS 15.5+** installer preview is also available. See [installation and validation scope](#native-macos-installer-apple-silicon-preview); physical Mac graphics qualification is pending.
 
@@ -113,6 +113,45 @@ python3 semantic_installer.py --list
 
 The root shell scripts are available on current `main`; the existing `v0.1.0` source tag is unchanged. Source builds still require Bundle activation and Skill publication after downloading models.
 
+### Install an extension scenario (LIBERO / BEHAVIOR)
+
+The base installation above prepares the workspace. Simulation scenes are optional side payloads published separately from the immutable base release; the installer pulls them after the base environment is ready. Two scenarios are available:
+
+| Scenario | `--extension` | Contents |
+|---|---|---|
+| LIBERO | `libero` | robosuite 1.4, Franka and SmolVLA; six artifacts, about 11.5 GB in total |
+| BEHAVIOR (Isaac Sim) | `isaac` | OmniGibson 3.9.2, R1 Pro and π0.5; six artifacts, about 99 MB in total (largest about 52 MB), plus a 31 GB engine image and the licensed dataset you provide |
+
+Pass `--extension <id>` to the same entry script; it runs once the base environment finishes:
+
+```bash
+# LIBERO
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --extension libero --extension-project <PROJECT-ID> --install-system-deps
+
+# BEHAVIOR (Isaac)
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --extension isaac --extension-source github --extension-project <PROJECT-ID> \
+  --extension-asset-root /absolute/path/to/datasets --install-system-deps
+```
+
+Options:
+
+- `--extension-source oss|github` selects the channel (default `oss`). The manifest and its version pointer always come from OSS; the GitHub Release mirrors artifacts. Three LIBERO artifacts exceed the 2 GiB per-asset GitHub limit and fall back to OSS automatically, so the GitHub channel is not offline-capable for LIBERO.
+- `--extension-base-url <URL>` uses another channel, `--extension-package-dir <dir>` installs fully offline from the six artifacts plus the manifest, and `--extension-manifest <file>` uses a local manifest.
+- `--extension-project <ID>` sets the target project (defaults to the signed-in user's Default Project); `--extension-robot <ID>` is passed when a component declares `robot_required`.
+- `--extension-asset-root <abs-path>` is required by the BEHAVIOR runtime: an absolute host path whose parent contains `2026-challenge-task-instances/`.
+- Extensions whose runtime pack declares a `license` are accepted from the manifest automatically; pass `--accept-license LIBERO` or `--accept-license behavior-assets` to state it explicitly.
+- Installation order is fixed: Runtime → scene catalog → robot base → ability → model → skill. `--extension-dry-run` prints the command plan without changing anything.
+
+Some prerequisites cannot be shipped and are reported by the installer; probes warn but never block:
+
+- BEHAVIOR needs the `behavior:v3.9.2` engine image in the local Docker store (31.1 GB), the licensed dataset, an LLM key, and a π0.5 policy service on port 20080 started before the robot components. A discrete GPU is required; previews need at least 6144 MiB free.
+- Ports: BEHAVIOR uses runtime 18090, ability 18100–18199 and policy 20080; LIBERO uses 18100–18199, so allocate different ranges when running both on one host.
+- After installation, add the compatible scene in the Web UI and bind the Ability and model to the robot — installing a scene only registers its catalog.
+
+Manage extensions with the installed manager: `semanticctl extension list|show|verify|install|remove`, plus `--source oss|github`. See the [extension scenario design](docs/extensions.md) and the notes under [`extensions/libero`](extensions/libero/README.md) and [`extensions/isaac`](extensions/isaac/README.md). The source-build TUI covers the same scenarios in stage 8.
+
 ## 🛠 Build from source
 
 Use Linux, Git + Git LFS, and Python with curses support. The source installer's system setup targets Ubuntu/apt; component builds additionally use Go 1.23+, Node.js 22, uv, and xmake. Native MuJoCo and Robot workers use separate Python environments (3.10 and 3.13).
@@ -169,7 +208,7 @@ Each component has its own English/Chinese README. Repository names and local di
 
 ## Versions and daily use
 
-**Recommended build version: `v0.1.0`.** Run `git checkout v0.1.0` before building with the installer. The [repo-versions.json at this tag](https://github.com/insightos-community/quick-start/blob/v0.1.0/repo-versions.json) is the usable, verified component baseline and pins all 13 repositories to tags and commit SHAs. For an existing clone, run `git fetch origin --tags` first.
+**Recommended build version: `v0.1.0`.** Run `git checkout v0.1.0` before building with the installer. The [repo-versions.json](repo-versions.json) is the usable, verified component baseline and pins all 14 repositories to specific revisions. For an existing clone, run `git fetch origin --tags` first.
 
 Releases and future mirror synchronization stay on the verified maintenance baseline, not the newest upstream/default branch. Use the exact tags and commits in `repo-versions.json`; see the [release policy](maintenance/release-policy.md) and [v0.1.3 record](maintenance/v0.1.3.md).
 

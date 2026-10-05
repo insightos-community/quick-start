@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Native Windows manager contracts against real OS objects and Framework."""
 import json
 import os

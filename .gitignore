@@ -1,7 +1,7 @@
-# 安装器本机状态 / 生成物，勿入库
-installer-settings.json
-installer-status.json
-semantic-env.sh
+# 安装器本机状态 / 生成物，勿入库（含 .basebak / .bak 等本地备份）
+installer-settings*.json
+installer-status*.json
+semantic-env*.sh
 .tui-logs/
 
 # Python
@@ -10,8 +10,8 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# Release downloads and assembled packages
-.release-cache/
+# 预编译安装树的下载与组装产物（artifacts/ 是源码，下面这些是构建输出）
 artifacts/releases/
 artifacts/.build/
 artifacts/channels/
+.release-cache/

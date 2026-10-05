@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Fetch Windows component releases with pinned sources and checksum manifests."""
 import json
 import hashlib

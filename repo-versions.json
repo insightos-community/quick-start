@@ -67,5 +67,84 @@
       "commit": "f85b9cce4f0040671fa74ebf0a587b7e4c65a7df"
     }
   },
-  "updated": "2026-09-10 17:56:31"
+  "extensions": {
+    "note": "扩展场景（旁挂于基础制品之外）的版本与通道锚点。产物 sha256/size 由 artifacts/build_extension.py 从真实产物回填进不可变的 extensions/<id>/<version>/extension.json，随后 publish_extension.py 发布到 OSS 与 GitHub；复现时以通道对象的摘要为准。清单模板 extensions/<id>/extension.json 里 size 为 2026-09 实测值、sha256 为占位。",
+    "libero": {
+      "version": "0.1.0",
+      "channel": "oss",
+      "github_tag": "ext-libero-v0.1.0",
+      "note": "三个超过 GitHub 2 GiB 单资产上限的产物仅走 OSS；GitHub 通道自动回退 OSS。",
+      "artifacts": {
+        "semantic-libero-robosuite-1.4-0.4.0-dev.0.runtime.tar.zst": {
+          "role": "runtime",
+          "size": 2178607514,
+          "sha256": "7a7c8abeaf57b514eec71b5f3eabc1c58417940cef67547557432743e00592b6"
+        },
+        "libero-scenes.zip": {
+          "role": "scene_catalog",
+          "size": 239269354,
+          "sha256": "c8d962bdd013cabca42c988324770b79e768f8f2d56a0675a20f123a8f5a56c3"
+        },
+        "franka-libero-robot.zip": {
+          "role": "robot_base",
+          "size": 2925302102,
+          "sha256": "8face071790044efdbf978a7e0fc2e25446309cc54579f36242392ffd0ca28c7"
+        },
+        "franka-ability.zip": {
+          "role": "robot_ability",
+          "size": 2869684065,
+          "sha256": "27703004982242945bff2257eba47440405701be480b0bc9b1015b201a2d119e"
+        },
+        "franka-smolvla-model.zip": {
+          "role": "model",
+          "size": 3252905012,
+          "sha256": "9e5893ff53c3777b8320b1c91aab8155a451cc9aaeaa1bf77e33fd8bdebe77af"
+        },
+        "vla-manipulation.zip": {
+          "role": "robot_skill",
+          "size": 11595,
+          "sha256": "1388f64159d6a671ce17728830fe644faacca3eeb24b8b503d57926b2ed9935c"
+        }
+      }
+    },
+    "isaac": {
+      "version": "0.1.0",
+      "channel": "oss,github",
+      "github_tag": "ext-isaac-v0.1.0",
+      "note": "六个产物均小于 GitHub 2 GiB 单资产上限，可完整镜像。",
+      "artifacts": {
+        "behavior-runtime-0.1.18.zip": {
+          "role": "runtime",
+          "size": 23104789,
+          "sha256": "f8eb838ceb2d43c2d208c5efd3bfb514e3a1aa325b8ceacf2b3132f9fa0b6672"
+        },
+        "behavior-scenes-3.9.2.zip": {
+          "role": "scene_catalog",
+          "size": 1341,
+          "sha256": "66391c9ed6607cb8878da1d4c51e54e3e839fe6a370ee80a0bfdd467557aed12"
+        },
+        "r1pro-behavior-robot-0.1.1.zip": {
+          "role": "robot_base",
+          "size": 52234354,
+          "sha256": "c48b5958e3f7c16c0ee60bc55f71de3de9898d970f9f66e9ab95cc830a078023"
+        },
+        "r1pro-behavior-ability-0.1.3.zip": {
+          "role": "robot_ability",
+          "size": 23814333,
+          "sha256": "cd991960b20631badde0bc523d64947ebe3972f0b193029ad384486fb50e5762"
+        },
+        "r1pro-radio-model-0.1.1.zip": {
+          "role": "model",
+          "size": 1155,
+          "sha256": "7fd380128205b2ed1acf9ef41d31ce436f3ae14250886a7a830a10e1646555fc"
+        },
+        "vla-manipulation-0.1.10.zip": {
+          "role": "robot_skill",
+          "size": 11595,
+          "sha256": "1388f64159d6a671ce17728830fe644faacca3eeb24b8b503d57926b2ed9935c"
+        }
+      }
+    }
+  },
+  "updated": "2026-10-05 15:05:00"
 }

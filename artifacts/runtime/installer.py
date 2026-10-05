@@ -42,9 +42,15 @@ sys.dont_write_bytecode = True  # Imports must not mutate the hash-verified payl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components
 from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form
+import extension
 
 INSTALL_LOG = None
 PROGRESS = None
+
+# Extension manifests live under ``<base>/extensions/<id>/``. The base defaults to
+# the same public channel as the bootstrap; SEMANTIC_DOWNLOAD_BASE or an explicit
+# --extension-base-url override it, and --extension-manifest is fully offline.
+DEFAULT_EXTENSION_BASE = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
 
 
 def digest(path):
@@ -567,6 +573,45 @@ def check_platform(manifest, musl=False, musl_runtime=None):
         raise RuntimeError(f'本制品 Python/动态依赖需要 glibc >= {minimum}；musl/Alpine 请显式使用 --musl')
 
 
+def install_extension(root, a):
+    """Install the optional extension scene named by ``--extension``.
+
+    Runs once the base environment is ready. The manifest comes from the channel
+    unless ``--extension-manifest`` names a local file; artifacts come from
+    ``--extension-package-dir`` when offline. Probes warn but never block, so a
+    "install the base first, add the engine image later" order stays possible.
+    """
+    identifier = a.extension
+    source = getattr(a, 'extension_source', None) or 'oss'
+    manifest_file = getattr(a, 'extension_manifest', None)
+    if manifest_file:
+        manifest = extension.load_manifest_file(manifest_file, source=source)
+    else:
+        base = (getattr(a, 'extension_base_url', None) or os.environ.get('SEMANTIC_DOWNLOAD_BASE')
+                or DEFAULT_EXTENSION_BASE)
+        manifest = extension.load_manifest(base, identifier, source=source)
+    if manifest['id'] != identifier:
+        raise ValueError('扩展清单 id({}) 与请求的 ({}) 不一致'.format(manifest['id'], identifier))
+    dry_run = getattr(a, 'extension_dry_run', False)
+    package_dir = getattr(a, 'extension_package_dir', None)
+    workspace = root/'tmp'/f'extension-{manifest["id"]}'
+    if not package_dir and not dry_run:
+        workspace.mkdir(parents=True, exist_ok=True)
+    print(f'扩展场景 {manifest["id"]}: {manifest["title"]} ({manifest["version"]})')
+    for name, state, detail in extension.probe_rows(manifest):
+        print(f'{state}\t{name}\t{detail}')
+    for port, detail in extension.port_warnings(manifest):
+        print(f'warn\t端口 {port}\t{detail}')
+    if getattr(a, 'no_start', False) and not dry_run:
+        print('note\tServer\t--no-start 未启动 Server; 组件安装会因服务未就绪而失败')
+    return extension.install(manifest, root, project=getattr(a, 'extension_project', None),
+                             robot=getattr(a, 'extension_robot', None),
+                             asset_root=getattr(a, 'extension_asset_root', None),
+                             accept_license=getattr(a, 'accept_license', None),
+                             package_dir=package_dir, workspace=workspace,
+                             replace=True, dry_run=dry_run)
+
+
 def install(a):
     global INSTALL_LOG, PROGRESS
     payload = a.payload.resolve()
@@ -741,6 +786,8 @@ def install(a):
             start(root, quiet=True)
         progress.finish()
         welcome(root, state, not a.no_start, desktop_message)
+        if getattr(a, 'extension', None):
+            install_extension(root, a)
 
 
 def install_manager(root, payload):
@@ -750,7 +797,7 @@ def install_manager(root, payload):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             raise ValueError('管理目录异常: '+str(directory))
         directory.mkdir(exist_ok=True, mode=0o700)
-    for name in ('installer.py', 'install_support.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):
+    for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):
         target = manager/name
         if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
             raise ValueError('管理文件链接异常: '+str(target))
@@ -931,6 +978,16 @@ def main():
     p.add_argument('--musl', action='store_true', help='Use the optional musl release')
     p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')
     p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])
+    p.add_argument('--extension', help='安装完成后安装的扩展场景 id (libero / isaac)')
+    p.add_argument('--accept-license', dest='accept_license', help='确认扩展 Runtime 包声明的许可')
+    p.add_argument('--extension-source', dest='extension_source', choices=['oss', 'github'], default='oss', help='扩展产物通道: oss 走 OSS, github 走 GitHub Releases (超限产物自动回退 OSS)')
+    p.add_argument('--extension-base-url', dest='extension_base_url', help='扩展清单所在通道基址；缺省取 SEMANTIC_DOWNLOAD_BASE 或内置通道')
+    p.add_argument('--extension-manifest', dest='extension_manifest', type=Path, help='离线清单文件；给出后不再联网解析版本')
+    p.add_argument('--extension-package-dir', dest='extension_package_dir', type=Path, help='离线产物目录；六个产物齐备即完全离线')
+    p.add_argument('--extension-project', dest='extension_project', help='扩展组件要安装到的 Project ID')
+    p.add_argument('--extension-robot', dest='extension_robot', help='robot_required 组件要安装到的 Robot ID')
+    p.add_argument('--extension-asset-root', dest='extension_asset_root', help='扩展 Runtime 的原生资产目录')
+    p.add_argument('--extension-dry-run', dest='extension_dry_run', action='store_true', help='只打印扩展安装将执行的命令')
     def presentation_options(p):
         network = p.add_mutually_exclusive_group()
         network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Web 监听所有 IPv4 网卡，仅对可信局域网开放防火墙')
@@ -969,7 +1026,11 @@ def main():
     p.add_argument('--yes', action='store_true', help='uninstall: 跳过确认')
     p.add_argument('--purge', action='store_true', help='uninstall: 删除全部实例数据')
     p.add_argument('--dry-run', action='store_true', help='uninstall: 只显示计划')
+    extension.register(commands)
     a = parser.parse_args()
+    handler = getattr(a, 'extension', None)
+    if handler:
+        sys.exit(handler(a))
     if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):
         parser.error('--yes/--purge/--dry-run 仅用于 uninstall')
     if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):

@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "id": "libero",
+  "title": "LIBERO 仿真场景 (robosuite 1.4 + Franka + SmolVLA)",
+  "version": "0.1.0",
+  "compatible_base": ">=0.5.0",
+  "profile": "libero-robosuite-1.4",
+  "note": "模板文件: url 为相对路径 (由 --source/base 拼接), sha256 与 size 由 artifacts/build_extension.py 从真实产物回填 (见同目录 README.md)。当前 size 取自 2026-09 实测值。三个超过 GitHub 2 GiB 单资产上限的产物标记 hosts=oss, 走 GitHub 通道时自动回退 OSS。",
+  "runtime": {
+    "installation_id": "local-libero-robosuite-1.4",
+    "endpoint": "http://127.0.0.1:8092",
+    "pack": {
+      "url": "semantic-libero-robosuite-1.4-0.4.0-dev.0.runtime.tar.zst",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 1932735283,
+      "license": "LIBERO"
+    }
+  },
+  "components": [
+    {
+      "role": "scene_catalog",
+      "id": "libero-scenes",
+      "url": "libero-scenes.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 250609664,
+      "previews": {
+        "default_scenes": ["libero-spatial-0", "libero-spatial-7"],
+        "note": "包内 130 任务 / 6500 初态; 不限定 --scene 会对全部初态逐一出图"
+      }
+    },
+    {
+      "role": "robot_base",
+      "id": "franka-libero-robot",
+      "url": "franka-libero-robot.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 3113851289,
+      "hosts": ["oss"]
+    },
+    {
+      "role": "robot_ability",
+      "id": "franka-ability",
+      "url": "franka-ability.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 2899102924,
+      "project_default": true,
+      "hosts": ["oss"]
+    },
+    {
+      "role": "model",
+      "id": "franka-smolvla-model",
+      "url": "franka-smolvla-model.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 3435973836,
+      "project_default": true,
+      "hosts": ["oss"]
+    },
+    {
+      "role": "robot_skill",
+      "id": "vla-manipulation",
+      "url": "vla-manipulation.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 11264,
+      "robot_required": true
+    }
+  ],
+  "host_requirements": {
+    "gpu": "optional"
+  },
+  "ports": [[18100, 18199]],
+  "prerequisites": [
+    { "kind": "user_action", "text": "模型权重可从 HuggingFace 镜像下载 (HF_ENDPOINT=https://hf-mirror.com); 代理与镜像二者取一即可" },
+    { "kind": "user_action", "text": "场景落库只注册到场景目录, 不会自动进项目; 装完需到 Web 添加兼容场景" },
+    { "kind": "user_action", "text": "不绑定 Ability 与模型, Robot 起不来 (Ability 停在 Standby, Pilot offline)" }
+  ],
+  "post_install": [
+    { "kind": "user_action", "text": "场景配置 → 添加兼容场景: 安装只把场景注册到 scene-catalogs, 不会自动进项目" },
+    { "kind": "user_action", "text": "项目内容 → 机器人与模型配置: 为 franka_panda 绑定 Ability 与模型, 否则 Ability 停在 Standby" }
+  ],
+  "license": "LIBERO"
+}

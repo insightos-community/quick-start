@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Manage an installed native Windows instance; no network download is needed.
 
 The payload assembler/installer will create the ownership marker and state.

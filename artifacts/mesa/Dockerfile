@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 FROM python:3.13-alpine3.23@sha256:75f27d686432419c9d42420b2b9ef605868c7a0682a6be10a6601fad46c2df01
 RUN apk add --no-cache build-base cmake meson ninja linux-headers pkgconf \
     llvm21-dev clang21-dev libclc-dev spirv-llvm-translator-dev spirv-tools-dev \

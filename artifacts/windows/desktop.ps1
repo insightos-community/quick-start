@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Version)
 $ErrorActionPreference = 'Stop'
 trap { [Console]::Error.WriteLine($_.ToString()+[Environment]::NewLine+$_.InvocationInfo.PositionMessage+[Environment]::NewLine+$_.ScriptStackTrace); exit 1 }

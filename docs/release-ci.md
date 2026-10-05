@@ -67,3 +67,59 @@ gh workflow run musl-release.yml --ref musl-vMAJOR.MINOR.PATCH-REVISION
 Published assets and tags are immutable. For an already published version, use its
 existing release; a changed package requires a new tag. To mirror verified releases
 to OSS, see [the four-platform mirror commands](../artifacts/site/README.md#reproduce-an-oss-release-mirror).
+
+## 扩展场景
+
+预编译入口装基础环境之后，按 `--extension <id>` 触发扩展场景安装（`semanticctl extension install`）。
+扩展场景（LIBERO 与 BEHAVIOR/Isaac）的旁挂设计与实施路径见
+[扩展场景的安装设计](extensions.md)：独立清单 + `semanticctl extension` 子命令 + 独立通道，
+基础制品保持精简与不可变。
+
+- **LIBERO**：六个可分发产物，`extensions/libero/extension.json`。三个超过 GitHub 2 GiB
+  单资产上限的产物（运行支持、Ability、模型）仅走 OSS。
+- **BEHAVIOR/Isaac**：`extensions/isaac/extension.json`。引擎镜像 `behavior:v3.9.2`（约 31 GB）与
+  数据集（数十 GB）**不在任何 Release 里**，清单只登记与探测（`prerequisites` 的 `probe`）——
+  发布通道里只有 Runtime / 场景 / 运行支持 / Ability / 模型 / Skill 六个小产物。
+
+### 通道布局
+
+OSS 为主通道，GitHub Releases 为镜像。清单与版本指针统一由 OSS 提供；清单里每个产物的
+`url` 是相对路径，安装时按所选通道拼接：
+
+```text
+OSS:    <oss>/extensions/<id>/stable.json               # 可变指针
+        <oss>/extensions/<id>/<version>/extension.json  # 不可变清单
+        <oss>/extensions/<id>/<version>/<artifact>      # 不可变产物
+GitHub: tag ext-<id>-v<version> 的 Release              # 不可变镜像（资产平铺，无子目录）
+```
+
+选择通道用 `--extension-source oss|github`（默认 `oss`）。GitHub 单个 Release 资产的硬上限是
+**2 GiB**；清单用 `hosts: ["oss"]` 标记超限产物，走 GitHub 通道时安装器**自动回退 OSS** 下载
+这些产物，其余仍从 GitHub 取。因此 GitHub 通道能装，但不是离线通道——离线用
+`--extension-package-dir`（六个产物 + 清单同目录）。
+
+### 发布工具
+
+构建机上先产出六个产物，再两步发布（细节见各扩展的 `README.md`）：
+
+```bash
+python3 artifacts/build_extension.py --id <id> --version <version> \
+  --package-dir <产物目录> --output <仓库外的 staging>
+python3 artifacts/publish_extension.py --id <id> --version <version> \
+  --staging <staging> --channel oss,github
+```
+
+`build_extension.py` 逐产物回填 `sha256`/`size`、为超 2 GiB 产物加 `hosts: ["oss"]`、写出
+staging 与 `stable.json`，并用 `extension.parse` 自检。`publish_extension.py` 先上传不可变的
+`extensions/<id>/<version>/`、全部校验通过后再提升 `extensions/<id>/stable.json`，随后创建
+GitHub Release（`extension.json`、`SHA256SUMS`、`release.json` 与可镜像产物）。扩展版本与
+GitHub tag 固化在 `repo-versions.json` 的 `extensions` 段。
+
+许可已获授权并回填：LIBERO 记为 `LIBERO`，BEHAVIOR 记为 `behavior-assets`；安装器据此自动补
+`--accept-license`，装带 `license` 的扩展不再需要人工指定。
+
+### CI
+
+`.github/workflows/extension-release.yml`（手动触发）串起：清单与工具单测 → 回填与 staging →
+离线冒烟安装 → 发布 OSS → 校验通道摘要 → 建 GitHub Release。构建机需已产出六个产物并把
+OSS 凭据放进 `OSS_ENV` secret。引擎镜像、授权数据集与 π0.5 策略服务**不进 CI**，仍由人准备。

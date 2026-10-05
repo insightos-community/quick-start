@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Publish a Windows release only after the complete offline project smoke passes."""
 import hashlib
 import json

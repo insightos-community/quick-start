@@ -336,7 +336,7 @@ def build(a):
     archive(stage, payload/pack_name)
     config = yaml.safe_load((sources/'Semantic-Framework/configs/semantic-server.yaml').read_text())
     write(payload/'defaults/server.json', config)
-    for name in ('installer.py', 'install_support.py', 'uninstall.py'):
+    for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py'):
         copy(HERE.parent/'runtime'/name, payload/name)
     for name in ('ios.png', 'banner.json'):
         copy(HERE.parent/'assets'/name, payload/'assets'/name)

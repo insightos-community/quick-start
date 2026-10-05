@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 # Runs from the user's temporary directory after the installed Python exits.
 param(
     [Parameter(Mandatory=$true)][string]$Root,

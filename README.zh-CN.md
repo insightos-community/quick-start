@@ -6,7 +6,7 @@
 另提供 **macOS Apple Silicon / macOS 15.5+ 原生安装包预览版**，见[安装方法与验证范围](#macos-原生安装包apple-silicon-预览版)。真机图形渲染仍待验收。
 > R1 Pro 旧业务模型现已通过清单锁定的资产仓库提供 Git LFS 下载。第三方来源声明见[发布范围](PUBLICATION.md)。组件与整包通过 GitHub Releases 发布，下载时保留第三方来源和许可声明。
 
-🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 13 个组件仓库，本身不是 Server。
+🚀 构建并运行 Semantic：连接 Web Studio、调度服务、机器人 Skill、Ability 与仿真的开发工作区。本仓库协调 14 个组件仓库，本身不是 Server。
 
 ### 应用图标与本地卸载
 
@@ -112,6 +112,45 @@ python3 semantic_installer.py --list
 
 根目录安装脚本位于当前 `main`，已有 `v0.1.0` 源码 Tag 保持不变。源码构建下载模型后仍需完成 Bundle 激活与 Skill 发布。
 
+### 安装扩展场景（LIBERO / BEHAVIOR）
+
+上面的基础安装只准备基础工作区。仿真场景是**独立发布、旁挂于不可变基础制品之外**的产物，由安装器在基础环境装好之后按需拉取。目前有两个场景：
+
+| 场景 | `--extension` | 内容 |
+|---|---|---|
+| LIBERO | `libero` | robosuite 1.4 + Franka + SmolVLA；六个产物合计约 11.5 GB |
+| BEHAVIOR（Isaac Sim） | `isaac` | OmniGibson 3.9.2 + R1 Pro + π0.5；六个产物合计约 99 MB（最大约 52 MB），另需 31 GB 引擎镜像与自行取得的授权数据集 |
+
+在同一个入口脚本上加 `--extension <id>`，基础环境装完后自动继续：
+
+```bash
+# LIBERO
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --extension libero --extension-project <项目ID> --install-system-deps
+
+# BEHAVIOR（Isaac）
+curl -fsSL https://semantic.insightos.cn/install.sh | bash -s -- \
+  --extension isaac --extension-source github --extension-project <项目ID> \
+  --extension-asset-root /数据集上一级目录 --install-system-deps
+```
+
+参数说明：
+
+- `--extension-source oss|github` 选通道（默认 `oss`）。清单与版本指针统一从 OSS 取，GitHub Release 镜像产物；LIBERO 有三个产物超过 GitHub 单个资产 2 GiB 上限，会**自动回退 OSS**，因此 LIBERO 走 GitHub 通道时离线不可用。
+- `--extension-base-url <URL>` 换通道；`--extension-package-dir <目录>` 用「六个产物 + 清单」完全离线安装；`--extension-manifest <文件>` 用本地清单。
+- `--extension-project <ID>` 指定目标 Project（缺省用当前用户的默认项目）；组件声明 `robot_required` 时可传 `--extension-robot <ID>`。
+- `--extension-asset-root <绝对路径>` 是 BEHAVIOR Runtime 的硬要求：宿主绝对路径，其上一级目录需含 `2026-challenge-task-instances/`。
+- 扩展 Runtime 包声明的 `license` 由清单自动带上，也可显式传 `--accept-license LIBERO` / `--accept-license behavior-assets`。
+- 安装顺序固定：Runtime → 场景 → 运行支持 → Ability → 模型 → Skill；`--extension-dry-run` 只打印命令计划、不改动现场。
+
+有些前提装不进来，安装器会探测并提示（探测失败只告警、不阻断）：
+
+- BEHAVIOR 需要本地 Docker 已导入 `behavior:v3.9.2` 引擎镜像（31.1 GB）、授权数据集、LLM 密钥，以及在机器人四件套之前启动的 π0.5 策略服务（端口 20080）；需要独显，预览至少 6144 MiB 空闲显存。
+- 端口：BEHAVIOR 用 Runtime `18090`、Ability `18100-18199`、策略服务 `20080`；LIBERO 用 `18100-18199`，同机并存要分配不同端口段。
+- 装完要到 Web「场景配置 → 添加兼容场景」，并把 Ability 与模型绑定到机器人——安装只把场景注册到场景目录。
+
+安装后可用管理命令：`semanticctl extension list|show|verify|install|remove`（可加 `--source oss|github`）。详细设计见[扩展场景设计](docs/extensions.md)，各场景说明见 [`extensions/libero`](extensions/libero/README.md) 与 [`extensions/isaac`](extensions/isaac/README.md)；源码编译路径见 TUI 阶段 8。
+
 ## 🛠 源码构建
 
 步骤 2.3 的场景资产仍通过 Git LFS 拉取；第三方 Wheel 优先复用已校验的本地缓存，
@@ -165,7 +204,7 @@ python3 semantic_installer.py
 
 ## 版本与日常使用
 
-**推荐构建版本：`v0.1.0`。** 请先 `git checkout v0.1.0`，再运行安装器进行构建。该 Tag 中的 [repo-versions.json](https://github.com/insightos-community/quick-start/blob/v0.1.0/repo-versions.json) 是可用、已验证的组件版本组合，固定了全部 13 个仓库的 Tag 与提交 SHA。已有克隆请先执行 `git fetch origin --tags`。
+**推荐构建版本：`v0.1.0`。** 请先 `git checkout v0.1.0`，再运行安装器进行构建。本仓库的 [repo-versions.json](repo-versions.json) 是可用、已验证的组件版本组合，固定了全部 14 个仓库的修订版本。已有克隆请先执行 `git fetch origin --tags`。
 
 发布及后续镜像同步均基于已验证的维护版本，不跟随上游或默认分支的领先版本。请使用 `repo-versions.json` 固定的 Tag 与提交，详见[发布策略](maintenance/release-policy.md)和 [v0.1.3 记录](maintenance/v0.1.3.md)。
 

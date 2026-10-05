@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Assemble a Windows x64 offline installer from pinned native inputs."""
 import argparse
 import importlib.util
@@ -329,7 +331,7 @@ def build(a):
     archive(stage, payload/pack_name)
     config = yaml.safe_load((sources/'Semantic-Framework/configs/semantic-server.yaml').read_text(encoding='utf-8'))
     write(payload/'defaults/server.json', config)
-    for name in ('installer.py', 'install_support.py'):
+    for name in ('installer.py', 'install_support.py', 'extension.py'):
         copy(HERE.parent/'runtime'/name, payload/name)
     for name in ('ios.png', 'banner.json'):
         copy(HERE.parent/'assets'/name, payload/'assets'/name)

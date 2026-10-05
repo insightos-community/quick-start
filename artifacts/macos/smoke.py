@@ -1,3 +1,5 @@
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 """Verify the shared native macOS Python environment with real computations."""
 from __future__ import annotations
 

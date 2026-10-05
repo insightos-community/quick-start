@@ -184,7 +184,7 @@ class ExperienceTests(unittest.TestCase):
     def test_manager_update_preserves_business_release(self):
         payload = self.home/'payload'
         payload.mkdir()
-        for name in ('installer.py', 'install_support.py', 'uninstall.py'):
+        for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py'):
             shutil.copyfile(ROOT/'artifacts/runtime'/name, payload/name)
         shutil.copytree(ROOT/'artifacts/assets', payload/'assets')
         original = self.root/'original-release'
@@ -197,7 +197,7 @@ class ExperienceTests(unittest.TestCase):
     def test_standalone_installer_does_not_add_unlisted_bytecode(self):
         payload = self.home/'payload'
         payload.mkdir()
-        for name in ('installer.py', 'install_support.py', 'uninstall.py'):
+        for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py'):
             shutil.copyfile(ROOT/'artifacts/runtime'/name, payload/name)
         (payload/'release.json').write_text(json.dumps(dict(version='0.5.0-dev.test', minimum_glibc='2.28')))
         records = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in payload.iterdir()}

@@ -488,9 +488,15 @@ sys.dont_write_bytecode = True  # Imports must not mutate the hash-verified payl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components
 from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form
+import extension
 
 INSTALL_LOG = None
 PROGRESS = None
+
+# Extension manifests live under ``<base>/extensions/<id>/``. The base defaults to
+# the same public channel as the bootstrap; SEMANTIC_DOWNLOAD_BASE or an explicit
+# --extension-base-url override it, and --extension-manifest is fully offline.
+DEFAULT_EXTENSION_BASE = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
 
 
 def digest(path):
@@ -1013,6 +1019,45 @@ def check_platform(manifest, musl=False, musl_runtime=None):
         raise RuntimeError(f'Python/dynamic dependencies in this artifact require glibc >= {minimum}; use --musl explicitly on musl/Alpine')
 
 
+def install_extension(root, a):
+    """Install the optional extension scene named by ``--extension``.
+
+    Runs once the base environment is ready. The manifest comes from the channel
+    unless ``--extension-manifest`` names a local file; artifacts come from
+    ``--extension-package-dir`` when offline. Probes warn but never block, so a
+    "install the base first, add the engine image later" order stays possible.
+    """
+    identifier = a.extension
+    source = getattr(a, 'extension_source', None) or 'oss'
+    manifest_file = getattr(a, 'extension_manifest', None)
+    if manifest_file:
+        manifest = extension.load_manifest_file(manifest_file, source=source)
+    else:
+        base = (getattr(a, 'extension_base_url', None) or os.environ.get('SEMANTIC_DOWNLOAD_BASE')
+                or DEFAULT_EXTENSION_BASE)
+        manifest = extension.load_manifest(base, identifier, source=source)
+    if manifest['id'] != identifier:
+        raise ValueError('ExtensionManifest id ({}) does not match the requested id ({})'.format(manifest['id'], identifier))
+    dry_run = getattr(a, 'extension_dry_run', False)
+    package_dir = getattr(a, 'extension_package_dir', None)
+    workspace = root/'tmp'/f'extension-{manifest["id"]}'
+    if not package_dir and not dry_run:
+        workspace.mkdir(parents=True, exist_ok=True)
+    print(f'Extension scene {manifest["id"]}: {manifest["title"]} ({manifest["version"]})')
+    for name, state, detail in extension.probe_rows(manifest):
+        print(f'{state}\t{name}\t{detail}')
+    for port, detail in extension.port_warnings(manifest):
+        print(f'warn\tPort {port}\t{detail}')
+    if getattr(a, 'no_start', False) and not dry_run:
+        print('note\tServer\t--no-start left the Server stopped; component installs fail until it runs')
+    return extension.install(manifest, root, project=getattr(a, 'extension_project', None),
+                             robot=getattr(a, 'extension_robot', None),
+                             asset_root=getattr(a, 'extension_asset_root', None),
+                             accept_license=getattr(a, 'accept_license', None),
+                             package_dir=package_dir, workspace=workspace,
+                             replace=True, dry_run=dry_run)
+
+
 def install(a):
     global INSTALL_LOG, PROGRESS
     payload = a.payload.resolve()
@@ -1187,6 +1232,8 @@ def install(a):
             start(root, quiet=True)
         progress.finish()
         welcome(root, state, not a.no_start, desktop_message)
+        if getattr(a, 'extension', None):
+            install_extension(root, a)
 
 
 def install_manager(root, payload):
@@ -1196,7 +1243,7 @@ def install_manager(root, payload):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             raise ValueError('Invalid management directory: '+str(directory))
         directory.mkdir(exist_ok=True, mode=0o700)
-    for name in ('installer.py', 'install_support.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):
+    for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):
         target = manager/name
         if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
             raise ValueError('Unsafe management file links: '+str(target))
@@ -1377,6 +1424,16 @@ def main():
     p.add_argument('--musl', action='store_true', help='Use the optional musl release')
     p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')
     p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])
+    p.add_argument('--extension', help='Extension scene id to install after the base environment (libero / isaac)')
+    p.add_argument('--accept-license', dest='accept_license', help='Accept the license declared by the extension Runtime pack')
+    p.add_argument('--extension-source', dest='extension_source', choices=['oss', 'github'], default='oss', help='Extension artifact channel: oss uses OSS, github uses GitHub Releases (oversized artifacts fall back to OSS)')
+    p.add_argument('--extension-base-url', dest='extension_base_url', help='Channel base for the extension manifest; defaults to SEMANTIC_DOWNLOAD_BASE or the built-in channel')
+    p.add_argument('--extension-manifest', dest='extension_manifest', type=Path, help='Offline manifest file; skips network version resolution')
+    p.add_argument('--extension-package-dir', dest='extension_package_dir', type=Path, help='Offline artifact directory; all six artifacts make it fully offline')
+    p.add_argument('--extension-project', dest='extension_project', help='Project ID the extension components install into')
+    p.add_argument('--extension-robot', dest='extension_robot', help='Robot ID that robot_required components install onto')
+    p.add_argument('--extension-asset-root', dest='extension_asset_root', help='Native asset root for the extension Runtime')
+    p.add_argument('--extension-dry-run', dest='extension_dry_run', action='store_true', help='Print the extension install commands without running them')
     def presentation_options(p):
         network = p.add_mutually_exclusive_group()
         network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Listen on all IPv4 interfaces; allow only trusted LAN traffic through the firewall')
@@ -1415,7 +1472,11 @@ def main():
     p.add_argument('--yes', action='store_true', help='uninstall: skip confirmation')
     p.add_argument('--purge', action='store_true', help='uninstall: delete all instance data')
     p.add_argument('--dry-run', action='store_true', help='uninstall: show the plan only')
+    extension.register(commands)
     a = parser.parse_args()
+    handler = getattr(a, 'extension', None)
+    if handler:
+        sys.exit(handler(a))
     if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):
         parser.error('--yes/--purge/--dry-run apply only to uninstall')
     if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):
@@ -2011,6 +2072,777 @@ def export_components(path, values):
     with os.fdopen(fd, 'w', encoding='utf-8') as stream:
         stream.write(text)
 SEMANTIC_MANAGER_SOURCE
+  cat > "$1/extension.py" <<'SEMANTIC_MANAGER_SOURCE'
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
+"""Extension scene manifest: parse, verify and list what an extension needs.
+
+An extension scene (LIBERO today, Isaac later) is an optional side-payload installed
+*after* the base environment. It is never folded into the immutable base release:
+the base payload is an exact verified file set, and the extension artifacts are an
+order of magnitude larger (LIBERO is about 10.4 GB against 345 MiB).
+
+See docs/extensions.md for the full design.
+
+The manifest carries one role per artifact. A role decides where an artifact lands:
+
+    runtime        local ``semantic install runtime --pack`` execution
+    scene_catalog  Server component install
+    robot_base     Server component install
+    robot_ability  Server component install
+    model          Server component install
+    robot_skill    Server component install
+
+Runtime goes first and the components follow in a fixed order: the Bundle is the
+base that ability, model and skill are inserted into.
+
+This module is deliberately dependency-free apart from the standard library and
+``install_support``, and it must not import ``installer``: ``installer`` imports it.
+"""
+
+import hashlib
+import json
+import shlex
+import socket
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from install_support import Progress
+
+SCHEMA_VERSION = 1
+
+# One artifact may legitimately be huge; keep a ceiling so a bad manifest cannot
+# fill the disk before the digest check runs.
+ARTIFACT_LIMIT = 12 * 1024**3
+
+COMPONENT_ORDER = ('scene_catalog', 'robot_base', 'robot_ability', 'model', 'robot_skill')
+ROLES = ('runtime', *COMPONENT_ORDER)
+# Roles whose bundle is the base the remaining components are inserted into.
+BASE_ROLES = ('robot_base',)
+PREREQUISITE_KINDS = ('probe', 'user_action')
+
+MANIFEST_NAME = 'extension.json'
+STABLE_POINTER = 'stable.json'
+
+# Two channels carry the same immutable artifacts. The manifest and its stable
+# pointer always come from the OSS base; a relative artifact URL is resolved
+# against the selected channel so one manifest serves both.
+SOURCES = ('oss', 'github')
+DEFAULT_OSS_BASE = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'
+DEFAULT_GITHUB_REPO = 'insightos-community/quick-start'
+GITHUB_DOWNLOAD = 'https://github.com/{repo}/releases/download/{tag}/'
+# GitHub rejects a single release asset at or above 2 GiB. Artifacts over the
+# limit are marked ``hosts: ["oss"]`` and fall back to OSS on the GitHub channel.
+GITHUB_ASSET_LIMIT = 2 * 1024**3
+
+
+class ManifestError(ValueError):
+    """A manifest is unusable; the message names the offending field."""
+
+
+def digest(path):
+    value = hashlib.sha256()
+    with Path(path).open('rb') as f:
+        while block := f.read(1024 * 1024):
+            value.update(block)
+    return value.hexdigest()
+
+
+def _text(value, field):
+    if not isinstance(value, str) or not value.strip():
+        raise ManifestError(f'{field} must be a non-empty string')
+    return value
+
+
+def _checksum(record, field):
+    if not isinstance(record, dict):
+        raise ManifestError(f'{field} must be an object')
+    value = _text(record.get('sha256'), f'{field}.sha256').lower()
+    if len(value) != 64 or any(c not in '0123456789abcdef' for c in value):
+        raise ManifestError(f'{field}.sha256 is not a valid digest')
+    size = record.get('size')
+    if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+        raise ManifestError(f'{field}.size must be a non-zero integer')
+    if size > ARTIFACT_LIMIT:
+        raise ManifestError(f'{field}.size exceeds the limit')
+    return value, size
+
+
+def _artifact(record, field):
+    source = _text(record.get('url'), f'{field}.url')
+    scheme = urllib.parse.urlsplit(source).scheme
+    if scheme and scheme not in ('https', 'http'):
+        raise ManifestError(f'{field}.url supports http(s) or a relative path')
+    checksum, size = _checksum(record, field)
+    artifact = {'url': source, 'sha256': checksum, 'size': size}
+    if 'license' in record:
+        artifact['license'] = _text(record['license'], f'{field}.license')
+    hosts = _hosts(record, field)
+    if hosts:
+        artifact['hosts'] = hosts
+    return artifact
+
+
+def _hosts(record, field):
+    """An artifact's allowed channels; ``None`` means every channel serves it.
+
+    ``hosts: ["oss"]`` (or the shorthand ``github: false``) marks an artifact the
+    GitHub mirror must not carry, so the installer falls back to OSS.
+    """
+    value = record.get('hosts')
+    if value is None:
+        github = record.get('github')
+        if github is None:
+            return None
+        if not isinstance(github, bool):
+            raise ManifestError(f'{field}.github must be a boolean')
+        return None if github else ['oss']
+    if not isinstance(value, list) or not value:
+        raise ManifestError(f'{field}.hosts must be a non-empty array')
+    hosts = []
+    for item in value:
+        name = _text(item, f'{field}.hosts')
+        if name not in SOURCES:
+            raise ManifestError(f'{field}.hosts must be oss or github')
+        if name not in hosts:
+            hosts.append(name)
+    return hosts
+
+
+def parse(text, source=None, base=None, repo=None):
+    """Validate a manifest and return it with the install order applied.
+
+    ``source``/``base`` are optional: when given, each artifact URL is bound to
+    the requested channel (``resolve_sources``); absolute URLs are preserved.
+    """
+    try:
+        manifest = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ManifestError(f'The manifest is not valid JSON: {error}') from None
+    if not isinstance(manifest, dict):
+        raise ManifestError('The manifest must be a JSON object')
+
+    version = manifest.get('schema_version')
+    if version != SCHEMA_VERSION:
+        raise ManifestError(f'Manifest schema_version must be {SCHEMA_VERSION}')
+
+    identifier = _text(manifest.get('id'), 'id')
+    title = _text(manifest.get('title'), 'title')
+    if not all(c.islower() or c.isdigit() or c == '-' for c in identifier) or identifier.startswith('-'):
+        raise ManifestError('id may only contain lowercase letters, digits and hyphens')
+    compatible = manifest.get('compatible_base')
+    if not isinstance(compatible, str) or not compatible.strip():
+        raise ManifestError('compatible_base must be a non-empty string')
+
+    runtime = manifest.get('runtime')
+    if not isinstance(runtime, dict):
+        raise ManifestError('the runtime section is missing')
+    endpoints = runtime.get('endpoint')
+    if not isinstance(endpoints, str) or not endpoints.startswith(('http://', 'https://')):
+        raise ManifestError('runtime.endpoint must be an http(s) address')
+    pack = _artifact(runtime.get('pack') or {}, 'runtime.pack')
+    installation_id = _text(runtime.get('installation_id'), 'runtime.installation_id')
+    if installation_id in ('native-mujoco', 'base'):
+        raise ManifestError('runtime.installation_id may not reuse a base Runtime identifier')
+    content = _content(runtime.get('content'))
+
+    components, seen, roles = [], set(), set()
+    raw_components = manifest.get('components')
+    if not isinstance(raw_components, list) or not raw_components:
+        raise ManifestError('components must be a non-empty array')
+    for index, record in enumerate(raw_components):
+        field = f'components[{index}]'
+        role = _text(record.get('role'), f'{field}.role')
+        if role not in ROLES or role == 'runtime':
+            raise ManifestError(f'{field}.role is not one of the allowed values: {" ".join(ROLES)}')
+        identifier_text = _text(record.get('id'), f'{field}.id')
+        component = dict(_artifact(record, field), role=role, id=identifier_text,
+                         previews=_previews(record.get('previews'), f'{field}.previews'),
+                         project_default=_flag(record.get('project_default'), f'{field}.project_default'),
+                         robot_required=_flag(record.get('robot_required'), f'{field}.robot_required'))
+        key = (role, identifier_text)
+        if key in seen:
+            raise ManifestError(f'{field} is declared more than once: {role}/{identifier_text}')
+        seen.add(key)
+        roles.add(role)
+        components.append(component)
+    missing = [role for role in BASE_ROLES if role not in roles]
+    if missing:
+        raise ManifestError('components is missing the base artifact: ' + ', '.join(missing))
+    components.sort(key=lambda item: COMPONENT_ORDER.index(item['role']))
+
+    requirements = manifest.get('host_requirements') or {}
+    if not isinstance(requirements, dict):
+        raise ManifestError('host_requirements must be an object')
+    gpu = requirements.get('gpu', 'optional')
+    if gpu not in ('required', 'optional', 'forbidden'):
+        raise ManifestError('host_requirements.gpu must be required, optional or forbidden')
+    disk_gib = requirements.get('disk_gib')
+    if disk_gib is not None and (not isinstance(disk_gib, int) or isinstance(disk_gib, bool) or disk_gib <= 0):
+        raise ManifestError('host_requirements.disk_gib must be a positive integer')
+
+    prerequisites = _steps(manifest.get('prerequisites'), 'prerequisites', probes=True)
+    post_install = _steps(manifest.get('post_install'), 'post_install')
+
+    ports = manifest.get('ports') or []
+    if not isinstance(ports, list) or any(
+            not isinstance(item, list) or len(item) != 2
+            or any(not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535 for port in item)
+            or item[1] < item[0] for item in ports):
+        raise ManifestError('A port range must be a [start, end] integer pair in valid order')
+
+    license_text = manifest.get('license')
+    if license_text is not None:
+        license_text = _text(license_text, 'license')
+
+    normalized = dict(manifest,
+                id=identifier, title=title, license=license_text,
+                runtime=dict(runtime, pack=pack, installation_id=installation_id,
+                             endpoint=endpoints, content=content),
+                components=components, prerequisites=prerequisites, post_install=post_install,
+                ports=ports, host_requirements=dict(requirements, gpu=gpu))
+    if source is None and base is None:
+        return normalized
+    return resolve_sources(normalized, source=source or 'oss', base=base, repo=repo)
+
+
+def _steps(value, field, probes=False):
+    """Normalize a ``prerequisites``-shaped list of ``{kind, text}`` steps."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ManifestError(f'{field} must be an array')
+    steps = []
+    for index, record in enumerate(value):
+        label = f'{field}[{index}]'
+        if not isinstance(record, dict):
+            raise ManifestError(f'{label} must be an object')
+        kind = _text(record.get('kind'), f'{label}.kind')
+        if kind not in PREREQUISITE_KINDS:
+            raise ManifestError(f'{label}.kind must be one of {" ".join(PREREQUISITE_KINDS)}')
+        step = {'kind': kind, 'text': _text(record.get('text'), f'{label}.text')}
+        if probes and 'check' in record:
+            step['check'] = _text(record['check'], f'{label}.check')
+        steps.append(step)
+    return steps
+
+
+def _flag(value, field):
+    """A component's boolean marker (``project_default`` / ``robot_required``)."""
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ManifestError(f'{field} must be a boolean')
+    return value
+
+
+def _content(value):
+    """The Runtime's external content requirement (``--asset-root`` today)."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ManifestError('runtime.content must be an object')
+    content = {'name': _text(value.get('name'), 'runtime.content.name')}
+    for key in ('option', 'requires', 'note'):
+        if key in value:
+            content[key] = _text(value[key], f'runtime.content.{key}')
+    return content
+
+
+def _previews(value, field):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ManifestError(f'{field} must be an object')
+    scenes = value.get('default_scenes', [])
+    if not isinstance(scenes, list) or any(not isinstance(item, str) or not item for item in scenes):
+        raise ManifestError(f'{field}.default_scenes must be an array of strings')
+    return dict(value, default_scenes=scenes)
+
+
+def channel_url(base, *parts):
+    """Join a channel base URL with path segments, keeping the query string."""
+    base = base.rstrip('/') + '/'
+    return urllib.parse.urljoin(base, '/'.join(urllib.parse.quote(p, safe='') for p in parts))
+
+
+def github_tag(identifier, version):
+    """The GitHub Release tag that mirrors one extension version."""
+    return f'ext-{identifier}-v{version}'
+
+
+def github_download(repo, identifier, version):
+    """The flat asset directory of a GitHub Release; GitHub has no subfolders."""
+    return GITHUB_DOWNLOAD.format(repo=repo, tag=github_tag(identifier, version))
+
+
+def artifact_base(source, base, identifier, version, repo=None):
+    """Artifact directory for one channel: an OSS version prefix or a release."""
+    if source == 'github':
+        return github_download(repo or DEFAULT_GITHUB_REPO, identifier, version)
+    return channel_url(base, 'extensions', identifier, version) + '/'
+
+
+def resolve_artifact(artifact, source, base, identifier, version, repo=None):
+    """Bind one artifact to the ``source`` channel, falling back to OSS.
+
+    Absolute URLs (legacy manifests, offline bundles) are kept untouched; a
+    relative URL is joined with the channel's artifact directory.
+    """
+    hosts = artifact.get('hosts') or list(SOURCES)
+    chosen = source if source in hosts else ('oss' if 'oss' in hosts else hosts[0])
+    url = artifact['url']
+    if not urllib.parse.urlsplit(url).scheme:
+        url = urllib.parse.urljoin(artifact_base(chosen, base, identifier, version, repo),
+                                   urllib.parse.quote(url, safe='/'))
+    return dict(artifact, url=url, channel=chosen)
+
+
+def resolve_sources(manifest, source='oss', base=None, repo=None):
+    """Return a copy of ``manifest`` with every artifact bound to ``source``."""
+    if source not in SOURCES:
+        raise ManifestError('Unknown artifact channel: ' + str(source))
+    base = (base or DEFAULT_OSS_BASE).rstrip('/')
+    identifier, version = manifest['id'], manifest['version']
+    runtime = dict(manifest['runtime'])
+    runtime['pack'] = resolve_artifact(manifest['runtime']['pack'], source, base,
+                                       identifier, version, repo)
+    components = [resolve_artifact(item, source, base, identifier, version, repo)
+                  for item in manifest['components']]
+    return dict(manifest, runtime=runtime, components=components, source=source)
+
+
+def stable_pointer(base, identifier):
+    """The mutable ``stable.json`` for an extension; ``None`` when unreachable."""
+    url = channel_url(base, 'extensions', identifier, STABLE_POINTER)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=30) as response:
+            pointer = json.load(response)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    version = (pointer or {}).get('version') if isinstance(pointer, dict) else None
+    return version if isinstance(version, str) and version.strip() else None
+
+
+def resolve_version(base, identifier, version=None):
+    """Version to use: explicit request, else the channel pointer, else fail."""
+    if version:
+        return version
+    version = stable_pointer(base, identifier)
+    if not version:
+        raise ManifestError('Cannot resolve the version of {} from the channel; pass version explicitly'.format(identifier))
+    return version
+
+
+def manifest_url(base, identifier, version):
+    return channel_url(base, 'extensions', identifier, version, MANIFEST_NAME)
+
+
+def load_manifest(base, identifier, version=None, source='oss', repo=None):
+    """Download and parse an extension manifest. Download only; no artifacts yet."""
+    version = resolve_version(base, identifier, version)
+    url = manifest_url(base, identifier, version)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=30) as response:
+            text = response.read().decode('utf-8')
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise ManifestError('The channel does not publish a manifest for {} {}'.format(identifier, version)) from None
+        raise ManifestError('Failed to download the manifest: HTTP {}'.format(error.code)) from None
+    except (urllib.error.URLError, OSError) as error:
+        raise ManifestError('Failed to reach the channel: {}'.format(error)) from None
+    manifest = parse(text, source=source, base=base, repo=repo)
+    if manifest['id'] != identifier:
+        raise ManifestError('Manifest id ({}) does not match the requested id ({})'.format(manifest['id'], identifier))
+    return manifest
+
+
+def render(manifest, base=None):
+    """Human-readable summary; ``base`` adds the resolved download URL per artifact."""
+    rows = [('Extension', manifest['title']), ('Id', manifest['id']),
+            ('Version', manifest['version']), ('Compatible base', manifest['compatible_base']),
+            ('Runtime', manifest['runtime']['installation_id']), ('Runtime endpoint', manifest['runtime']['endpoint']),
+            ('GPU', manifest['host_requirements']['gpu'])]
+    content = manifest['runtime'].get('content') or {}
+    if content:
+        detail = content['name']
+        if content.get('option'):
+            detail += '  ' + content['option']
+        if content.get('requires'):
+            detail += ' requires ' + content['requires']
+        rows.append(('Runtime content', detail))
+    pack = manifest['runtime']['pack']
+    rows.append(('Runtime pack', _describe(pack, base)))
+    for component in manifest['components']:
+        rows.append((component['role'], f"{component['id']}  {_describe(component, base)}"))
+    if manifest['ports']:
+        rows.append(('Port ranges', ', '.join(f'{first}-{last}' for first, last in manifest['ports'])))
+    prerequisites = manifest['prerequisites']
+    if prerequisites:
+        rows.append(('Prerequisites', '; '.join(
+            f"{item['kind']}: {item['text']}" + (f" [{item['check']}]" if item.get('check') else '')
+            for item in prerequisites)))
+    post_install = manifest.get('post_install') or []
+    if post_install:
+        rows.append(('Post-install', '; '.join(item['text'] for item in post_install)))
+    return rows
+
+
+def probe_rows(manifest, runner=None):
+    """Run the manifest's ``probe`` steps. Failures warn; nothing raises.
+
+    The execution semantics are "skippable but reported": a probe that fails must
+    not block the install, or a normal "install the base first, add the image
+    later" order would be impossible.
+    """
+    runner = runner or run_probe
+    rows = []
+    for item in manifest.get('prerequisites', []):
+        if item['kind'] != 'probe':
+            continue
+        command = item.get('check')
+        if not command:
+            rows.append((item['text'], 'skip', 'The manifest declares no check command'))
+            continue
+        try:
+            code, output = runner(command)
+        except OSError as error:
+            rows.append((item['text'], 'warn', str(error)))
+            continue
+        detail = (output or '').strip().splitlines()
+        detail = detail[-1] if detail else ''
+        rows.append((item['text'], 'ok' if code == 0 else 'warn', detail or f'exit code {code}'))
+    return rows
+
+
+def run_probe(command):
+    """Run a probe command through the shell; returns ``(exit_code, output)``."""
+    result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=120)
+    return result.returncode, (result.stdout or '') + (result.stderr or '')
+
+
+def _describe(artifact, base=None):
+    text = f"{artifact['size'] / 1024**2:.1f} MiB  sha256={artifact['sha256'][:12]}…"
+    return text + '  ' + artifact['url']
+
+
+def verify(manifest, quiet=False):
+    """Download every artifact and check its digest and size. Nothing is installed.
+
+    Returns one ``(name, state, detail)`` row per artifact and raises on the first
+    failure, so a caller can record the rows and still stop the install.
+    """
+    artifacts = [(manifest['runtime']['installation_id'], manifest['runtime']['pack'])]
+    artifacts += [(f"{item['role']}/{item['id']}", item) for item in manifest['components']]
+    rows, failures = [], []
+    progress = None if quiet else Progress([name for name, _ in artifacts])
+    try:
+        for name, artifact in artifacts:
+            if progress:
+                progress.next(name)
+            state, detail = _verify_one(artifact)
+            rows.append((name, state, detail))
+            if state != 'ok':
+                failures.append(name)
+    finally:
+        if progress:
+            progress.finish()
+    if failures:
+        raise ManifestError('Failed verification: ' + ', '.join(f'{name}: {state} ({detail})'
+                           for (name, state, detail) in rows if name in failures))
+    return rows
+
+
+def _verify_one(artifact):
+    url, expected, size = artifact['url'], artifact['sha256'], artifact['size']
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)/Path(urllib.parse.urlsplit(url).path).name
+            _download(url, target)
+            if target.stat().st_size != size:
+                return 'size-mismatch', f'expected {size} but got {target.stat().st_size}'
+            actual = digest(target)
+            if actual != expected:
+                return 'sha256-mismatch', f'expected {expected[:12]}… but got {actual[:12]}…'
+            return 'ok', f'{size / 1024**2:.1f} MiB'
+    except ManifestError as error:
+        return 'download-failed', str(error)
+    except (urllib.error.HTTPError, OSError) as error:
+        return 'download-failed', str(error)
+
+
+def _download(url, destination):
+    """Stream ``url`` to ``destination``, stopping before a runaway manifest fills the disk."""
+    received = 0
+    with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as response, destination.open('wb') as target:
+        while block := response.read(1024 * 1024):
+            received += len(block)
+            if received > ARTIFACT_LIMIT:
+                raise ManifestError(f'Download exceeds the limit of {ARTIFACT_LIMIT / 1024**3:.1f} GiB')
+            target.write(block)
+    return received
+
+
+def artifact_name(artifact):
+    """File name an artifact lands as, inside a package dir or the download workspace."""
+    return Path(urllib.parse.urlsplit(artifact['url']).path).name
+
+
+def artifact_paths(manifest, package_dir=None, workspace=None):
+    """Where each artifact is expected: ``package_dir`` (offline) or the workspace."""
+    directory = Path(package_dir) if package_dir else Path(workspace or '.')
+    paths = {'runtime': directory/artifact_name(manifest['runtime']['pack'])}
+    for component in manifest['components']:
+        paths[(component['role'], component['id'])] = directory/artifact_name(component)
+    return paths
+
+
+def stage_artifact(artifact, path):
+    """Verify a staged artifact before it is installed. Raises ``ManifestError``."""
+    path = Path(path)
+    name = path.name
+    if not path.is_file():
+        raise ManifestError(f'Missing artifact: {path}')
+    if path.stat().st_size != artifact['size']:
+        raise ManifestError(f'{name} size mismatch: expected {artifact["size"]} but got {path.stat().st_size}')
+    actual = digest(path)
+    if actual != artifact['sha256']:
+        raise ManifestError(f'{name} digest mismatch: expected {artifact["sha256"][:12]}… but got {actual[:12]}…')
+    return path
+
+
+def plan_commands(manifest, paths, cli, config, project=None, robot=None, asset_root=None,
+                  accept_license=None, replace=False, previews=True, scenes=None):
+    """The exact commands an install runs, in order. Pure; used by dry-run and tests."""
+    plan = []
+    command = [cli, 'runtime', 'install', '--pack', str(paths['runtime']),
+               '--sha256', manifest['runtime']['pack']['sha256'],
+               '--installation-id', manifest['runtime']['installation_id'],
+               '--endpoint', manifest['runtime']['endpoint'], '-c', str(config)]
+    content = manifest['runtime'].get('content') or {}
+    if content:
+        if not asset_root:
+            raise ManifestError('Runtime requires content {}: pass --asset-root'.format(content['name']))
+        command += ['--asset-root', str(asset_root)]
+    declared = manifest['runtime']['pack'].get('license')
+    if declared:
+        command += ['--accept-license', accept_license or declared]
+    if replace:
+        command.append('--replace')
+    plan.append(('runtime', command))
+    for component in manifest['components']:
+        command = [cli, 'install', str(paths[(component['role'], component['id'])]), '--project', str(project)]
+        if component.get('project_default'):
+            command.append('--project-default')
+        if component.get('robot_required'):
+            if not robot:
+                raise ManifestError('Component {} requires --robot'.format(component['id']))
+            command += ['--robot', str(robot)]
+        if component['role'] == 'scene_catalog':
+            if not previews:
+                command.append('--generate-previews=false')
+            chosen = scenes if scenes is not None else (component.get('previews') or {}).get('default_scenes') or []
+            for scene in chosen:
+                command += ['--scene', scene]
+        plan.append((f"{component['role']}/{component['id']}", command))
+    return plan
+
+
+def uninstall_plan(manifest, cli, config, project):
+    """The commands that remove an installed extension, in reverse order."""
+    plan = []
+    for component in reversed(manifest['components']):
+        plan.append((f"{component['role']}/{component['id']}",
+                     [cli, 'uninstall', component['id'], '--project', str(project)]))
+    plan.append(('runtime', [cli, 'uninstall', 'runtime', '--id',
+                             manifest['runtime']['installation_id'], '-c', str(config)]))
+    return plan
+
+
+def port_warnings(manifest, host='127.0.0.1'):
+    """Report declared ports already in use. A warning, never a failure."""
+    rows = []
+    for first, last in manifest.get('ports', []):
+        for port in range(first, last + 1):
+            if port_busy(port, host):
+                rows.append((port, f'{host}:{port}  is already in use; co-located environments need distinct port ranges'))
+    return rows
+
+
+def port_busy(port, host='127.0.0.1', timeout=0.3):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        return sock.connect_ex((host, port)) == 0
+
+
+def run_command(command):
+    subprocess.run(command, check=True)
+
+
+def install(manifest, root, project=None, robot=None, asset_root=None, accept_license=None,
+            package_dir=None, workspace=None, replace=False, previews=True, scenes=None,
+            dry_run=False, report=print, runner=None):
+    """Install a parsed extension: verify every artifact, then run the plan.
+
+    Offline installs take artifacts from ``package_dir``; otherwise they are
+    expected in ``workspace`` (the caller downloads them there first).
+    """
+    runner = runner or run_command
+    cli = str(Path(root)/'current/bin/semantic')
+    config = Path(root)/'configs/semantic-server.yaml'
+    paths = artifact_paths(manifest, package_dir, workspace)
+    if dry_run:
+        plan = plan_commands(manifest, paths, cli, config, project, robot, asset_root,
+                             accept_license, replace, previews, scenes)
+        for name, command in plan:
+            report('dry-run', name, shell_line(command))
+        return plan
+    for key, path in paths.items():
+        artifact = manifest['runtime']['pack'] if key == 'runtime' else next(
+            item for item in manifest['components'] if (item['role'], item['id']) == key)
+        if package_dir is None and not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _download(artifact['url'], path)
+        stage_artifact(artifact, path)
+    plan = plan_commands(manifest, paths, cli, config, project, robot, asset_root,
+                         accept_license, replace, previews, scenes)
+    for name, command in plan:
+        report('run', name, shell_line(command))
+        runner(command)
+    for item in manifest.get('post_install') or []:
+        report('post', item['kind'], item['text'])
+    return plan
+
+
+def remove(manifest, root, project, dry_run=False, report=print, runner=None):
+    """Uninstall an extension: components first, then the Runtime installation."""
+    runner = runner or run_command
+    cli = str(Path(root)/'current/bin/semantic')
+    config = Path(root)/'configs/semantic-server.yaml'
+    plan = uninstall_plan(manifest, cli, config, project)
+    for name, command in plan:
+        report('dry-run' if dry_run else 'run', name, shell_line(command))
+        if not dry_run:
+            runner(command)
+    return plan
+
+
+def shell_line(command):
+    """Render an argv for display without losing quoting."""
+    return ' '.join(shlex.quote(str(part)) for part in command)
+
+
+def load_manifest_file(path, source='oss', base=None, repo=None):
+    """Load a manifest from disk: the offline counterpart of ``load_manifest``."""
+    return parse(Path(path).read_text(), source=source, base=base, repo=repo)
+
+
+def entry(args):
+    """``semanticctl extension`` dispatch."""
+    action = args.extension_action
+    if action not in ('list', 'show', 'verify', 'install', 'remove'):
+        raise SystemExit(f'Unknown extension action: {action}')
+    source = getattr(args, 'source', 'oss')
+    if action == 'list':
+        base = args.base_url.rstrip('/')
+        try:
+            with urllib.request.urlopen(urllib.request.Request(channel_url(base, 'extensions', 'index.json'),
+                        headers={'Accept': 'application/json'}), timeout=30) as response:
+                index = json.load(response)
+        except (urllib.error.URLError, OSError, ValueError):
+            index = None
+        if not isinstance(index, dict) or not index:
+            print(f'The channel {base} has no extension catalog (extensions/index.json)')
+            return 1
+        for identifier, item in sorted(index.items()):
+            version = (item or {}).get('version') if isinstance(item, dict) else None
+            print(f"{identifier}\t{(item or {}).get('title', '')}\t{version if isinstance(version, str) else '?'}")
+        return 0
+    if not args.id:
+        raise SystemExit(f'extension {action} needs an extension id, for example isaac')
+    manifest_file = getattr(args, 'manifest_file', None)
+    manifest = (load_manifest_file(manifest_file, source=source, base=args.base_url)
+                if manifest_file else load_manifest(args.base_url, args.id, args.version, source=source))
+    if action == 'show':
+        for label, value in render(manifest):
+            print(f'{label}: {value}')
+        return 0
+    if action == 'verify':
+        for name, state, detail in verify(manifest, quiet=args.quiet):
+            print(f'{state}\t{name}\t{detail}')
+        print(f'Verified {len(manifest["components"]) + 1} artifact(s).')
+        return 0
+    quiet = getattr(args, 'quiet', False)
+
+    def emit(kind, name, detail):
+        if not quiet:
+            print(f'{kind}\t{name}\t{detail}')
+
+    root = getattr(args, 'root', None)
+    if not root:
+        raise SystemExit(f'extension {action} needs --root <install root>')
+    project = getattr(args, 'project', None)
+    if not project:
+        raise SystemExit(f'extension {action} needs --project <project id>')
+    dry_run = getattr(args, 'dry_run', False)
+    if action == 'install':
+        for name, state, detail in probe_rows(manifest):
+            emit(state, name, detail)
+        for port, detail in port_warnings(manifest):
+            emit('warn', f'Port {port}', detail)
+        package_dir = getattr(args, 'extension_package_dir', None)
+        workspace = Path(root)/'tmp'/f'extension-{manifest["id"]}'
+        if not package_dir and not dry_run:
+            workspace.mkdir(parents=True, exist_ok=True)
+        install(manifest, root, project=project, robot=getattr(args, 'robot', None),
+                asset_root=getattr(args, 'asset_root', None),
+                accept_license=getattr(args, 'accept_license', None),
+                package_dir=package_dir, workspace=workspace,
+                replace=getattr(args, 'replace', False),
+                previews=getattr(args, 'previews', True),
+                scenes=getattr(args, 'scenes', None),
+                dry_run=dry_run, report=emit)
+        return 0
+    if not dry_run and not getattr(args, 'yes', False):
+        raise SystemExit('extension remove uninstalls this extension Runtime and components; confirm with --yes, or use --dry-run first')
+    remove(manifest, root, project, dry_run=dry_run, report=emit)
+    return 0
+
+
+def register(parser):
+    commands = parser.add_parser('extension', help='Extension scenes: manifest view, artifact verify and install')
+    commands.add_argument('extension_action', choices=['list', 'show', 'verify', 'install', 'remove'])
+    commands.add_argument('id', nargs='?', help='Extension id, for example libero / isaac')
+    commands.add_argument('--base-url', dest='base_url', default=DEFAULT_OSS_BASE,
+                          help='Release channel base URL')
+    commands.add_argument('--source', dest='source', choices=list(SOURCES), default='oss',
+                          help='Artifact channel: oss uses OSS, github uses GitHub Releases (oversized artifacts fall back to OSS)')
+    commands.add_argument('--version', help='Override the version stable.json points at')
+    commands.add_argument('--manifest-file', dest='manifest_file', type=Path,
+                          help='Offline manifest file; skips network version resolution')
+    commands.add_argument('--extension-package-dir', dest='extension_package_dir', type=Path,
+                          help='Offline artifact directory; all six artifacts make it fully offline')
+    commands.add_argument('--root', type=Path, help='Install root (required for install/remove)')
+    commands.add_argument('--project', help='Target Project ID')
+    commands.add_argument('--robot', help='Robot ID that robot_required components install onto')
+    commands.add_argument('--asset-root', dest='asset_root', help='Native asset root for the Runtime')
+    commands.add_argument('--accept-license', dest='accept_license', help='Accept the license declared by the Runtime pack')
+    commands.add_argument('--scene', dest='scenes', action='append', help='Limit scene preview scope; repeatable')
+    commands.add_argument('--no-previews', dest='previews', action='store_false', default=True,
+                          help='Skip previews when installing scenes (low-VRAM machines)')
+    commands.add_argument('--replace', action='store_true', help='Replace an existing Runtime when repairing the same installation_id')
+    commands.add_argument('--dry-run', dest='dry_run', action='store_true', help='Print the commands without running them')
+    commands.add_argument('--yes', action='store_true', help='remove: skip confirmation')
+    commands.add_argument('--quiet', action='store_true')
+    commands.set_defaults(extension=entry)
+    return commands
+SEMANTIC_MANAGER_SOURCE
   cat > "$1/uninstall.py" <<'SEMANTIC_MANAGER_SOURCE'
 # Copyright 2026 InsightOS
 # SPDX-License-Identifier: Apache-2.0
@@ -2378,8 +3210,8 @@ SEMANTIC_MANAGER_SOURCE
 # SPDX-License-Identifier: Apache-2.0
 # Shared pre-routing configuration. Works with the system Bash/awk on macOS.
 semantic_config_entry() (
-  local config='' output='' action=install root="$HOME/.local/share/semantic" python='' manager=''
-  [[ "$(uname -s)" != Darwin ]] || root="$HOME/Library/Application Support/Semantic"
+  local config='' output='' action=install root="${HOME:-}/.local/share/semantic" python='' manager=''
+  [[ "$(uname -s)" != Darwin ]] || root="${HOME:-}/Library/Application Support/Semantic"
   local args=() config_args=() key value line parsed
   while (($#)); do
     case "$1" in
@@ -3433,9 +4265,15 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             'sys.path.insert(0, str(Path(__file__).resolve().parent))\n'
             'from install_support import COMPONENT_DEFAULTS, component_values, read_component_config, validate_components, component_yaml, export_components\n'
             'from install_support import Progress, desktop_shortcuts, welcome, web_host, web_probe, urls, settings_form\n'
+            'import extension\n'
             '\n'
             'INSTALL_LOG = None\n'
             'PROGRESS = None\n'
+            '\n'
+            '# Extension manifests live under ``<base>/extensions/<id>/``. The base defaults to\n'
+            '# the same public channel as the bootstrap; SEMANTIC_DOWNLOAD_BASE or an explicit\n'
+            '# --extension-base-url override it, and --extension-manifest is fully offline.\n'
+            "DEFAULT_EXTENSION_BASE = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'\n"
             '\n'
             '\n'
             'def digest(path):\n'
@@ -3958,6 +4796,45 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "        raise RuntimeError(f'Python/dynamic dependencies in this artifact require glibc >= {minimum}; use --musl explicitly on musl/Alpine')\n"
             '\n'
             '\n'
+            'def install_extension(root, a):\n'
+            '    """Install the optional extension scene named by ``--extension``.\n'
+            '\n'
+            '    Runs once the base environment is ready. The manifest comes from the channel\n'
+            '    unless ``--extension-manifest`` names a local file; artifacts come from\n'
+            '    ``--extension-package-dir`` when offline. Probes warn but never block, so a\n'
+            '    "install the base first, add the engine image later" order stays possible.\n'
+            '    """\n'
+            '    identifier = a.extension\n'
+            "    source = getattr(a, 'extension_source', None) or 'oss'\n"
+            "    manifest_file = getattr(a, 'extension_manifest', None)\n"
+            '    if manifest_file:\n'
+            '        manifest = extension.load_manifest_file(manifest_file, source=source)\n'
+            '    else:\n'
+            "        base = (getattr(a, 'extension_base_url', None) or os.environ.get('SEMANTIC_DOWNLOAD_BASE')\n"
+            '                or DEFAULT_EXTENSION_BASE)\n'
+            '        manifest = extension.load_manifest(base, identifier, source=source)\n'
+            "    if manifest['id'] != identifier:\n"
+            "        raise ValueError('ExtensionManifest id ({}) does not match the requested id ({})'.format(manifest['id'], identifier))\n"
+            "    dry_run = getattr(a, 'extension_dry_run', False)\n"
+            "    package_dir = getattr(a, 'extension_package_dir', None)\n"
+            '    workspace = root/\'tmp\'/f\'extension-{manifest["id"]}\'\n'
+            '    if not package_dir and not dry_run:\n'
+            '        workspace.mkdir(parents=True, exist_ok=True)\n'
+            '    print(f\'Extension scene {manifest["id"]}: {manifest["title"]} ({manifest["version"]})\')\n'
+            '    for name, state, detail in extension.probe_rows(manifest):\n'
+            "        print(f'{state}\\t{name}\\t{detail}')\n"
+            '    for port, detail in extension.port_warnings(manifest):\n'
+            "        print(f'warn\\tPort {port}\\t{detail}')\n"
+            "    if getattr(a, 'no_start', False) and not dry_run:\n"
+            "        print('note\\tServer\\t--no-start left the Server stopped; component installs fail until it runs')\n"
+            "    return extension.install(manifest, root, project=getattr(a, 'extension_project', None),\n"
+            "                             robot=getattr(a, 'extension_robot', None),\n"
+            "                             asset_root=getattr(a, 'extension_asset_root', None),\n"
+            "                             accept_license=getattr(a, 'accept_license', None),\n"
+            '                             package_dir=package_dir, workspace=workspace,\n'
+            '                             replace=True, dry_run=dry_run)\n'
+            '\n'
+            '\n'
             'def install(a):\n'
             '    global INSTALL_LOG, PROGRESS\n'
             '    payload = a.payload.resolve()\n'
@@ -4132,6 +5009,8 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '            start(root, quiet=True)\n'
             '        progress.finish()\n'
             '        welcome(root, state, not a.no_start, desktop_message)\n'
+            "        if getattr(a, 'extension', None):\n"
+            '            install_extension(root, a)\n'
             '\n'
             '\n'
             'def install_manager(root, payload):\n'
@@ -4141,7 +5020,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '        if directory.is_symlink() or (directory.exists() and not directory.is_dir()):\n'
             "            raise ValueError('Invalid management directory: '+str(directory))\n"
             '        directory.mkdir(exist_ok=True, mode=0o700)\n'
-            "    for name in ('installer.py', 'install_support.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):\n"
+            "    for name in ('installer.py', 'install_support.py', 'extension.py', 'uninstall.py', 'assets/ios.png', 'assets/banner.json'):\n"
             '        target = manager/name\n'
             '        if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):\n'
             "            raise ValueError('Unsafe management file links: '+str(target))\n"
@@ -4322,6 +5201,16 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    p.add_argument('--musl', action='store_true', help='Use the optional musl release')\n"
             "    p.add_argument('--musl-runtime', choices=['bundled', 'system'], help='Use bundled musl (default for new releases) or the host musl')\n"
             "    p.add_argument('--render-backend', choices=['auto', 'mesa-gpu', 'software'])\n"
+            "    p.add_argument('--extension', help='Extension scene id to install after the base environment (libero / isaac)')\n"
+            "    p.add_argument('--accept-license', dest='accept_license', help='Accept the license declared by the extension Runtime pack')\n"
+            "    p.add_argument('--extension-source', dest='extension_source', choices=['oss', 'github'], default='oss', help='Extension artifact channel: oss uses OSS, github uses GitHub Releases (oversized artifacts fall back to OSS)')\n"
+            "    p.add_argument('--extension-base-url', dest='extension_base_url', help='Channel base for the extension manifest; defaults to SEMANTIC_DOWNLOAD_BASE or the built-in channel')\n"
+            "    p.add_argument('--extension-manifest', dest='extension_manifest', type=Path, help='Offline manifest file; skips network version resolution')\n"
+            "    p.add_argument('--extension-package-dir', dest='extension_package_dir', type=Path, help='Offline artifact directory; all six artifacts make it fully offline')\n"
+            "    p.add_argument('--extension-project', dest='extension_project', help='Project ID the extension components install into')\n"
+            "    p.add_argument('--extension-robot', dest='extension_robot', help='Robot ID that robot_required components install onto')\n"
+            "    p.add_argument('--extension-asset-root', dest='extension_asset_root', help='Native asset root for the extension Runtime')\n"
+            "    p.add_argument('--extension-dry-run', dest='extension_dry_run', action='store_true', help='Print the extension install commands without running them')\n"
             '    def presentation_options(p):\n'
             '        network = p.add_mutually_exclusive_group()\n'
             "        network.add_argument('--lan', dest='web_host', action='store_const', const='0.0.0.0', help='Listen on all IPv4 interfaces; allow only trusted LAN traffic through the firewall')\n"
@@ -4360,7 +5249,11 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             "    p.add_argument('--yes', action='store_true', help='uninstall: skip confirmation')\n"
             "    p.add_argument('--purge', action='store_true', help='uninstall: delete all instance data')\n"
             "    p.add_argument('--dry-run', action='store_true', help='uninstall: show the plan only')\n"
+            '    extension.register(commands)\n'
             '    a = parser.parse_args()\n'
+            "    handler = getattr(a, 'extension', None)\n"
+            '    if handler:\n'
+            '        sys.exit(handler(a))\n'
             "    if a.command == 'control' and a.action not in ('uninstall', 'reconfigure') and (a.yes or a.purge or a.dry_run):\n"
             "        parser.error('--yes/--purge/--dry-run apply only to uninstall')\n"
             "    if a.command == 'export-config' or (a.command == 'control' and a.action == 'export-config'):\n"
@@ -4955,6 +5848,777 @@ with tempfile.TemporaryDirectory(prefix='semantic-download-') as temporary:
             '    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n'
             "    with os.fdopen(fd, 'w', encoding='utf-8') as stream:\n"
             '        stream.write(text)\n'
+        ),
+        'extension.py': (
+            '# Copyright 2026 InsightOS\n'
+            '# SPDX-License-Identifier: Apache-2.0\n'
+            '"""Extension scene manifest: parse, verify and list what an extension needs.\n'
+            '\n'
+            'An extension scene (LIBERO today, Isaac later) is an optional side-payload installed\n'
+            '*after* the base environment. It is never folded into the immutable base release:\n'
+            'the base payload is an exact verified file set, and the extension artifacts are an\n'
+            'order of magnitude larger (LIBERO is about 10.4 GB against 345 MiB).\n'
+            '\n'
+            'See docs/extensions.md for the full design.\n'
+            '\n'
+            'The manifest carries one role per artifact. A role decides where an artifact lands:\n'
+            '\n'
+            '    runtime        local ``semantic install runtime --pack`` execution\n'
+            '    scene_catalog  Server component install\n'
+            '    robot_base     Server component install\n'
+            '    robot_ability  Server component install\n'
+            '    model          Server component install\n'
+            '    robot_skill    Server component install\n'
+            '\n'
+            'Runtime goes first and the components follow in a fixed order: the Bundle is the\n'
+            'base that ability, model and skill are inserted into.\n'
+            '\n'
+            'This module is deliberately dependency-free apart from the standard library and\n'
+            '``install_support``, and it must not import ``installer``: ``installer`` imports it.\n'
+            '"""\n'
+            '\n'
+            'import hashlib\n'
+            'import json\n'
+            'import shlex\n'
+            'import socket\n'
+            'import subprocess\n'
+            'import sys\n'
+            'import tempfile\n'
+            'import urllib.error\n'
+            'import urllib.parse\n'
+            'import urllib.request\n'
+            'from pathlib import Path\n'
+            '\n'
+            'sys.path.insert(0, str(Path(__file__).resolve().parent))\n'
+            'from install_support import Progress\n'
+            '\n'
+            'SCHEMA_VERSION = 1\n'
+            '\n'
+            '# One artifact may legitimately be huge; keep a ceiling so a bad manifest cannot\n'
+            '# fill the disk before the digest check runs.\n'
+            'ARTIFACT_LIMIT = 12 * 1024**3\n'
+            '\n'
+            "COMPONENT_ORDER = ('scene_catalog', 'robot_base', 'robot_ability', 'model', 'robot_skill')\n"
+            "ROLES = ('runtime', *COMPONENT_ORDER)\n"
+            '# Roles whose bundle is the base the remaining components are inserted into.\n'
+            "BASE_ROLES = ('robot_base',)\n"
+            "PREREQUISITE_KINDS = ('probe', 'user_action')\n"
+            '\n'
+            "MANIFEST_NAME = 'extension.json'\n"
+            "STABLE_POINTER = 'stable.json'\n"
+            '\n'
+            '# Two channels carry the same immutable artifacts. The manifest and its stable\n'
+            '# pointer always come from the OSS base; a relative artifact URL is resolved\n'
+            '# against the selected channel so one manifest serves both.\n'
+            "SOURCES = ('oss', 'github')\n"
+            "DEFAULT_OSS_BASE = 'https://insightos-artifacts.oss-cn-shanghai.aliyuncs.com/semantic'\n"
+            "DEFAULT_GITHUB_REPO = 'insightos-community/quick-start'\n"
+            "GITHUB_DOWNLOAD = 'https://github.com/{repo}/releases/download/{tag}/'\n"
+            '# GitHub rejects a single release asset at or above 2 GiB. Artifacts over the\n'
+            '# limit are marked ``hosts: ["oss"]`` and fall back to OSS on the GitHub channel.\n'
+            'GITHUB_ASSET_LIMIT = 2 * 1024**3\n'
+            '\n'
+            '\n'
+            'class ManifestError(ValueError):\n'
+            '    """A manifest is unusable; the message names the offending field."""\n'
+            '\n'
+            '\n'
+            'def digest(path):\n'
+            '    value = hashlib.sha256()\n'
+            "    with Path(path).open('rb') as f:\n"
+            '        while block := f.read(1024 * 1024):\n'
+            '            value.update(block)\n'
+            '    return value.hexdigest()\n'
+            '\n'
+            '\n'
+            'def _text(value, field):\n'
+            '    if not isinstance(value, str) or not value.strip():\n'
+            "        raise ManifestError(f'{field} must be a non-empty string')\n"
+            '    return value\n'
+            '\n'
+            '\n'
+            'def _checksum(record, field):\n'
+            '    if not isinstance(record, dict):\n'
+            "        raise ManifestError(f'{field} must be an object')\n"
+            "    value = _text(record.get('sha256'), f'{field}.sha256').lower()\n"
+            "    if len(value) != 64 or any(c not in '0123456789abcdef' for c in value):\n"
+            "        raise ManifestError(f'{field}.sha256 is not a valid digest')\n"
+            "    size = record.get('size')\n"
+            '    if not isinstance(size, int) or isinstance(size, bool) or size <= 0:\n'
+            "        raise ManifestError(f'{field}.size must be a non-zero integer')\n"
+            '    if size > ARTIFACT_LIMIT:\n'
+            "        raise ManifestError(f'{field}.size exceeds the limit')\n"
+            '    return value, size\n'
+            '\n'
+            '\n'
+            'def _artifact(record, field):\n'
+            "    source = _text(record.get('url'), f'{field}.url')\n"
+            '    scheme = urllib.parse.urlsplit(source).scheme\n'
+            "    if scheme and scheme not in ('https', 'http'):\n"
+            "        raise ManifestError(f'{field}.url supports http(s) or a relative path')\n"
+            '    checksum, size = _checksum(record, field)\n'
+            "    artifact = {'url': source, 'sha256': checksum, 'size': size}\n"
+            "    if 'license' in record:\n"
+            "        artifact['license'] = _text(record['license'], f'{field}.license')\n"
+            '    hosts = _hosts(record, field)\n'
+            '    if hosts:\n'
+            "        artifact['hosts'] = hosts\n"
+            '    return artifact\n'
+            '\n'
+            '\n'
+            'def _hosts(record, field):\n'
+            '    """An artifact\'s allowed channels; ``None`` means every channel serves it.\n'
+            '\n'
+            '    ``hosts: ["oss"]`` (or the shorthand ``github: false``) marks an artifact the\n'
+            '    GitHub mirror must not carry, so the installer falls back to OSS.\n'
+            '    """\n'
+            "    value = record.get('hosts')\n"
+            '    if value is None:\n'
+            "        github = record.get('github')\n"
+            '        if github is None:\n'
+            '            return None\n'
+            '        if not isinstance(github, bool):\n'
+            "            raise ManifestError(f'{field}.github must be a boolean')\n"
+            "        return None if github else ['oss']\n"
+            '    if not isinstance(value, list) or not value:\n'
+            "        raise ManifestError(f'{field}.hosts must be a non-empty array')\n"
+            '    hosts = []\n'
+            '    for item in value:\n'
+            "        name = _text(item, f'{field}.hosts')\n"
+            '        if name not in SOURCES:\n'
+            "            raise ManifestError(f'{field}.hosts must be oss or github')\n"
+            '        if name not in hosts:\n'
+            '            hosts.append(name)\n'
+            '    return hosts\n'
+            '\n'
+            '\n'
+            'def parse(text, source=None, base=None, repo=None):\n'
+            '    """Validate a manifest and return it with the install order applied.\n'
+            '\n'
+            '    ``source``/``base`` are optional: when given, each artifact URL is bound to\n'
+            '    the requested channel (``resolve_sources``); absolute URLs are preserved.\n'
+            '    """\n'
+            '    try:\n'
+            '        manifest = json.loads(text)\n'
+            '    except json.JSONDecodeError as error:\n'
+            "        raise ManifestError(f'The manifest is not valid JSON: {error}') from None\n"
+            '    if not isinstance(manifest, dict):\n'
+            "        raise ManifestError('The manifest must be a JSON object')\n"
+            '\n'
+            "    version = manifest.get('schema_version')\n"
+            '    if version != SCHEMA_VERSION:\n'
+            "        raise ManifestError(f'Manifest schema_version must be {SCHEMA_VERSION}')\n"
+            '\n'
+            "    identifier = _text(manifest.get('id'), 'id')\n"
+            "    title = _text(manifest.get('title'), 'title')\n"
+            "    if not all(c.islower() or c.isdigit() or c == '-' for c in identifier) or identifier.startswith('-'):\n"
+            "        raise ManifestError('id may only contain lowercase letters, digits and hyphens')\n"
+            "    compatible = manifest.get('compatible_base')\n"
+            '    if not isinstance(compatible, str) or not compatible.strip():\n'
+            "        raise ManifestError('compatible_base must be a non-empty string')\n"
+            '\n'
+            "    runtime = manifest.get('runtime')\n"
+            '    if not isinstance(runtime, dict):\n'
+            "        raise ManifestError('the runtime section is missing')\n"
+            "    endpoints = runtime.get('endpoint')\n"
+            "    if not isinstance(endpoints, str) or not endpoints.startswith(('http://', 'https://')):\n"
+            "        raise ManifestError('runtime.endpoint must be an http(s) address')\n"
+            "    pack = _artifact(runtime.get('pack') or {}, 'runtime.pack')\n"
+            "    installation_id = _text(runtime.get('installation_id'), 'runtime.installation_id')\n"
+            "    if installation_id in ('native-mujoco', 'base'):\n"
+            "        raise ManifestError('runtime.installation_id may not reuse a base Runtime identifier')\n"
+            "    content = _content(runtime.get('content'))\n"
+            '\n'
+            '    components, seen, roles = [], set(), set()\n'
+            "    raw_components = manifest.get('components')\n"
+            '    if not isinstance(raw_components, list) or not raw_components:\n'
+            "        raise ManifestError('components must be a non-empty array')\n"
+            '    for index, record in enumerate(raw_components):\n'
+            "        field = f'components[{index}]'\n"
+            "        role = _text(record.get('role'), f'{field}.role')\n"
+            "        if role not in ROLES or role == 'runtime':\n"
+            '            raise ManifestError(f\'{field}.role is not one of the allowed values: {" ".join(ROLES)}\')\n'
+            "        identifier_text = _text(record.get('id'), f'{field}.id')\n"
+            '        component = dict(_artifact(record, field), role=role, id=identifier_text,\n'
+            "                         previews=_previews(record.get('previews'), f'{field}.previews'),\n"
+            "                         project_default=_flag(record.get('project_default'), f'{field}.project_default'),\n"
+            "                         robot_required=_flag(record.get('robot_required'), f'{field}.robot_required'))\n"
+            '        key = (role, identifier_text)\n'
+            '        if key in seen:\n'
+            "            raise ManifestError(f'{field} is declared more than once: {role}/{identifier_text}')\n"
+            '        seen.add(key)\n'
+            '        roles.add(role)\n'
+            '        components.append(component)\n'
+            '    missing = [role for role in BASE_ROLES if role not in roles]\n'
+            '    if missing:\n'
+            "        raise ManifestError('components is missing the base artifact: ' + ', '.join(missing))\n"
+            "    components.sort(key=lambda item: COMPONENT_ORDER.index(item['role']))\n"
+            '\n'
+            "    requirements = manifest.get('host_requirements') or {}\n"
+            '    if not isinstance(requirements, dict):\n'
+            "        raise ManifestError('host_requirements must be an object')\n"
+            "    gpu = requirements.get('gpu', 'optional')\n"
+            "    if gpu not in ('required', 'optional', 'forbidden'):\n"
+            "        raise ManifestError('host_requirements.gpu must be required, optional or forbidden')\n"
+            "    disk_gib = requirements.get('disk_gib')\n"
+            '    if disk_gib is not None and (not isinstance(disk_gib, int) or isinstance(disk_gib, bool) or disk_gib <= 0):\n'
+            "        raise ManifestError('host_requirements.disk_gib must be a positive integer')\n"
+            '\n'
+            "    prerequisites = _steps(manifest.get('prerequisites'), 'prerequisites', probes=True)\n"
+            "    post_install = _steps(manifest.get('post_install'), 'post_install')\n"
+            '\n'
+            "    ports = manifest.get('ports') or []\n"
+            '    if not isinstance(ports, list) or any(\n'
+            '            not isinstance(item, list) or len(item) != 2\n'
+            '            or any(not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535 for port in item)\n'
+            '            or item[1] < item[0] for item in ports):\n'
+            "        raise ManifestError('A port range must be a [start, end] integer pair in valid order')\n"
+            '\n'
+            "    license_text = manifest.get('license')\n"
+            '    if license_text is not None:\n'
+            "        license_text = _text(license_text, 'license')\n"
+            '\n'
+            '    normalized = dict(manifest,\n'
+            '                id=identifier, title=title, license=license_text,\n'
+            '                runtime=dict(runtime, pack=pack, installation_id=installation_id,\n'
+            '                             endpoint=endpoints, content=content),\n'
+            '                components=components, prerequisites=prerequisites, post_install=post_install,\n'
+            '                ports=ports, host_requirements=dict(requirements, gpu=gpu))\n'
+            '    if source is None and base is None:\n'
+            '        return normalized\n'
+            "    return resolve_sources(normalized, source=source or 'oss', base=base, repo=repo)\n"
+            '\n'
+            '\n'
+            'def _steps(value, field, probes=False):\n'
+            '    """Normalize a ``prerequisites``-shaped list of ``{kind, text}`` steps."""\n'
+            '    if value is None:\n'
+            '        return []\n'
+            '    if not isinstance(value, list):\n'
+            "        raise ManifestError(f'{field} must be an array')\n"
+            '    steps = []\n'
+            '    for index, record in enumerate(value):\n'
+            "        label = f'{field}[{index}]'\n"
+            '        if not isinstance(record, dict):\n'
+            "            raise ManifestError(f'{label} must be an object')\n"
+            "        kind = _text(record.get('kind'), f'{label}.kind')\n"
+            '        if kind not in PREREQUISITE_KINDS:\n'
+            '            raise ManifestError(f\'{label}.kind must be one of {" ".join(PREREQUISITE_KINDS)}\')\n'
+            "        step = {'kind': kind, 'text': _text(record.get('text'), f'{label}.text')}\n"
+            "        if probes and 'check' in record:\n"
+            "            step['check'] = _text(record['check'], f'{label}.check')\n"
+            '        steps.append(step)\n'
+            '    return steps\n'
+            '\n'
+            '\n'
+            'def _flag(value, field):\n'
+            '    """A component\'s boolean marker (``project_default`` / ``robot_required``)."""\n'
+            '    if value is None:\n'
+            '        return False\n'
+            '    if not isinstance(value, bool):\n'
+            "        raise ManifestError(f'{field} must be a boolean')\n"
+            '    return value\n'
+            '\n'
+            '\n'
+            'def _content(value):\n'
+            '    """The Runtime\'s external content requirement (``--asset-root`` today)."""\n'
+            '    if value is None:\n'
+            '        return {}\n'
+            '    if not isinstance(value, dict):\n'
+            "        raise ManifestError('runtime.content must be an object')\n"
+            "    content = {'name': _text(value.get('name'), 'runtime.content.name')}\n"
+            "    for key in ('option', 'requires', 'note'):\n"
+            '        if key in value:\n'
+            "            content[key] = _text(value[key], f'runtime.content.{key}')\n"
+            '    return content\n'
+            '\n'
+            '\n'
+            'def _previews(value, field):\n'
+            '    if value is None:\n'
+            '        return {}\n'
+            '    if not isinstance(value, dict):\n'
+            "        raise ManifestError(f'{field} must be an object')\n"
+            "    scenes = value.get('default_scenes', [])\n"
+            '    if not isinstance(scenes, list) or any(not isinstance(item, str) or not item for item in scenes):\n'
+            "        raise ManifestError(f'{field}.default_scenes must be an array of strings')\n"
+            '    return dict(value, default_scenes=scenes)\n'
+            '\n'
+            '\n'
+            'def channel_url(base, *parts):\n'
+            '    """Join a channel base URL with path segments, keeping the query string."""\n'
+            "    base = base.rstrip('/') + '/'\n"
+            "    return urllib.parse.urljoin(base, '/'.join(urllib.parse.quote(p, safe='') for p in parts))\n"
+            '\n'
+            '\n'
+            'def github_tag(identifier, version):\n'
+            '    """The GitHub Release tag that mirrors one extension version."""\n'
+            "    return f'ext-{identifier}-v{version}'\n"
+            '\n'
+            '\n'
+            'def github_download(repo, identifier, version):\n'
+            '    """The flat asset directory of a GitHub Release; GitHub has no subfolders."""\n'
+            '    return GITHUB_DOWNLOAD.format(repo=repo, tag=github_tag(identifier, version))\n'
+            '\n'
+            '\n'
+            'def artifact_base(source, base, identifier, version, repo=None):\n'
+            '    """Artifact directory for one channel: an OSS version prefix or a release."""\n'
+            "    if source == 'github':\n"
+            '        return github_download(repo or DEFAULT_GITHUB_REPO, identifier, version)\n'
+            "    return channel_url(base, 'extensions', identifier, version) + '/'\n"
+            '\n'
+            '\n'
+            'def resolve_artifact(artifact, source, base, identifier, version, repo=None):\n'
+            '    """Bind one artifact to the ``source`` channel, falling back to OSS.\n'
+            '\n'
+            '    Absolute URLs (legacy manifests, offline bundles) are kept untouched; a\n'
+            "    relative URL is joined with the channel's artifact directory.\n"
+            '    """\n'
+            "    hosts = artifact.get('hosts') or list(SOURCES)\n"
+            "    chosen = source if source in hosts else ('oss' if 'oss' in hosts else hosts[0])\n"
+            "    url = artifact['url']\n"
+            '    if not urllib.parse.urlsplit(url).scheme:\n'
+            '        url = urllib.parse.urljoin(artifact_base(chosen, base, identifier, version, repo),\n'
+            "                                   urllib.parse.quote(url, safe='/'))\n"
+            '    return dict(artifact, url=url, channel=chosen)\n'
+            '\n'
+            '\n'
+            "def resolve_sources(manifest, source='oss', base=None, repo=None):\n"
+            '    """Return a copy of ``manifest`` with every artifact bound to ``source``."""\n'
+            '    if source not in SOURCES:\n'
+            "        raise ManifestError('Unknown artifact channel: ' + str(source))\n"
+            "    base = (base or DEFAULT_OSS_BASE).rstrip('/')\n"
+            "    identifier, version = manifest['id'], manifest['version']\n"
+            "    runtime = dict(manifest['runtime'])\n"
+            "    runtime['pack'] = resolve_artifact(manifest['runtime']['pack'], source, base,\n"
+            '                                       identifier, version, repo)\n'
+            '    components = [resolve_artifact(item, source, base, identifier, version, repo)\n'
+            "                  for item in manifest['components']]\n"
+            '    return dict(manifest, runtime=runtime, components=components, source=source)\n'
+            '\n'
+            '\n'
+            'def stable_pointer(base, identifier):\n'
+            '    """The mutable ``stable.json`` for an extension; ``None`` when unreachable."""\n'
+            "    url = channel_url(base, 'extensions', identifier, STABLE_POINTER)\n"
+            '    try:\n'
+            "        with urllib.request.urlopen(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=30) as response:\n"
+            '            pointer = json.load(response)\n'
+            '    except (urllib.error.URLError, OSError, ValueError):\n'
+            '        return None\n'
+            "    version = (pointer or {}).get('version') if isinstance(pointer, dict) else None\n"
+            '    return version if isinstance(version, str) and version.strip() else None\n'
+            '\n'
+            '\n'
+            'def resolve_version(base, identifier, version=None):\n'
+            '    """Version to use: explicit request, else the channel pointer, else fail."""\n'
+            '    if version:\n'
+            '        return version\n'
+            '    version = stable_pointer(base, identifier)\n'
+            '    if not version:\n'
+            "        raise ManifestError('Cannot resolve the version of {} from the channel; pass version explicitly'.format(identifier))\n"
+            '    return version\n'
+            '\n'
+            '\n'
+            'def manifest_url(base, identifier, version):\n'
+            "    return channel_url(base, 'extensions', identifier, version, MANIFEST_NAME)\n"
+            '\n'
+            '\n'
+            "def load_manifest(base, identifier, version=None, source='oss', repo=None):\n"
+            '    """Download and parse an extension manifest. Download only; no artifacts yet."""\n'
+            '    version = resolve_version(base, identifier, version)\n'
+            '    url = manifest_url(base, identifier, version)\n'
+            '    try:\n'
+            "        with urllib.request.urlopen(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=30) as response:\n"
+            "            text = response.read().decode('utf-8')\n"
+            '    except urllib.error.HTTPError as error:\n'
+            '        if error.code == 404:\n'
+            "            raise ManifestError('The channel does not publish a manifest for {} {}'.format(identifier, version)) from None\n"
+            "        raise ManifestError('Failed to download the manifest: HTTP {}'.format(error.code)) from None\n"
+            '    except (urllib.error.URLError, OSError) as error:\n'
+            "        raise ManifestError('Failed to reach the channel: {}'.format(error)) from None\n"
+            '    manifest = parse(text, source=source, base=base, repo=repo)\n'
+            "    if manifest['id'] != identifier:\n"
+            "        raise ManifestError('Manifest id ({}) does not match the requested id ({})'.format(manifest['id'], identifier))\n"
+            '    return manifest\n'
+            '\n'
+            '\n'
+            'def render(manifest, base=None):\n'
+            '    """Human-readable summary; ``base`` adds the resolved download URL per artifact."""\n'
+            "    rows = [('Extension', manifest['title']), ('Id', manifest['id']),\n"
+            "            ('Version', manifest['version']), ('Compatible base', manifest['compatible_base']),\n"
+            "            ('Runtime', manifest['runtime']['installation_id']), ('Runtime endpoint', manifest['runtime']['endpoint']),\n"
+            "            ('GPU', manifest['host_requirements']['gpu'])]\n"
+            "    content = manifest['runtime'].get('content') or {}\n"
+            '    if content:\n'
+            "        detail = content['name']\n"
+            "        if content.get('option'):\n"
+            "            detail += '  ' + content['option']\n"
+            "        if content.get('requires'):\n"
+            "            detail += ' requires ' + content['requires']\n"
+            "        rows.append(('Runtime content', detail))\n"
+            "    pack = manifest['runtime']['pack']\n"
+            "    rows.append(('Runtime pack', _describe(pack, base)))\n"
+            "    for component in manifest['components']:\n"
+            '        rows.append((component[\'role\'], f"{component[\'id\']}  {_describe(component, base)}"))\n'
+            "    if manifest['ports']:\n"
+            "        rows.append(('Port ranges', ', '.join(f'{first}-{last}' for first, last in manifest['ports'])))\n"
+            "    prerequisites = manifest['prerequisites']\n"
+            '    if prerequisites:\n'
+            "        rows.append(('Prerequisites', '; '.join(\n"
+            '            f"{item[\'kind\']}: {item[\'text\']}" + (f" [{item[\'check\']}]" if item.get(\'check\') else \'\')\n'
+            '            for item in prerequisites)))\n'
+            "    post_install = manifest.get('post_install') or []\n"
+            '    if post_install:\n'
+            "        rows.append(('Post-install', '; '.join(item['text'] for item in post_install)))\n"
+            '    return rows\n'
+            '\n'
+            '\n'
+            'def probe_rows(manifest, runner=None):\n'
+            '    """Run the manifest\'s ``probe`` steps. Failures warn; nothing raises.\n'
+            '\n'
+            '    The execution semantics are "skippable but reported": a probe that fails must\n'
+            '    not block the install, or a normal "install the base first, add the image\n'
+            '    later" order would be impossible.\n'
+            '    """\n'
+            '    runner = runner or run_probe\n'
+            '    rows = []\n'
+            "    for item in manifest.get('prerequisites', []):\n"
+            "        if item['kind'] != 'probe':\n"
+            '            continue\n'
+            "        command = item.get('check')\n"
+            '        if not command:\n'
+            "            rows.append((item['text'], 'skip', 'The manifest declares no check command'))\n"
+            '            continue\n'
+            '        try:\n'
+            '            code, output = runner(command)\n'
+            '        except OSError as error:\n'
+            "            rows.append((item['text'], 'warn', str(error)))\n"
+            '            continue\n'
+            "        detail = (output or '').strip().splitlines()\n"
+            "        detail = detail[-1] if detail else ''\n"
+            "        rows.append((item['text'], 'ok' if code == 0 else 'warn', detail or f'exit code {code}'))\n"
+            '    return rows\n'
+            '\n'
+            '\n'
+            'def run_probe(command):\n'
+            '    """Run a probe command through the shell; returns ``(exit_code, output)``."""\n'
+            '    result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=120)\n'
+            "    return result.returncode, (result.stdout or '') + (result.stderr or '')\n"
+            '\n'
+            '\n'
+            'def _describe(artifact, base=None):\n'
+            '    text = f"{artifact[\'size\'] / 1024**2:.1f} MiB  sha256={artifact[\'sha256\'][:12]}…"\n'
+            "    return text + '  ' + artifact['url']\n"
+            '\n'
+            '\n'
+            'def verify(manifest, quiet=False):\n'
+            '    """Download every artifact and check its digest and size. Nothing is installed.\n'
+            '\n'
+            '    Returns one ``(name, state, detail)`` row per artifact and raises on the first\n'
+            '    failure, so a caller can record the rows and still stop the install.\n'
+            '    """\n'
+            "    artifacts = [(manifest['runtime']['installation_id'], manifest['runtime']['pack'])]\n"
+            '    artifacts += [(f"{item[\'role\']}/{item[\'id\']}", item) for item in manifest[\'components\']]\n'
+            '    rows, failures = [], []\n'
+            '    progress = None if quiet else Progress([name for name, _ in artifacts])\n'
+            '    try:\n'
+            '        for name, artifact in artifacts:\n'
+            '            if progress:\n'
+            '                progress.next(name)\n'
+            '            state, detail = _verify_one(artifact)\n'
+            '            rows.append((name, state, detail))\n'
+            "            if state != 'ok':\n"
+            '                failures.append(name)\n'
+            '    finally:\n'
+            '        if progress:\n'
+            '            progress.finish()\n'
+            '    if failures:\n'
+            "        raise ManifestError('Failed verification: ' + ', '.join(f'{name}: {state} ({detail})'\n"
+            '                           for (name, state, detail) in rows if name in failures))\n'
+            '    return rows\n'
+            '\n'
+            '\n'
+            'def _verify_one(artifact):\n'
+            "    url, expected, size = artifact['url'], artifact['sha256'], artifact['size']\n"
+            '    try:\n'
+            '        with tempfile.TemporaryDirectory() as directory:\n'
+            '            target = Path(directory)/Path(urllib.parse.urlsplit(url).path).name\n'
+            '            _download(url, target)\n'
+            '            if target.stat().st_size != size:\n'
+            "                return 'size-mismatch', f'expected {size} but got {target.stat().st_size}'\n"
+            '            actual = digest(target)\n'
+            '            if actual != expected:\n'
+            "                return 'sha256-mismatch', f'expected {expected[:12]}… but got {actual[:12]}…'\n"
+            "            return 'ok', f'{size / 1024**2:.1f} MiB'\n"
+            '    except ManifestError as error:\n'
+            "        return 'download-failed', str(error)\n"
+            '    except (urllib.error.HTTPError, OSError) as error:\n'
+            "        return 'download-failed', str(error)\n"
+            '\n'
+            '\n'
+            'def _download(url, destination):\n'
+            '    """Stream ``url`` to ``destination``, stopping before a runaway manifest fills the disk."""\n'
+            '    received = 0\n'
+            "    with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as response, destination.open('wb') as target:\n"
+            '        while block := response.read(1024 * 1024):\n'
+            '            received += len(block)\n'
+            '            if received > ARTIFACT_LIMIT:\n'
+            "                raise ManifestError(f'Download exceeds the limit of {ARTIFACT_LIMIT / 1024**3:.1f} GiB')\n"
+            '            target.write(block)\n'
+            '    return received\n'
+            '\n'
+            '\n'
+            'def artifact_name(artifact):\n'
+            '    """File name an artifact lands as, inside a package dir or the download workspace."""\n'
+            "    return Path(urllib.parse.urlsplit(artifact['url']).path).name\n"
+            '\n'
+            '\n'
+            'def artifact_paths(manifest, package_dir=None, workspace=None):\n'
+            '    """Where each artifact is expected: ``package_dir`` (offline) or the workspace."""\n'
+            "    directory = Path(package_dir) if package_dir else Path(workspace or '.')\n"
+            "    paths = {'runtime': directory/artifact_name(manifest['runtime']['pack'])}\n"
+            "    for component in manifest['components']:\n"
+            "        paths[(component['role'], component['id'])] = directory/artifact_name(component)\n"
+            '    return paths\n'
+            '\n'
+            '\n'
+            'def stage_artifact(artifact, path):\n'
+            '    """Verify a staged artifact before it is installed. Raises ``ManifestError``."""\n'
+            '    path = Path(path)\n'
+            '    name = path.name\n'
+            '    if not path.is_file():\n'
+            "        raise ManifestError(f'Missing artifact: {path}')\n"
+            "    if path.stat().st_size != artifact['size']:\n"
+            '        raise ManifestError(f\'{name} size mismatch: expected {artifact["size"]} but got {path.stat().st_size}\')\n'
+            '    actual = digest(path)\n'
+            "    if actual != artifact['sha256']:\n"
+            '        raise ManifestError(f\'{name} digest mismatch: expected {artifact["sha256"][:12]}… but got {actual[:12]}…\')\n'
+            '    return path\n'
+            '\n'
+            '\n'
+            'def plan_commands(manifest, paths, cli, config, project=None, robot=None, asset_root=None,\n'
+            '                  accept_license=None, replace=False, previews=True, scenes=None):\n'
+            '    """The exact commands an install runs, in order. Pure; used by dry-run and tests."""\n'
+            '    plan = []\n'
+            "    command = [cli, 'runtime', 'install', '--pack', str(paths['runtime']),\n"
+            "               '--sha256', manifest['runtime']['pack']['sha256'],\n"
+            "               '--installation-id', manifest['runtime']['installation_id'],\n"
+            "               '--endpoint', manifest['runtime']['endpoint'], '-c', str(config)]\n"
+            "    content = manifest['runtime'].get('content') or {}\n"
+            '    if content:\n'
+            '        if not asset_root:\n'
+            "            raise ManifestError('Runtime requires content {}: pass --asset-root'.format(content['name']))\n"
+            "        command += ['--asset-root', str(asset_root)]\n"
+            "    declared = manifest['runtime']['pack'].get('license')\n"
+            '    if declared:\n'
+            "        command += ['--accept-license', accept_license or declared]\n"
+            '    if replace:\n'
+            "        command.append('--replace')\n"
+            "    plan.append(('runtime', command))\n"
+            "    for component in manifest['components']:\n"
+            "        command = [cli, 'install', str(paths[(component['role'], component['id'])]), '--project', str(project)]\n"
+            "        if component.get('project_default'):\n"
+            "            command.append('--project-default')\n"
+            "        if component.get('robot_required'):\n"
+            '            if not robot:\n'
+            "                raise ManifestError('Component {} requires --robot'.format(component['id']))\n"
+            "            command += ['--robot', str(robot)]\n"
+            "        if component['role'] == 'scene_catalog':\n"
+            '            if not previews:\n'
+            "                command.append('--generate-previews=false')\n"
+            "            chosen = scenes if scenes is not None else (component.get('previews') or {}).get('default_scenes') or []\n"
+            '            for scene in chosen:\n'
+            "                command += ['--scene', scene]\n"
+            '        plan.append((f"{component[\'role\']}/{component[\'id\']}", command))\n'
+            '    return plan\n'
+            '\n'
+            '\n'
+            'def uninstall_plan(manifest, cli, config, project):\n'
+            '    """The commands that remove an installed extension, in reverse order."""\n'
+            '    plan = []\n'
+            "    for component in reversed(manifest['components']):\n"
+            '        plan.append((f"{component[\'role\']}/{component[\'id\']}",\n'
+            "                     [cli, 'uninstall', component['id'], '--project', str(project)]))\n"
+            "    plan.append(('runtime', [cli, 'uninstall', 'runtime', '--id',\n"
+            "                             manifest['runtime']['installation_id'], '-c', str(config)]))\n"
+            '    return plan\n'
+            '\n'
+            '\n'
+            "def port_warnings(manifest, host='127.0.0.1'):\n"
+            '    """Report declared ports already in use. A warning, never a failure."""\n'
+            '    rows = []\n'
+            "    for first, last in manifest.get('ports', []):\n"
+            '        for port in range(first, last + 1):\n'
+            '            if port_busy(port, host):\n'
+            "                rows.append((port, f'{host}:{port}  is already in use; co-located environments need distinct port ranges'))\n"
+            '    return rows\n'
+            '\n'
+            '\n'
+            "def port_busy(port, host='127.0.0.1', timeout=0.3):\n"
+            '    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:\n'
+            '        sock.settimeout(timeout)\n'
+            '        return sock.connect_ex((host, port)) == 0\n'
+            '\n'
+            '\n'
+            'def run_command(command):\n'
+            '    subprocess.run(command, check=True)\n'
+            '\n'
+            '\n'
+            'def install(manifest, root, project=None, robot=None, asset_root=None, accept_license=None,\n'
+            '            package_dir=None, workspace=None, replace=False, previews=True, scenes=None,\n'
+            '            dry_run=False, report=print, runner=None):\n'
+            '    """Install a parsed extension: verify every artifact, then run the plan.\n'
+            '\n'
+            '    Offline installs take artifacts from ``package_dir``; otherwise they are\n'
+            '    expected in ``workspace`` (the caller downloads them there first).\n'
+            '    """\n'
+            '    runner = runner or run_command\n'
+            "    cli = str(Path(root)/'current/bin/semantic')\n"
+            "    config = Path(root)/'configs/semantic-server.yaml'\n"
+            '    paths = artifact_paths(manifest, package_dir, workspace)\n'
+            '    if dry_run:\n'
+            '        plan = plan_commands(manifest, paths, cli, config, project, robot, asset_root,\n'
+            '                             accept_license, replace, previews, scenes)\n'
+            '        for name, command in plan:\n'
+            "            report('dry-run', name, shell_line(command))\n"
+            '        return plan\n'
+            '    for key, path in paths.items():\n'
+            "        artifact = manifest['runtime']['pack'] if key == 'runtime' else next(\n"
+            "            item for item in manifest['components'] if (item['role'], item['id']) == key)\n"
+            '        if package_dir is None and not path.is_file():\n'
+            '            path.parent.mkdir(parents=True, exist_ok=True)\n'
+            "            _download(artifact['url'], path)\n"
+            '        stage_artifact(artifact, path)\n'
+            '    plan = plan_commands(manifest, paths, cli, config, project, robot, asset_root,\n'
+            '                         accept_license, replace, previews, scenes)\n'
+            '    for name, command in plan:\n'
+            "        report('run', name, shell_line(command))\n"
+            '        runner(command)\n'
+            "    for item in manifest.get('post_install') or []:\n"
+            "        report('post', item['kind'], item['text'])\n"
+            '    return plan\n'
+            '\n'
+            '\n'
+            'def remove(manifest, root, project, dry_run=False, report=print, runner=None):\n'
+            '    """Uninstall an extension: components first, then the Runtime installation."""\n'
+            '    runner = runner or run_command\n'
+            "    cli = str(Path(root)/'current/bin/semantic')\n"
+            "    config = Path(root)/'configs/semantic-server.yaml'\n"
+            '    plan = uninstall_plan(manifest, cli, config, project)\n'
+            '    for name, command in plan:\n'
+            "        report('dry-run' if dry_run else 'run', name, shell_line(command))\n"
+            '        if not dry_run:\n'
+            '            runner(command)\n'
+            '    return plan\n'
+            '\n'
+            '\n'
+            'def shell_line(command):\n'
+            '    """Render an argv for display without losing quoting."""\n'
+            "    return ' '.join(shlex.quote(str(part)) for part in command)\n"
+            '\n'
+            '\n'
+            "def load_manifest_file(path, source='oss', base=None, repo=None):\n"
+            '    """Load a manifest from disk: the offline counterpart of ``load_manifest``."""\n'
+            '    return parse(Path(path).read_text(), source=source, base=base, repo=repo)\n'
+            '\n'
+            '\n'
+            'def entry(args):\n'
+            '    """``semanticctl extension`` dispatch."""\n'
+            '    action = args.extension_action\n'
+            "    if action not in ('list', 'show', 'verify', 'install', 'remove'):\n"
+            "        raise SystemExit(f'Unknown extension action: {action}')\n"
+            "    source = getattr(args, 'source', 'oss')\n"
+            "    if action == 'list':\n"
+            "        base = args.base_url.rstrip('/')\n"
+            '        try:\n'
+            "            with urllib.request.urlopen(urllib.request.Request(channel_url(base, 'extensions', 'index.json'),\n"
+            "                        headers={'Accept': 'application/json'}), timeout=30) as response:\n"
+            '                index = json.load(response)\n'
+            '        except (urllib.error.URLError, OSError, ValueError):\n'
+            '            index = None\n'
+            '        if not isinstance(index, dict) or not index:\n'
+            "            print(f'The channel {base} has no extension catalog (extensions/index.json)')\n"
+            '            return 1\n'
+            '        for identifier, item in sorted(index.items()):\n'
+            "            version = (item or {}).get('version') if isinstance(item, dict) else None\n"
+            '            print(f"{identifier}\\t{(item or {}).get(\'title\', \'\')}\\t{version if isinstance(version, str) else \'?\'}")\n'
+            '        return 0\n'
+            '    if not args.id:\n'
+            "        raise SystemExit(f'extension {action} needs an extension id, for example isaac')\n"
+            "    manifest_file = getattr(args, 'manifest_file', None)\n"
+            '    manifest = (load_manifest_file(manifest_file, source=source, base=args.base_url)\n'
+            '                if manifest_file else load_manifest(args.base_url, args.id, args.version, source=source))\n'
+            "    if action == 'show':\n"
+            '        for label, value in render(manifest):\n'
+            "            print(f'{label}: {value}')\n"
+            '        return 0\n'
+            "    if action == 'verify':\n"
+            '        for name, state, detail in verify(manifest, quiet=args.quiet):\n'
+            "            print(f'{state}\\t{name}\\t{detail}')\n"
+            '        print(f\'Verified {len(manifest["components"]) + 1} artifact(s).\')\n'
+            '        return 0\n'
+            "    quiet = getattr(args, 'quiet', False)\n"
+            '\n'
+            '    def emit(kind, name, detail):\n'
+            '        if not quiet:\n'
+            "            print(f'{kind}\\t{name}\\t{detail}')\n"
+            '\n'
+            "    root = getattr(args, 'root', None)\n"
+            '    if not root:\n'
+            "        raise SystemExit(f'extension {action} needs --root <install root>')\n"
+            "    project = getattr(args, 'project', None)\n"
+            '    if not project:\n'
+            "        raise SystemExit(f'extension {action} needs --project <project id>')\n"
+            "    dry_run = getattr(args, 'dry_run', False)\n"
+            "    if action == 'install':\n"
+            '        for name, state, detail in probe_rows(manifest):\n'
+            '            emit(state, name, detail)\n'
+            '        for port, detail in port_warnings(manifest):\n'
+            "            emit('warn', f'Port {port}', detail)\n"
+            "        package_dir = getattr(args, 'extension_package_dir', None)\n"
+            '        workspace = Path(root)/\'tmp\'/f\'extension-{manifest["id"]}\'\n'
+            '        if not package_dir and not dry_run:\n'
+            '            workspace.mkdir(parents=True, exist_ok=True)\n'
+            "        install(manifest, root, project=project, robot=getattr(args, 'robot', None),\n"
+            "                asset_root=getattr(args, 'asset_root', None),\n"
+            "                accept_license=getattr(args, 'accept_license', None),\n"
+            '                package_dir=package_dir, workspace=workspace,\n'
+            "                replace=getattr(args, 'replace', False),\n"
+            "                previews=getattr(args, 'previews', True),\n"
+            "                scenes=getattr(args, 'scenes', None),\n"
+            '                dry_run=dry_run, report=emit)\n'
+            '        return 0\n'
+            "    if not dry_run and not getattr(args, 'yes', False):\n"
+            "        raise SystemExit('extension remove uninstalls this extension Runtime and components; confirm with --yes, or use --dry-run first')\n"
+            '    remove(manifest, root, project, dry_run=dry_run, report=emit)\n'
+            '    return 0\n'
+            '\n'
+            '\n'
+            'def register(parser):\n'
+            "    commands = parser.add_parser('extension', help='Extension scenes: manifest view, artifact verify and install')\n"
+            "    commands.add_argument('extension_action', choices=['list', 'show', 'verify', 'install', 'remove'])\n"
+            "    commands.add_argument('id', nargs='?', help='Extension id, for example libero / isaac')\n"
+            "    commands.add_argument('--base-url', dest='base_url', default=DEFAULT_OSS_BASE,\n"
+            "                          help='Release channel base URL')\n"
+            "    commands.add_argument('--source', dest='source', choices=list(SOURCES), default='oss',\n"
+            "                          help='Artifact channel: oss uses OSS, github uses GitHub Releases (oversized artifacts fall back to OSS)')\n"
+            "    commands.add_argument('--version', help='Override the version stable.json points at')\n"
+            "    commands.add_argument('--manifest-file', dest='manifest_file', type=Path,\n"
+            "                          help='Offline manifest file; skips network version resolution')\n"
+            "    commands.add_argument('--extension-package-dir', dest='extension_package_dir', type=Path,\n"
+            "                          help='Offline artifact directory; all six artifacts make it fully offline')\n"
+            "    commands.add_argument('--root', type=Path, help='Install root (required for install/remove)')\n"
+            "    commands.add_argument('--project', help='Target Project ID')\n"
+            "    commands.add_argument('--robot', help='Robot ID that robot_required components install onto')\n"
+            "    commands.add_argument('--asset-root', dest='asset_root', help='Native asset root for the Runtime')\n"
+            "    commands.add_argument('--accept-license', dest='accept_license', help='Accept the license declared by the Runtime pack')\n"
+            "    commands.add_argument('--scene', dest='scenes', action='append', help='Limit scene preview scope; repeatable')\n"
+            "    commands.add_argument('--no-previews', dest='previews', action='store_false', default=True,\n"
+            "                          help='Skip previews when installing scenes (low-VRAM machines)')\n"
+            "    commands.add_argument('--replace', action='store_true', help='Replace an existing Runtime when repairing the same installation_id')\n"
+            "    commands.add_argument('--dry-run', dest='dry_run', action='store_true', help='Print the commands without running them')\n"
+            "    commands.add_argument('--yes', action='store_true', help='remove: skip confirmation')\n"
+            "    commands.add_argument('--quiet', action='store_true')\n"
+            '    commands.set_defaults(extension=entry)\n'
+            '    return commands\n'
         ),
         'uninstall.py': (
             '# Copyright 2026 InsightOS\n'

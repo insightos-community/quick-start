@@ -116,7 +116,7 @@ def build(args):
         download(f"https://raw.githubusercontent.com/{pin['repository']}/{pin['source_commit']}/configs/semantic-server.yaml", temporary/'server.yaml', 1024**2)
         write_json(payload/'defaults/server.json', yaml.safe_load((temporary/'server.yaml').read_text()))
         source = args.quick_start.resolve()
-        for name in ('installer.py','install_support.py','uninstall.py'):
+        for name in ('installer.py','install_support.py','extension.py','uninstall.py'):
             copy(source/'artifacts/runtime'/name, payload/name)
         for name in ('ios.png','banner.json'):
             copy(source/'artifacts/assets'/name, payload/'assets'/name)

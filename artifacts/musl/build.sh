@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright 2026 InsightOS
+# SPDX-License-Identifier: Apache-2.0
 set -eu
 mkdir -p /work/logs
 exec > /work/logs/assemble.log 2>&1

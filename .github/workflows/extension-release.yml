@@ -1,0 +1,162 @@
+name: Extension Release
+'on':
+  workflow_dispatch:
+    inputs:
+      id:
+        description: Extension id (libero / isaac)
+        required: true
+        type: choice
+        options:
+        - libero
+        - isaac
+      version:
+        description: Extension version (for example 0.1.0)
+        required: true
+        type: string
+      channel:
+        description: 'Comma-separated publish channels: oss,github'
+        required: true
+        default: oss,github
+        type: string
+      package_dir:
+        description: Absolute directory holding the six built artifacts (build machine)
+        required: true
+        type: string
+      dry_run:
+        description: Stage and verify only; skip OSS and GitHub publish
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: extension-release-${{ inputs.id }}-${{ inputs.version }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      staging: ${{ steps.stage.outputs.staging }}
+    steps:
+    - name: Check out workflow implementation
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Install assembly dependencies
+      run: 'sudo apt-get update
+
+        sudo apt-get install -y python3-yaml zstd
+
+        '
+    - name: Reject stale generated installers
+      run: python3 artifacts/build_installers.py --check
+    - name: Manifest, tooling and entrypoint tests
+      run: 'python3 -m unittest discover -s tests -p test_artifacts_extension.py
+
+        python3 -m unittest discover -s tests -p test_extension_release.py
+
+        python3 -m unittest discover -s tests -p test_artifact_english.py
+
+        python3 -m unittest discover -s tests -p test_install_entrypoints.py
+
+        '
+    - name: Backfill digests and stage the immutable tree
+      id: stage
+      env:
+        EXTENSION_ID: ${{ inputs.id }}
+        EXTENSION_VERSION: ${{ inputs.version }}
+        PACKAGE_DIR: ${{ inputs.package_dir }}
+      run: 'staging="$RUNNER_TEMP/extension-staging"
+
+        python3 artifacts/build_extension.py --id "$EXTENSION_ID" --version "$EXTENSION_VERSION"
+        --package-dir "$PACKAGE_DIR" --output "$staging"
+
+        echo "staging=$staging" >> "$GITHUB_OUTPUT"
+
+        '
+    - name: Offline smoke install from the staged directory
+      env:
+        EXTENSION_ID: ${{ inputs.id }}
+        EXTENSION_VERSION: ${{ inputs.version }}
+      run: |
+        python3 - <<'PY'
+        import importlib.util, os, pathlib
+        root = pathlib.Path(os.environ['RUNNER_TEMP'])/'extension-staging'
+        spec = importlib.util.spec_from_file_location('extension_manifest', 'artifacts/runtime/extension.py')
+        extension = importlib.util.module_from_spec(spec); spec.loader.exec_module(extension)
+        folder = root/'extensions'/os.environ['EXTENSION_ID']/os.environ['EXTENSION_VERSION']
+        manifest = extension.load_manifest_file(folder/'extension.json', source='oss')
+        plan = extension.install(manifest, root/'instance', project='smoke', robot='smoke-robot',
+                                 asset_root=root/'assets', package_dir=folder, dry_run=True,
+                                 report=lambda *row: None)
+        assert len(plan) == len(manifest['components']) + 1, plan
+        print('offline smoke plan:', [name for name, _ in plan])
+        PY
+    - name: Upload staged extension
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: extension-staging
+        path: ${{ steps.stage.outputs.staging }}/extensions/**
+        if-no-files-found: error
+        retention-days: 14
+  publish:
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+    - name: Check out workflow implementation
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Download staged extension
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: extension-staging
+        path: staging
+    - name: Materialize OSS credentials outside the checkout
+      if: contains(inputs.channel, 'oss')
+      env:
+        OSS_ENV: ${{ secrets.OSS_ENV }}
+      run: 'test -n "$OSS_ENV" || { echo "OSS_ENV secret is required for the oss channel" >&2; exit 1; }
+
+        install -m 700 -d "$HOME/.config/semantic-artifacts"
+
+        printf ''%s'' "$OSS_ENV" > "$HOME/.config/semantic-artifacts/oss.env"
+
+        chmod 600 "$HOME/.config/semantic-artifacts/oss.env"
+
+        '
+    - name: Publish to OSS and mirror to GitHub
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EXTENSION_ID: ${{ inputs.id }}
+        EXTENSION_VERSION: ${{ inputs.version }}
+        EXTENSION_CHANNEL: ${{ inputs.channel }}
+      run: 'python3 artifacts/publish_extension.py --id "$EXTENSION_ID" --version "$EXTENSION_VERSION"
+        --staging "$PWD/staging" --channel "$EXTENSION_CHANNEL" --repo "${{ github.repository }}"
+
+        '
+    - name: Verify the OSS channel serves the pinned digests
+      if: contains(inputs.channel, 'oss')
+      env:
+        EXTENSION_ID: ${{ inputs.id }}
+        EXTENSION_VERSION: ${{ inputs.version }}
+      run: |
+        python3 - <<'PY'
+        import importlib.util, os
+        from oss_client import read_config
+        spec = importlib.util.spec_from_file_location('extension_manifest', 'artifacts/runtime/extension.py')
+        extension = importlib.util.module_from_spec(spec); spec.loader.exec_module(extension)
+        values = read_config(os.path.expanduser('~/.config/semantic-artifacts/oss.env'))
+        manifest = extension.load_manifest(values['OSS_DOWNLOAD_BASE'], os.environ['EXTENSION_ID'],
+                                           os.environ['EXTENSION_VERSION'], source='oss')
+        for name, state, detail in extension.verify(manifest, quiet=True):
+            print(f'{state}\t{name}\t{detail}')
+        PY
