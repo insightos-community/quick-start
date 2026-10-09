@@ -41,14 +41,31 @@ LIBERO 场景装进 Semantic，并在 Web Studio 里把机器人跑起来。按�
 
 ### 1.2 场景数据集与模型权重
 
-**场景数据集（用户自备）。** LIBERO 场景数据集（`libero-scenes.zip`）是上游第三方资产，
-**不随本通道分发**（不发 OSS、也不发 GitHub Release）。请按上游许可自行获取（上游 benchmark
-`github.com/Lifelong-Robot-Learning/LIBERO` 或其正式镜像），然后指给安装器：
+**场景数据集（用户自备，自行构建）。** LIBERO 场景数据集（`libero-scenes.zip`）是上游第三方资产，
+**不随本通道分发**（不发 OSS、也不发 GitHub Release）；上游 benchmark 也不提供成品 zip——它由
+mujoco-runtime 仓库自带的构建工具从上游固定提交打出（约 239 MB；上游为 MIT 许可，包内附带其 LICENSE）：
 
 ```bash
-# 把 libero-scenes.zip 放进本地目录，完全离线安装
-install.sh --extension libero --extension-package-dir <目录>
-# 通道产物按清单里的 sha256/size 逐字节校验；自备场景 zip 不锁定摘要，导入时校验内容
+# 1. 克隆上游 benchmark，检出锁定提交（以 mujoco-runtime/profiles/sources.lock.yaml 的
+#    libero.commit 为准；国内克隆 GitHub 困难时走代理或镜像）
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
+git -C LIBERO checkout 8f1084e3132a39270c3a13ebe37270a43ece2a01
+
+# 2. 构建时要枚举上游任务清单，需要可导入的 LIBERO 环境（会拉入 robosuite/mujoco，约几分钟）
+python3 -m venv ~/.venvs/libero-build && source ~/.venvs/libero-build/bin/activate
+pip install -e ./LIBERO pyyaml
+
+# 3. 用构建工具打出场景包
+git clone https://github.com/insightos-community/mujoco-runtime.git
+python3 mujoco-runtime/tools/libero_packages.py \
+  --source "$PWD/LIBERO" --output ~/libero-packages/libero-scenes.zip --version 1.0.0
+```
+
+把打好的 zip 放进本地目录，然后完全离线安装（通道产物按清单里的 sha256/size 逐字节校验；
+自备场景 zip 不锁定摘要，导入时校验内容）：
+
+```bash
+install.sh --extension libero --extension-package-dir ~/libero-packages
 ```
 
 **模型权重（另一项外部依赖）。** SmolVLA 权重从 HuggingFace 取得。**国内直连 huggingface.co

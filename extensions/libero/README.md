@@ -44,16 +44,36 @@ work. The manifest enforces this order and `install.sh` / `semanticctl` follow i
 
 ### 1.2 Scene dataset and model weights
 
-**Scene dataset (you provide it).** The LIBERO scene dataset (`libero-scenes.zip`) is an upstream
-third-party asset and is **not distributed with this channel** (neither OSS nor GitHub Releases).
-Obtain it yourself under the upstream license (the upstream benchmark
-`github.com/Lifelong-Robot-Learning/LIBERO` or its official mirror), then point the installer at it:
+**Scene dataset (you provide it — and build it).** The LIBERO scene dataset (`libero-scenes.zip`)
+is an upstream third-party asset and is **not distributed with this channel** (neither OSS nor
+GitHub Releases), and the upstream benchmark does not ship a ready-made zip either. Build it from
+the pinned upstream commit with the packaging tool bundled in the mujoco-runtime repository
+(~239 MB; upstream is MIT-licensed and its LICENSE rides along in the package):
 
 ```bash
-# put libero-scenes.zip into a local directory and install fully offline from it
-install.sh --extension libero --extension-package-dir <dir>
-# channel artifacts are verified byte-for-byte against the manifest (sha256/size);
-# your own scenes zip is not digest-pinned — the importing command validates its content
+# 1. Clone the upstream benchmark and check out the locked commit (the authoritative pin is
+#    libero.commit in mujoco-runtime/profiles/sources.lock.yaml; use a proxy/mirror if GitHub
+#    is unreachable)
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
+git -C LIBERO checkout 8f1084e3132a39270c3a13ebe37270a43ece2a01
+
+# 2. The build enumerates the upstream task catalog, so it needs an importable LIBERO
+#    environment (pulls in robosuite/mujoco, a few minutes)
+python3 -m venv ~/.venvs/libero-build && source ~/.venvs/libero-build/bin/activate
+pip install -e ./LIBERO pyyaml
+
+# 3. Build the scenes package with the bundled tool
+git clone https://github.com/insightos-community/mujoco-runtime.git
+python3 mujoco-runtime/tools/libero_packages.py \
+  --source "$PWD/LIBERO" --output ~/libero-packages/libero-scenes.zip --version 1.0.0
+```
+
+Put the built zip in a local directory, then install fully offline (channel artifacts are verified
+byte-for-byte against the manifest sha256/size; your own scenes zip is not digest-pinned — the
+importing command validates its content):
+
+```bash
+install.sh --extension libero --extension-package-dir ~/libero-packages
 ```
 
 **Model weights (the only other external dependency).** SmolVLA weights come from HuggingFace.

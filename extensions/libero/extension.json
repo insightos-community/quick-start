@@ -85,7 +85,7 @@
   "prerequisites": [
     {
       "kind": "user_action",
-      "text": "场景数据集为用户自备、不随通道分发: 请按上游许可获取 libero-scenes.zip, 放到本地目录后用 --extension-package-dir 提供, 不要上传到 OSS 或 GitHub Release"
+      "text": "场景数据集为用户自备、不随通道分发: 用 mujoco-runtime/tools/libero_packages.py 从上游固定提交构建 libero-scenes.zip（步骤见用户手册 1.2 节）, 放到本地目录后用 --extension-package-dir 提供, 不要上传到 OSS 或 GitHub Release"
     },
     {
       "kind": "user_action",
